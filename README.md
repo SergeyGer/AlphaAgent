@@ -46,7 +46,7 @@ trustworthy as its ability to explain and constrain itself.
 
 | | |
 | --- | --- |
-| 🧠 **Two-agent reasoning** | A research analyst and a CIO run sequentially: one gathers evidence, the other commits to a decision. |
+| 🧠 **Three-agent debate** | A bull analyst and a short seller argue opposite cases from independent evidence; the CIO adjudicates. Nothing reaches a decision unchallenged. |
 | 🛡️ **Guardrails that are code, not prompts** | Position sizing, cash limits and the daily stop-loss are enforced in a pure, unit-tested function — never delegated to the model. |
 | 🔍 **Explainable by default** | Every run writes an audit row with the chain of thought, token usage and cost. HOLDs and rejections included. |
 | ⚡ **Fan-out by design** | Celery Beat dispatches one independent task per `(portfolio, ticker)` pair — no nested loops, no head-of-line blocking. |
@@ -63,7 +63,7 @@ trustworthy as its ability to explain and constrain itself.
 | **API** | [Django 5.2 LTS](https://www.djangoproject.com/) · [Django REST Framework](https://www.django-rest-framework.org/) | Token auth, `select_related`/`prefetch_related`, bounded query counts |
 | **Database** | [PostgreSQL 16](https://www.postgresql.org/) | `CHECK` constraints, `UNIQUE` constraints, hot-path indexes |
 | **Async** | [Celery 5](https://docs.celeryq.dev/) · [Celery Beat](https://docs.celeryq.dev/en/stable/userguide/periodic-tasks.html) · [Redis 7](https://redis.io/) | Fan-out subtasks, cron scheduling, brokered results |
-| **AI** | [CrewAI](https://github.com/crewAIInc/crewAI) · DeepSeek-R1 · GPT-4o · Claude | Sequential crew, read-only tools, Pydantic-validated output |
+| **AI** | [CrewAI](https://github.com/crewAIInc/crewAI) · DeepSeek-R1 · GPT-4o · Claude | Three-agent adversarial debate, read-only tools, Pydantic-validated output |
 | **Market data** | [yfinance](https://github.com/ranaroussi/yfinance) | Cached quotes with graceful degradation |
 | **News** | RSS (Google News, Yahoo Finance) · [defusedxml](https://github.com/tiran/defusedxml) | Lexicon sentiment scoring, hardened XML parsing |
 | **Validation** | [Pydantic v2](https://docs.pydantic.dev/) | The guardrail payload contract |
@@ -74,50 +74,111 @@ trustworthy as its ability to explain and constrain itself.
 | **Containers** | [Docker](https://www.docker.com/) · Docker Compose | Five services with healthchecks and restart policies |
 | **Quality** | [Ruff](https://github.com/astral-sh/ruff) · [pre-commit](https://pre-commit.com/) · GitHub Actions · CodeQL | Lint, format, test, security scanning |
 
+## Demo
+
+A guided tour of the live application — sign-in, portfolio metrics, the equity
+curve, the bull/bear debate, news sentiment and the trade ledger:
+
+![AlphaAgent guided tour](docs/demo.gif)
+
+*Full quality: [docs/demo.mp4](docs/demo.mp4) (0.8 MB). The recording is taken
+from the running stack, not a mockup.*
+
 ## Architecture
 
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│ 1. REST API          Django 5.2 + DRF                                    │
-│                      token auth · nested portfolio metrics · audit trail │
-├──────────────────────────────────────────────────────────────────────────┤
-│ 2. DATABASE          PostgreSQL 16                                       │
-│                      portfolio · asset · transaction · agent decision log│
-├──────────────────────────────────────────────────────────────────────────┤
-│ 3. ASYNC ENGINE      Celery 5 + Redis + Celery Beat                      │
-│                      one subtask per (portfolio × ticker) · cron         │
-├──────────────────────────────────────────────────────────────────────────┤
-│ 4. AI LAYER          CrewAI sequential crew + guardrail pipeline         │
-│                      analyst → CIO · yfinance · RSS · read-only tools    │
-└──────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph clients["&nbsp;Clients"]
+        direction LR
+        SPA["<b>React SPA</b><br/>Vite · Tailwind · Recharts"]
+        TG["<b>Telegram bot</b><br/>inline keyboards"]
+        EXT["<b>External MCP clients</b><br/>Claude Code · Cursor · Ollama"]
+    end
+
+    subgraph edge["&nbsp;Edge"]
+        ASGI["<b>Daphne (ASGI)</b><br/>HTTP + WebSocket on one port"]
+    end
+
+    subgraph app["&nbsp;Application tier"]
+        direction LR
+        API["<b>Django 5.2 + DRF</b><br/>REST API · token auth"]
+        WSC["<b>Channels consumer</b><br/>per-user event stream"]
+        CEL["<b>Celery 5 + Beat</b><br/>fan-out · cron"]
+    end
+
+    subgraph ai["&nbsp;AI layer"]
+        direction LR
+        CREW["<b>CrewAI debate</b><br/>bull ⚔ bear ⚔ CIO"]
+        GUARD["<b>Execution guard</b><br/>pure, unit-tested"]
+    end
+
+    subgraph tools["&nbsp;Tool server"]
+        MCP["<b>MCP server</b><br/>stdio + streamable HTTP"]
+    end
+
+    subgraph data["&nbsp;Data tier"]
+        direction LR
+        PG[("<b>PostgreSQL 16</b><br/>ledger · audit trail")]
+        RD[("<b>Redis 7</b><br/>broker · channel layer · cache")]
+    end
+
+    SPA -->|REST| ASGI
+    SPA <-->|WebSocket| ASGI
+    TG -->|webhook| ASGI
+    EXT -->|MCP| MCP
+
+    ASGI --> API
+    ASGI --> WSC
+    WSC -.->|subscribe| RD
+    API --> PG
+    API -.->|enqueue| RD
+    RD -->|consume| CEL
+    CEL --> CREW
+    CREW -->|proposal JSON| GUARD
+    GUARD -->|transaction.atomic| PG
+    CEL -.->|publish events| RD
+    CREW -.->|read-only tools| MCP
+    MCP -.->|quotes · news| EXT
+
+    classDef store fill:#0f2b46,stroke:#38bdf8,color:#e2e8f0
+    classDef guard fill:#3b1d1d,stroke:#fb7185,color:#ffe4e6
+    classDef crew fill:#1e1b4b,stroke:#818cf8,color:#e0e7ff
+    class PG,RD store
+    class GUARD guard
+    class CREW crew
 ```
 
 ### The decision pipeline
 
-```
- Celery Beat (*/15)
-      │
-      ▼
- autonomous_market_monitoring_task
-      │  one query: portfolios where is_autonomous = true
-      │
-      └─► group( run_alpha_agent_task.s(portfolio_id, ticker) × N )   ← fan-out
-                    │
-                    ▼
-          ┌─────────────────────────────────────────┐
-          │ 1. re-check autonomy + stop-loss        │
-          │ 2. gather context (price, news, ledger) │
-          │ 3. CrewAI: analyst ──► CIO              │
-          │      read-only tools, JSON contract     │
-          │ 4. EXECUTION GUARD  ← pure function     │
-          │      allocation · cash · position · loss│
-          │ 5. transaction.atomic() + row locks     │
-          │ 6. AgentDecisionLog (always)            │
-          └─────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    BEAT(["Celery Beat<br/>every 15 minutes"])
+    SWEEP["<b>autonomous_market_monitoring_task</b><br/>one query for is_autonomous portfolios"]
+    FAN{{"celery group — fan-out<br/>one subtask per (portfolio × ticker)"}}
+    TASK["<b>run_alpha_agent_task</b>"]
+
+    BEAT --> SWEEP --> FAN
+    FAN -->|AAPL| TASK
+    FAN -->|TSLA| TASK
+    FAN -->|BTC| TASK
+
+    TASK --> S1["1 · autonomy + cooldown check"]
+    S1 --> S2["2 · gather context<br/>price · news · fundamentals · ledger replay"]
+    S2 --> S3["3 · CrewAI debate<br/>bull → bear → CIO"]
+    S3 --> S4{"4 · EXECUTION GUARD<br/>allocation · cash · position · stop-loss"}
+    S4 -->|approved| S5["5 · transaction.atomic + row locks"]
+    S4 -->|blocked| S6
+    S5 --> S6["6 · AgentDecisionLog<br/><i>always written</i>"]
+    S6 --> S7["7 · publish WebSocket event"]
+    S7 --> S8["8 · capture portfolio snapshot"]
+
+    classDef guard fill:#3b1d1d,stroke:#fb7185,color:#ffe4e6
+    classDef audit fill:#1a2e1a,stroke:#4ade80,color:#dcfce7
+    class S4 guard
+    class S6 audit
 ```
 
 The AI never writes to the database. It returns a proposal; the guard decides.
-
 ## Quick start
 
 ### Docker (recommended)
@@ -340,14 +401,61 @@ Supported query parameters: `sentiment`, `ticker`, `executed`, `since`.
 
 ## AI layer
 
-Two agents run in a **sequential** CrewAI process:
+Three agents run in a **sequential** CrewAI process, structured as an adversarial
+debate. A single analyst feeding a single decision-maker is a hallucination
+amplifier — whatever the analyst asserts becomes the premise, and nothing argues
+the other side.
 
-1. **Senior Market Research Analyst** — tool `get_news_sentiment`: scrapes and
-   de-duplicates Google News and Yahoo Finance RSS, then scores headlines with a
-   finance lexicon that handles negation ("did **not** beat") and intensifiers
-   ("fell **sharply**").
-2. **Chief Investment Officer** — tool `get_market_price` (`yfinance`) plus the
-   analyst's report, the live price, the current position and the risk profile.
+```mermaid
+flowchart LR
+    subgraph evidence["&nbsp;Evidence"]
+        direction TB
+        NEWS["<b>RSS news</b><br/>Google News · Yahoo Finance<br/><i>per-article polarity</i>"]
+        FUND["<b>Fundamentals</b><br/>debt · liquidity · cash flow<br/>valuation · red flags"]
+        HIST["<b>Price history</b><br/>SMA 50/200 · drawdown<br/>trend flags"]
+    end
+
+    subgraph debate["&nbsp;Adversarial debate"]
+        direction TB
+        BULL["🐂 <b>Bullish Research Analyst</b><br/><i>strongest honest bull case</i>"]
+        BEAR["🐻 <b>Risk Assessor (Short Seller)</b><br/><i>every material risk</i>"]
+    end
+
+    CIO["⚖️ <b>Chief Investment Officer</b><br/>weighs evidence, not rhetoric<br/>BUY · SELL · HOLD"]
+
+    NEWS --> BULL
+    NEWS --> BEAR
+    HIST --> BULL
+    HIST --> BEAR
+    FUND --> BEAR
+
+    BULL -->|bull case| CIO
+    BEAR -->|bear case| CIO
+
+    CIO --> JSON["<b>TradeProposal</b><br/>{action, amount, sentiment, reasoning}"]
+    JSON --> GUARD{"Execution guard"}
+    GUARD -->|approved| LEDGER[("Ledger")]
+    GUARD -->|blocked| LOG[("Audit trail")]
+
+    classDef bull fill:#0d2b1d,stroke:#4ade80,color:#dcfce7
+    classDef bear fill:#3b1d1d,stroke:#fb7185,color:#ffe4e6
+    classDef cio fill:#1e1b4b,stroke:#818cf8,color:#e0e7ff
+    class BULL bull
+    class BEAR bear
+    class CIO cio
+```
+
+### Agent responsibilities
+
+| Agent | Tools | Mandate |
+| --- | --- | --- |
+| **Bullish Research Analyst** | `get_news_sentiment`, `get_price_history` | Build the strongest *honest* bull case: catalysts, upgrades, momentum. Must acknowledge and rebut the main counter-argument, and say so plainly when the bullish evidence is weak. |
+| **Risk Assessor (Short Seller)** | `get_financial_health`, `get_price_history`, `get_news_sentiment` | Find every material risk: leverage, liquidity, cash burn, valuation stretch, technical breakdown. Must state explicitly when it **cannot** find a credible bear case — fabricating a risk is as damaging as missing one. |
+| **Chief Investment Officer** | `get_market_price` | Adjudicate on evidence rather than rhetoric. Weigh the stronger argument, respect the risk mandate and cash budget, and return HOLD when the cases genuinely balance. |
+
+Both arguments are persisted on the decision log (`bull_case`, `bear_case`) and
+streamed to the dashboard, so any verdict can be traced back to the two cases
+that produced it.
 
 The crew must emit exactly this payload:
 
@@ -386,12 +494,12 @@ A React SPA lives in [`frontend/`](frontend/). Django serves the compiled build
 at `/`, so a fresh `docker compose up` gives you a working UI with no extra
 services. In development, run Vite alongside Django for hot reload.
 
-```bash
-# Production: Django serves frontend/dist
-cd frontend && npm install && npm run build
+`frontend/dist` is gitignored (build output does not belong in a repository),
+so the Docker image compiles it in a dedicated Node stage. A fresh clone needs
+no manual npm step. For frontend work with hot reload:
 
-# Development: Vite dev server on :5173, proxying /api and /ws to :8000
-cd frontend && npm run dev
+```bash
+cd frontend && npm run dev   # Vite on :5173, proxying /api and /ws to :8000
 ```
 
 | Panel | What it shows |
@@ -406,9 +514,17 @@ cd frontend && npm run dev
 | **Debate view** | Expand any decision to read the bull case, the bear case and the CIO's verdict side by side |
 
 <details>
-<summary>More screenshots</summary>
+<summary>All screenshots (4)</summary>
+
+**Sign-in** — token authentication against the DRF API.
+
+![Login](docs/screenshots/login.png)
+
+**Debate view** — the bull case, the bear case and the CIO's verdict, side by side.
 
 ![Debate view](docs/screenshots/debate.png)
+
+**Mobile layout** — the same dashboard at a 414 px viewport.
 
 ![Mobile layout](docs/screenshots/dashboard-mobile.png)
 

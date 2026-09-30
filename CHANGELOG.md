@@ -24,10 +24,12 @@ Initial release: a four-tier autonomous investment platform.
   live metrics, the safety-gated autonomy toggle, the AI decision audit trail,
   the trade ledger and on-demand agent sweeps. Query counts are bounded and
   asserted in tests.
-- **AI layer** (`ai_agent.py`) — a sequential two-agent CrewAI crew (market
-  research analyst → CIO) whose tools are strictly read-only. The output
-  contract is enforced twice: a Pydantic `TradeProposal` model and a CrewAI task
-  guardrail that forces a retry on malformed JSON.
+- **AI layer** (`ai_agent.py`) — a sequential three-agent CrewAI crew running
+  an adversarial debate (bullish analyst → risk assessor / short seller → CIO
+  adjudicator) whose tools are strictly read-only. The output contract is
+  enforced twice: a Pydantic `TradeProposal` model and a CrewAI task guardrail
+  that forces a retry on malformed JSON. Both arguments are persisted on the
+  decision log (`bull_case`, `bear_case`) so every verdict is auditable.
 - **Deterministic fallback engine** — when no LLM credential is configured, or
   the provider fails, decisions come from an auditable rule engine instead of
   crashing the pipeline.

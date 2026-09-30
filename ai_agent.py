@@ -1,12 +1,18 @@
 """AlphaAgent AI layer - CrewAI orchestration with a strict guardrail pipeline.
 
-Design contract (spec section 4)
---------------------------------
-* Two agents run in a **sequential** process:
-  1. *Senior Market Research Analyst* - scrapes/filters the latest headlines and
-     extracts a sentiment score (tool: :class:`NewsSentimentTool`).
-  2. *Chief Investment Officer* - decides BUY/SELL/HOLD given the analyst report,
-     the live market price and the investor's risk profile
+Design contract
+---------------
+* Three agents run in a **sequential** process, structured as an adversarial
+  debate so that no single narrative reaches the decision unchallenged:
+  1. *Bullish Research Analyst* - builds the strongest evidence-based bull case
+     from the latest headlines and price action
+     (tools: :class:`NewsSentimentTool`, :class:`PriceHistoryTool`).
+  2. *Risk Assessor (Short Seller)* - builds the bear case from independent
+     evidence: leverage, liquidity, cash burn, valuation and technical breakdown
+     (tools: :class:`FinancialHealthTool`, :class:`PriceHistoryTool`,
+     :class:`NewsSentimentTool`).
+  3. *Chief Investment Officer* - adjudicates between the two arguments and
+     decides BUY/SELL/HOLD given the live price and the investor's risk profile
      (tool: :class:`MarketPriceTool`, backed by ``yfinance``).
 * **No tool touches the database.** Tools are strictly read-only and return JSON.
   Persistence happens only in ``tasks.py`` *after* the execution guard approves
@@ -526,7 +532,7 @@ class LLMProviderError(RuntimeError):
 # Orchestrator
 # ---------------------------------------------------------------------------
 class AlphaAgentOrchestrator:
-    """Builds and runs the two-agent sequential crew."""
+    """Builds and runs the three-agent adversarial debate crew."""
 
     def __init__(self, config: dict[str, Any] | None = None) -> None:
         self.config = config or getattr(settings, "AI_CONFIG", {})
@@ -1006,7 +1012,7 @@ def estimate_cost(tokens_used: int, model: str) -> Decimal:
 # Public entrypoint used by tasks.py
 # ---------------------------------------------------------------------------
 def run_alpha_agent(context: DecisionContext) -> AgentRunResult:
-    """Execute the analyst -> CIO pipeline for one portfolio/ticker pair."""
+    """Execute the bull -> bear -> CIO debate for one portfolio/ticker pair."""
     orchestrator = AlphaAgentOrchestrator()
     if context.news_report is None:
         limit = int(getattr(settings, "AI_CONFIG", {}).get("NEWS_ARTICLE_LIMIT", 10))

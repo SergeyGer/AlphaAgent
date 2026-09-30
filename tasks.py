@@ -10,7 +10,7 @@ Flow
 ``run_alpha_agent_task`` (worker)
     1. Re-check autonomy and the portfolio-level daily stop-loss.
     2. Gather read-only context (live price, news, ledger replay).
-    3. Run the CrewAI analyst -> CIO pipeline (``ai_agent.run_alpha_agent``).
+    3. Run the CrewAI bull -> bear -> CIO debate (``ai_agent.run_alpha_agent``).
     4. **Execution Guard**: validate the JSON payload against
        ``max_trade_allocation_pct`` and ``daily_loss_limit_usd``.
     5. Only if approved, open ``transaction.atomic()`` + ``select_for_update()``
