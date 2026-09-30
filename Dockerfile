@@ -15,7 +15,7 @@
 # so the image must produce it. Building here means `docker compose up --build`
 # from a fresh clone yields a working dashboard, with no manual npm step.
 # ---------------------------------------------------------------------------
-FROM node:22-alpine AS frontend
+FROM node:26-alpine AS frontend
 
 WORKDIR /ui
 
