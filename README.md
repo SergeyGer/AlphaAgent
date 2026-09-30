@@ -46,7 +46,7 @@ trustworthy as its ability to explain and constrain itself.
 
 | | |
 | --- | --- |
-| 🧠 **Three-agent debate** | A bull analyst and a short seller argue opposite cases from independent evidence; the CIO adjudicates. Nothing reaches a decision unchallenged. |
+| 🧠 **Three-agent debate** | A bull analyst and a short seller argue opposite cases from independent evidence; the Chief Investment Officer (CIO) adjudicates. Nothing reaches a decision unchallenged. |
 | 🛡️ **Guardrails that are code, not prompts** | Position sizing, cash limits and the daily stop-loss are enforced in a pure, unit-tested function — never delegated to the model. |
 | 🔍 **Explainable by default** | Every run writes an audit row with the chain of thought, token usage and cost. HOLDs and rejections included. |
 | ⚡ **Fan-out by design** | Celery Beat dispatches one independent task per `(portfolio, ticker)` pair — no nested loops, no head-of-line blocking. |
@@ -452,7 +452,7 @@ flowchart LR
 | --- | --- | --- |
 | **Bullish Research Analyst** | `get_news_sentiment`, `get_price_history` | Build the strongest *honest* bull case: catalysts, upgrades, momentum. Must acknowledge and rebut the main counter-argument, and say so plainly when the bullish evidence is weak. |
 | **Risk Assessor (Short Seller)** | `get_financial_health`, `get_price_history`, `get_news_sentiment` | Find every material risk: leverage, liquidity, cash burn, valuation stretch, technical breakdown. Must state explicitly when it **cannot** find a credible bear case — fabricating a risk is as damaging as missing one. |
-| **Chief Investment Officer** | `get_market_price` | Adjudicate on evidence rather than rhetoric. Weigh the stronger argument, respect the risk mandate and cash budget, and return HOLD when the cases genuinely balance. |
+| **Chief Investment Officer (CIO)** | `get_market_price` | Adjudicate on evidence rather than rhetoric. Weigh the stronger argument, respect the risk mandate and cash budget, and return HOLD when the cases genuinely balance. |
 
 Both arguments are persisted on the decision log (`bull_case`, `bear_case`) and
 streamed to the dashboard, so any verdict can be traced back to the two cases
@@ -626,7 +626,7 @@ staged:
 | --- | --- | --- |
 | **Bullish Research Analyst** | news, price history | Strongest honest bull case. Must acknowledge and rebut the counter-argument, and say so when the bullish evidence is weak. |
 | **Risk Assessor (Short Seller)** | news, fundamentals, price history | Every material risk: leverage, liquidity, cash burn, valuation stretch, technical breakdown. Must state plainly when it *cannot* find a credible bear case - fabricating risk is as damaging as missing it. |
-| **CIO** | live price | Adjudicates on evidence, not rhetoric. HOLD is an acceptable verdict when the cases balance. Records which argument won and names the strongest point on the losing side. |
+| **Chief Investment Officer (CIO)** | live price | Adjudicates on evidence, not rhetoric. HOLD is an acceptable verdict when the cases balance. Records which argument won and names the strongest point on the losing side. |
 
 Both write-ups are persisted on the `AgentDecisionLog` (`bull_case`,
 `bear_case`) and streamed to the dashboard, so every verdict can be audited back
