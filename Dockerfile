@@ -15,7 +15,7 @@
 # so the image must produce it. Building here means `docker compose up --build`
 # from a fresh clone yields a working dashboard, with no manual npm step.
 # ---------------------------------------------------------------------------
-FROM node:22-alpine AS frontend
+FROM node:26-alpine AS frontend
 
 WORKDIR /ui
 
@@ -30,7 +30,7 @@ RUN npm run build
 # ---------------------------------------------------------------------------
 # Stage 2 - Python runtime.
 # ---------------------------------------------------------------------------
-FROM python:3.12-slim
+FROM python:3.13-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
