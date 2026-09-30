@@ -301,9 +301,10 @@ leaves the process. `services/llm_hooks.py` implements it as a genuine
 is rejected:
 
 ```python
-LLM(model="claude-sonnet-4-5-20250929", interceptor=HeaderInjectionInterceptor(
-    {"anthropic-workspace-id": "ws_0123456789abcdef"}
-))
+LLM(
+    model="claude-sonnet-4-5-20250929",
+    interceptor=HeaderInjectionInterceptor({"anthropic-workspace-id": "ws_0123456789abcdef"}),
+)
 ```
 
 No monkeypatching, no forking the provider. Verified end-to-end:
