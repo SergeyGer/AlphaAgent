@@ -26,7 +26,7 @@ psycopg2-binary==2.9.13        # PostgreSQL driver
 crewai[anthropic]==1.15.23     # agent orchestration
 yfinance==1.7.0                # live market prices
 openai==2.54.0                 # GPT-4o / OpenAI-compatible gateways (DeepSeek)
-pydantic==2.12.5               # guardrail payload validation
+pydantic==2.13.5               # guardrail payload validation
 
 # --- Support --------------------------------------------------------------
 python-dotenv==1.2.3           # .env loading
