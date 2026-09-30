@@ -30,7 +30,7 @@ RUN npm run build
 # ---------------------------------------------------------------------------
 # Stage 2 - Python runtime.
 # ---------------------------------------------------------------------------
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
