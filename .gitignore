@@ -5,6 +5,11 @@
 .env.*
 !.env.example
 
+# Never commit a credential handed over for a one-off authenticated push.
+.git-token
+*.token
+*.pat
+
 # ---------------------------------------------------------------------------
 # Python
 # ---------------------------------------------------------------------------
