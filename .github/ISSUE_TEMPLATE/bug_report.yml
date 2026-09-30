@@ -1,0 +1,91 @@
+name: Bug report
+description: Report something that is broken or behaving unexpectedly.
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a report.
+
+        ⚠️ **Do not paste API keys, tokens or database passwords.**
+        For security vulnerabilities, use [SECURITY.md](../blob/main/SECURITY.md) instead.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Also tell us what you expected to happen instead.
+      placeholder: The autonomous sweep returned HOLD for every ticker even though...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. `docker compose up -d`
+        2. `python manage.py seed_demo --autonomous`
+        3. `POST /api/portfolio/run-agent/`
+        4. ...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      multiple: true
+      options:
+        - REST API
+        - AI layer (CrewAI)
+        - Celery / async engine
+        - Execution guard / risk limits
+        - Database / models
+        - Docker / deployment
+        - Documentation
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      placeholder: v1.0.0 or a commit SHA
+    validations:
+      required: true
+
+  - type: dropdown
+    id: llm-provider
+    attributes:
+      label: LLM provider in use
+      options:
+        - Not configured (deterministic fallback)
+        - deepseek
+        - openai
+        - anthropic
+        - other
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: |
+        Redact secrets. `logs/errors.log`, `docker compose logs worker`, or the
+        `reasoning` field of the affected `AgentDecisionLog` row.
+      render: shell
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I have redacted all credentials from this report.
+          required: true
+        - label: I searched existing issues for a duplicate.
+          required: true

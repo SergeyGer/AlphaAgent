@@ -1,0 +1,171 @@
+# AlphaAgent - full stack.
+#
+#   docker compose up -d --build
+#   docker compose exec web python manage.py migrate
+#   docker compose exec web python manage.py seed_demo --autonomous --confirm
+#
+# The application tier (web/worker/beat) runs from the image built by the
+# Dockerfile; the worker has `restart: unless-stopped`, so it survives crashes
+# and host reboots instead of vanishing when a parent shell exits.
+
+x-app: &app
+  build: .
+  image: alphaagent:latest
+  env_file: .env
+  # `environment` wins over `env_file`, so the in-container service hostnames
+  # override the 127.0.0.1 defaults that suit a bare-metal dev run.
+  environment: &app_env
+    POSTGRES_HOST: db
+    POSTGRES_PORT: "5432"
+    REDIS_HOST: redis
+    REDIS_PORT: "6379"
+    CELERY_BROKER_URL: redis://redis:6379/0
+    CELERY_RESULT_BACKEND: redis://redis:6379/1
+    DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,0.0.0.0,web
+    # Points the crew at the MCP service. Only used when AI_TOOLS_VIA_MCP=true.
+    AI_MCP_SERVER_URL: http://mcp:8100/mcp
+  restart: unless-stopped
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  # ---------------------------------------------------------------------
+  # Data tier
+  # ---------------------------------------------------------------------
+  db:
+    image: postgres:16-alpine
+    container_name: alpha_postgres
+    restart: always
+    environment:
+      # Sourced from .env - never hard-code credentials in this file.
+      # `:?` makes compose abort with a clear message if it is unset.
+      POSTGRES_DB: ${POSTGRES_DB:-alpha_agent_db}
+      POSTGRES_USER: ${POSTGRES_USER:-alpha_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-alpha_user} -d ${POSTGRES_DB:-alpha_agent_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: redis:7-alpine
+    container_name: alpha_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  # ---------------------------------------------------------------------
+  # Application tier
+  # ---------------------------------------------------------------------
+  web:
+    <<: *app
+    container_name: alpha_web
+    # NOTE: commands are YAML *lists* on purpose. A folded scalar (``>``) keeps
+    # the newlines of more-indented continuation lines, which silently truncated
+    # the command to `gunicorn config.wsgi:application` and made gunicorn fall
+    # back to its defaults (127.0.0.1:8000, 1 worker) - unreachable from the host.
+    command:
+      - sh
+      - -c
+      - >-
+        python manage.py migrate --noinput &&
+        exec daphne -b 0.0.0.0 -p 8000 config.asgi:application
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/healthz/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Autonomous agent sweep: consumes the fan-out subtasks.
+  worker:
+    <<: *app
+    container_name: alpha_worker
+    command:
+      - celery
+      - -A
+      - config
+      - worker
+      - --loglevel=info
+      - --concurrency=4
+      - --max-tasks-per-child=200
+      - -n
+      - alphaagent-worker@%h
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A config inspect ping -d alphaagent-worker@$$(hostname) || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 40s
+
+  # Market-data tools over the Model Context Protocol.
+  #
+  # The same tools the crew uses, exposed on an open protocol so any MCP client
+  # (Claude Code, Cursor, a local Ollama agent, another framework) can call them
+  # without touching this codebase. Strictly read-only: no tool here can read
+  # portfolio state or place a trade.
+  mcp:
+    <<: *app
+    container_name: alpha_mcp
+    command:
+      - python
+      - -m
+      - mcp_server
+      - --transport
+      - http
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8100"
+    environment:
+      <<: *app_env
+      MCP_LOG_LEVEL: INFO
+      # Never leave the stdio transport's framing to chance: logs go to stderr.
+      PYTHONUNBUFFERED: "1"
+    ports:
+      # Published so external MCP clients on the host can connect. The tools are
+      # read-only and serve public market data; drop this mapping if only the
+      # worker needs them.
+      - "8100:8100"
+    healthcheck:
+      # A TCP connect is enough: the MCP endpoint needs a JSON-RPC handshake.
+      test:
+        - CMD-SHELL
+        - >-
+          python -c "import socket; socket.create_connection(('127.0.0.1', 8100), 3)"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # Celery Beat: the cron scheduler for autonomous_market_monitoring_task.
+  beat:
+    <<: *app
+    container_name: alpha_beat
+    command:
+      - sh
+      - -c
+      - >-
+        rm -f /app/celerybeat-schedule &&
+        exec celery -A config beat --loglevel=info --schedule /app/celerybeat-schedule
+
+volumes:
+  postgres_data:
+  redis_data:

@@ -1,0 +1,36 @@
+# AlphaAgent - runtime dependencies.
+# Pinned to the versions verified in this repository (Python 3.12).
+# Development tooling lives in requirements-dev.txt.
+
+# --- Web / API tier -------------------------------------------------------
+Django==5.2.17                 # LTS
+djangorestframework==3.18.1    # REST API
+
+# --- Real-time / ASGI -----------------------------------------------------
+# Daphne is not optional: the dashboard streams over WebSocket, which a WSGI
+# server cannot serve. The extra also pulls in the `daphne` runserver.
+channels[daphne]==4.3.2        # ASGI + WebSocket protocol handling
+channels-redis==4.3.0          # Redis-backed channel layer
+
+# --- Async engine ---------------------------------------------------------
+celery==5.6.3                  # worker + Celery Beat scheduler
+redis==8.1.0                   # broker, result backend and Django cache
+
+# --- Database -------------------------------------------------------------
+psycopg2-binary==2.9.13        # PostgreSQL driver
+
+# --- AI layer -------------------------------------------------------------
+# Extras matter: CrewAI resolves some models through *native* providers that
+# need their SDK installed (e.g. `claude-*` -> anthropic). Without the extra,
+# crew construction dies with "Anthropic native provider not available".
+crewai[anthropic]==1.15.23     # agent orchestration
+yfinance==1.7.0                # live market prices
+openai==2.54.0                 # GPT-4o / OpenAI-compatible gateways (DeepSeek)
+pydantic==2.12.5               # guardrail payload validation
+
+# --- Support --------------------------------------------------------------
+python-dotenv==1.2.3           # .env loading
+requests==2.34.2               # RSS / HTTP client
+defusedxml==0.7.1              # hardened XML parsing for untrusted RSS feeds
+beautifulsoup4==4.15.0
+lxml==6.1.3

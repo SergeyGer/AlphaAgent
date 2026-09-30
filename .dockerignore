@@ -1,0 +1,33 @@
+# Keep the build context small and reproducible.
+# The local venv alone is multiple GB - never ship it into the image.
+
+venv/
+.venv/
+.runtime/
+logs/
+staticfiles/
+media/
+
+# Frontend: the image builds its own bundle in a separate stage, so neither
+# the dependency tree nor a stale host build may enter the context.
+frontend/node_modules/
+frontend/.vite/
+frontend/dist/
+
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+.env
+.git/
+.gitignore
+.dockerignore
+Dockerfile
+docker-compose.yml
+README.md
+
+celerybeat-schedule*
+db.sqlite3
+*.log
+.pytest_cache/
+.mypy_cache/

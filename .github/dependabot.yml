@@ -1,0 +1,41 @@
+version: 2
+
+updates:
+  # Python runtime dependencies
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "python"]
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      # Keep the Django stack in one reviewable PR.
+      django:
+        patterns: ["django*", "djangorestframework*"]
+      ai:
+        patterns: ["crewai*", "openai*", "anthropic*", "pydantic*", "yfinance*"]
+      celery:
+        patterns: ["celery*", "redis*", "kombu*", "amqp*", "vine*", "billiard*"]
+
+  # GitHub Actions used by the workflows
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    labels: ["dependencies", "ci"]
+    commit-message:
+      prefix: "chore(ci)"
+
+  # Base image in the Dockerfile
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: weekly
+    labels: ["dependencies", "docker"]
+    commit-message:
+      prefix: "chore(docker)"

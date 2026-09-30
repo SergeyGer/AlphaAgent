@@ -1,0 +1,74 @@
+[project]
+name = "alphaagent"
+version = "1.0.0"
+description = "Autonomous multi-agent investment and portfolio management platform"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+
+# ---------------------------------------------------------------------------
+# Ruff - linting + import sorting (replaces flake8, isort and friends)
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+exclude = [
+    ".git",
+    ".runtime",
+    "venv",
+    ".venv",
+    "__pycache__",
+    "**/migrations/*",
+    "staticfiles",
+    "logs",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "C4",   # flake8-comprehensions
+    "DJ",   # flake8-django
+    "SIM",  # flake8-simplify
+    "S",    # flake8-bandit (security)
+    "RUF",  # ruff-specific
+]
+ignore = [
+    "E501",    # line length is handled by the formatter
+    "B008",    # Django/celery idiom: calls in argument defaults
+    "S101",    # asserts are fine in tests
+    "SIM108",  # ternaries are not always clearer
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests legitimately use asserts, hard-coded passwords and dummy secrets.
+"core/tests/*" = ["S105", "S106", "S107", "S311", "C408"]
+"core/management/commands/*" = ["S106"]
+"config/settings.py" = ["S105"]
+"manage.py" = ["S105"]
+# Django / DRF declare class-level lists by design (`Meta.constraints`,
+# `Meta.fields`, `permission_classes`, `inlines`); RUF012 is a false positive.
+"core/models.py" = ["RUF012"]
+"core/serializers.py" = ["RUF012"]
+"core/views.py" = ["RUF012"]
+"core/admin.py" = ["RUF012"]
+# A network service has to bind an interface; the host is configurable.
+"mcp_server/*" = ["S104"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["config", "core", "services", "ai_agent", "tasks", "runtime_env"]
+section-order = [
+    "future",
+    "standard-library",
+    "third-party",
+    "first-party",
+    "local-folder",
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
