@@ -1,41 +1,89 @@
 version: 2
 
+# Strategy: monthly, tightly grouped.
+#
+# The first release of this file opened 11 pull requests within minutes, most of
+# them single-package major bumps. That is noise, not maintenance. Everything is
+# now monthly and grouped so a normal month produces two or three reviewable PRs
+# instead of a dozen.
+#
+# Grouping rules:
+#   * `patterns: ["*"]` sweeps every remaining dependency into one PR per
+#     ecosystem, so nothing arrives ungrouped.
+#   * `update-types` splits major bumps into their own PR. A major version is a
+#     breaking change and deserves individual review; minor and patch releases
+#     are safe to batch.
+#
+# `day` is intentionally omitted: it accepts weekday names and only applies to
+# weekly schedules. Monthly runs happen on the 1st.
 updates:
-  # Python runtime dependencies
+  # ---------------------------------------------------------------------
+  # Python runtime + dev dependencies
+  # ---------------------------------------------------------------------
   - package-ecosystem: pip
     directory: "/"
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
       time: "06:00"
       timezone: Etc/UTC
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
     labels: ["dependencies", "python"]
     commit-message:
       prefix: "chore(deps)"
     groups:
-      # Keep the Django stack in one reviewable PR.
+      # Breaking changes, one PR each so they can be reviewed properly.
+      python-major:
+        patterns: ["*"]
+        update-types: ["major"]
+      # Everything compatible, batched together.
+      python-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+      # Security-relevant surfaces stay individually visible.
       django:
         patterns: ["django*", "djangorestframework*"]
+        update-types: ["minor", "patch"]
       ai:
         patterns: ["crewai*", "openai*", "anthropic*", "pydantic*", "yfinance*"]
+        update-types: ["minor", "patch"]
       celery:
         patterns: ["celery*", "redis*", "kombu*", "amqp*", "vine*", "billiard*"]
+        update-types: ["minor", "patch"]
 
-  # GitHub Actions used by the workflows
+  # ---------------------------------------------------------------------
+  # GitHub Actions
+  # ---------------------------------------------------------------------
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: monthly
+      time: "06:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 3
     labels: ["dependencies", "ci"]
     commit-message:
       prefix: "chore(ci)"
+    groups:
+      actions-major:
+        patterns: ["*"]
+        update-types: ["major"]
+      actions-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
-  # Base image in the Dockerfile
+  # ---------------------------------------------------------------------
+  # Base images (python:3.12-slim, node:22-alpine)
+  # ---------------------------------------------------------------------
   - package-ecosystem: docker
     directory: "/"
     schedule:
-      interval: weekly
+      interval: monthly
+      time: "06:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 2
     labels: ["dependencies", "docker"]
     commit-message:
       prefix: "chore(docker)"
+    groups:
+      docker-all:
+        patterns: ["*"]
