@@ -30,6 +30,15 @@ updates:
     labels: ["dependencies", "python"]
     commit-message:
       prefix: "chore(deps)"
+    ignore:
+      # crewai 1.15.23 pins `openai<3,>=2.30.0`. Proposing 3.x produces a PR
+      # that cannot install (pip: ResolutionImpossible). Remove once crewai
+      # widens the bound.
+      - dependency-name: "openai"
+        versions: [">=3.0.0"]
+      # crewai 1.15.23 pins `pydantic<2.13,>=2.11.9` for the same reason.
+      - dependency-name: "pydantic"
+        versions: [">=2.13.0"]
     groups:
       # Breaking changes, one PR each so they can be reviewed properly.
       python-major:
@@ -84,6 +93,11 @@ updates:
     labels: ["dependencies", "docker"]
     commit-message:
       prefix: "chore(docker)"
+    ignore:
+      # Every crewai release declares `Requires-Python <3.14`, so the runtime
+      # image cannot move to 3.14 yet. Remove once a release supports it.
+      - dependency-name: "python"
+        versions: [">=3.14"]
     groups:
       docker-all:
         patterns: ["*"]
