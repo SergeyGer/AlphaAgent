@@ -3,7 +3,7 @@
 # Development tooling lives in requirements-dev.txt.
 
 # --- Web / API tier -------------------------------------------------------
-Django==5.2.17                 # LTS
+Django==6.1.1                 # LTS
 djangorestframework==3.18.1    # REST API
 
 # --- Real-time / ASGI -----------------------------------------------------
