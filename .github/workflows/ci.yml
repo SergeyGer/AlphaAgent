@@ -161,9 +161,16 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Verify compose configuration
+        # Runs against a fresh checkout, which has no .env - the same state a
+        # new contributor is in before `cp .env.example .env`.
         run: docker compose config --quiet
 
       - name: Smoke-test the image
         run: |
           docker run --rm alphaagent:ci python -c "import django, celery, crewai, yfinance; print('imports OK')"
-          docker run --rm alphaagent:ci python manage.py --help > /dev/null
+          # A real boot, not just --help: `manage.py --help` exits 0 without
+          # loading settings, so it would not catch a broken configuration.
+          docker run --rm \
+            -e DJANGO_SECRET_KEY=ci-smoke-key \
+            -e POSTGRES_PASSWORD=ci-smoke-password \
+            alphaagent:ci python manage.py check
