@@ -39,6 +39,12 @@ updates:
       # crewai 1.15.23 pins `pydantic<2.13,>=2.11.9` for the same reason.
       - dependency-name: "pydantic"
         versions: [">=2.13.0"]
+      # Django 5.2 is the LTS line (longer security-support window than the
+      # regular 6.x releases) and the README documents Django 5.x. Revisit at
+      # 6.2 LTS, or when moving off the LTS line deliberately. Patch and minor
+      # updates within 5.x still flow through.
+      - dependency-name: "Django"
+        versions: [">=6.0.0"]
     groups:
       # Breaking changes, one PR each so they can be reviewed properly.
       python-major:
