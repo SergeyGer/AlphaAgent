@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>AlphaAgent — social preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+  /* Palette lifted from frontend/tailwind.config.js so the card matches the app. */
+  :root {
+    --t950: #070b16;
+    --t900: #0b1120;
+    --t850: #0f172a;
+    --t800: #131c31;
+    --t700: #1e293b;
+    --t600: #334155;
+    --emerald: #10b981;
+    --emerald-lt: #34d399;
+    --rose: #f43f5e;
+    --sky: #38bdf8;
+    --indigo: #818cf8;
+    --slate100: #f1f5f9;
+    --slate300: #cbd5e1;
+    --slate400: #94a3b8;
+    --slate500: #64748b;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body { width: 1280px; height: 640px; overflow: hidden; }
+
+  body {
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+    background: var(--t950);
+    color: var(--slate100);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .canvas {
+    position: relative;
+    width: 1280px;
+    height: 640px;
+    padding: 52px 56px;
+    display: flex;
+    gap: 42px;
+    background:
+      radial-gradient(900px 520px at 78% 6%, rgba(16, 185, 129, 0.13), transparent 62%),
+      radial-gradient(760px 460px at 6% 96%, rgba(56, 189, 248, 0.11), transparent 60%),
+      linear-gradient(150deg, var(--t900) 0%, var(--t950) 58%, #05080f 100%);
+  }
+
+  /* Faint terminal grid, echoing the dashboard background. */
+  .grid {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(148, 163, 184, 0.055) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(148, 163, 184, 0.055) 1px, transparent 1px);
+    background-size: 64px 64px;
+    mask-image: radial-gradient(circle at 50% 40%, #000 0%, transparent 78%);
+  }
+
+  .left  { position: relative; z-index: 2; width: 706px; display: flex; flex-direction: column; justify-content: center; }
+  .right { position: relative; z-index: 2; flex: 1; display: flex; flex-direction: column; justify-content: center; }
+
+  /* ---------- brand row ---------- */
+  .brand { display: flex; align-items: center; gap: 14px; }
+
+  .logo {
+    width: 52px; height: 52px; border-radius: 13px;
+    display: grid; place-items: center;
+    font-size: 30px; font-weight: 700; color: #06251a;
+    background: linear-gradient(140deg, var(--emerald-lt), #22d3ee);
+    box-shadow: 0 0 0 1px rgba(16,185,129,.45), 0 10px 26px -8px rgba(16,185,129,.55);
+  }
+
+  .brand-name { font-size: 31px; font-weight: 800; letter-spacing: -0.02em; }
+  .brand-sub {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px; font-weight: 500; letter-spacing: 0.22em;
+    color: var(--slate500); text-transform: uppercase; margin-top: 3px;
+  }
+
+  /* ---------- headline ---------- */
+  .headline {
+    margin-top: 44px;
+    font-size: 55px; font-weight: 800; line-height: 1.06;
+    letter-spacing: -0.032em;
+  }
+  .headline .accent {
+    background: linear-gradient(96deg, var(--emerald-lt), #22d3ee 92%);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .lede {
+    margin-top: 23px;
+    font-size: 18px; line-height: 1.58; font-weight: 400;
+    color: var(--slate400); max-width: 652px;
+  }
+  .lede b { color: var(--slate300); font-weight: 600; }
+
+  /* ---------- credibility strip ---------- */
+  .proof {
+    margin-top: 40px;
+    display: flex; align-items: center; gap: 11px;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 10.6px; font-weight: 500;
+    letter-spacing: 0.115em; text-transform: uppercase;
+    color: var(--slate500);
+  }
+  .proof .sep { color: var(--emerald); opacity: 0.75; }
+  .proof .yes { color: var(--emerald-lt); }
+
+  /* ---------- tech chips ---------- */
+  .chips { margin-top: 24px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 10.8px; font-weight: 500; letter-spacing: 0.02em;
+    color: var(--slate300);
+    padding: 6px 10.5px; border-radius: 7px;
+    white-space: nowrap;
+    background: rgba(30, 41, 59, 0.72);
+    border: 1px solid rgba(51, 65, 85, 0.95);
+  }
+
+  /* ---------- debate panel ---------- */
+  .panel {
+    border-radius: 16px;
+    padding: 20px 20px 18px;
+    background: linear-gradient(180deg, rgba(15,23,42,.92), rgba(11,17,32,.92));
+    border: 1px solid rgba(51,65,85,.85);
+    box-shadow: 0 24px 60px -28px rgba(2,6,23,1), inset 0 1px 0 rgba(148,163,184,.07);
+  }
+
+  .panel-head {
+    display: flex; align-items: center; justify-content: space-between;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 10.5px; letter-spacing: 0.2em; text-transform: uppercase;
+    color: var(--slate500); margin-bottom: 15px;
+  }
+  .live { display: flex; align-items: center; gap: 7px; color: var(--emerald-lt); letter-spacing: 0.14em; }
+  .dot {
+    width: 7px; height: 7px; border-radius: 999px; background: var(--emerald);
+    box-shadow: 0 0 9px 1px rgba(16,185,129,.85);
+  }
+
+  .agent {
+    display: flex; align-items: center; gap: 12px;
+    border-radius: 11px; padding: 11px 13px; margin-bottom: 9px;
+    background: rgba(2, 6, 23, 0.55);
+    border: 1px solid rgba(51, 65, 85, 0.7);
+  }
+  .bar { width: 3px; height: 30px; border-radius: 999px; flex: none; }
+  .agent-name { font-size: 14.5px; font-weight: 600; letter-spacing: -0.01em; }
+  .agent-role {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 9.6px; letter-spacing: 0.13em; text-transform: uppercase;
+    color: var(--slate500); margin-top: 3px;
+  }
+
+  .bull { border-color: rgba(16,185,129,.42); background: rgba(16,185,129,.07); }
+  .bull .bar { background: var(--emerald); }
+  .bull .agent-name { color: #a7f3d0; }
+  .bear { border-color: rgba(244,63,94,.42); background: rgba(244,63,94,.07); }
+  .bear .bar { background: var(--rose); }
+  .bear .agent-name { color: #fecdd3; }
+  .cio  { border-color: rgba(129,140,248,.5); background: rgba(129,140,248,.09); }
+  .cio .bar { background: var(--indigo); }
+  .cio .agent-name { color: #c7d2fe; }
+  .cio .badge {
+    margin-left: auto; flex: none;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+    color: #c7d2fe; padding: 4px 11px; border-radius: 6px;
+    background: rgba(129,140,248,.18); border: 1px solid rgba(129,140,248,.45);
+  }
+
+  .guard {
+    margin-top: 13px; padding-top: 13px;
+    border-top: 1px dashed rgba(51,65,85,.9);
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+  }
+  .guard-label {
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em;
+    color: var(--emerald-lt);
+  }
+  .guard-detail {
+    margin-top: 5px;
+    font-size: 10.2px; letter-spacing: 0.045em; color: var(--slate500);
+  }
+</style>
+</head>
+<body>
+  <div class="canvas">
+    <div class="grid"></div>
+
+    <!-- ---------------- left: identity + positioning ---------------- -->
+    <div class="left">
+      <div class="brand">
+        <div class="logo">α</div>
+        <div>
+          <div class="brand-name">AlphaAgent</div>
+          <div class="brand-sub">Autonomous Investment Terminal</div>
+        </div>
+      </div>
+
+      <div class="headline">
+        Three AI agents argue.<br />
+        <span class="accent">One guard decides.</span>
+      </div>
+
+      <p class="lede">
+        A bull analyst and a short seller build opposing cases from
+        <b>independent evidence</b>. A CIO adjudicates. A deterministic risk
+        guard has the final say — the model proposes, it never writes to the ledger.
+      </p>
+
+      <div class="proof">
+        <span class="yes">324 tests</span>
+        <span class="sep">◆</span>
+        <span>Deterministic risk guard</span>
+        <span class="sep">◆</span>
+        <span>Full audit trail</span>
+      </div>
+
+      <div class="chips">
+        <span class="chip">Django 5 · DRF</span>
+        <span class="chip">Celery · Redis</span>
+        <span class="chip">PostgreSQL 16</span>
+        <span class="chip">CrewAI</span>
+        <span class="chip">React · WebSocket</span>
+        <span class="chip">MCP · Telegram</span>
+      </div>
+    </div>
+
+    <!-- ---------------- right: the debate, as the app renders it ---------------- -->
+    <div class="right">
+      <div class="panel">
+        <div class="panel-head">
+          <span>Debate</span>
+          <span class="live"><span class="dot"></span>Live</span>
+        </div>
+
+        <div class="agent bull">
+          <span class="bar"></span>
+          <span>
+            <div class="agent-name">Bullish Research Analyst</div>
+            <div class="agent-role">News · Price history</div>
+          </span>
+        </div>
+
+        <div class="agent bear">
+          <span class="bar"></span>
+          <span>
+            <div class="agent-name">Risk Assessor (Short Seller)</div>
+            <div class="agent-role">Fundamentals · Price · News</div>
+          </span>
+        </div>
+
+        <div class="agent cio">
+          <span class="bar"></span>
+          <span>
+            <div class="agent-name">Chief Investment Officer</div>
+            <div class="agent-role">Adjudicates the evidence</div>
+          </span>
+          <span class="badge">HOLD</span>
+        </div>
+
+        <div class="guard">
+          <div class="guard-label">✓ EXECUTION GUARD</div>
+          <div class="guard-detail">allocation · cash · position · stop-loss</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
