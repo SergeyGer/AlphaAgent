@@ -15,8 +15,12 @@ import logging
 from pathlib import Path
 
 from django.conf import settings
+from django.core.exceptions import SuspiciousFileOperation
 from django.http import FileResponse, Http404, HttpResponse
+from django.utils._os import safe_join
 from django.views.static import serve as static_serve
+
+from core.log_safety import log_safe
 
 logger = logging.getLogger("alphaagent.spa")
 
@@ -54,18 +58,31 @@ def spa_index(request) -> HttpResponse:
 def _resolve_within(root: Path, relative: str) -> None:
     """Reject any path that escapes ``root`` (traversal, absolute paths, symlinks).
 
-    Django's ``safe_join`` raises ``SuspiciousFileOperation``, which is not an
-    ``Http404``; without this guard a crafted request would surface as a 500
-    instead of a clean 404.
+    Two layers, deliberately:
+
+    * ``safe_join`` is Django's own containment helper. It rejects absolute
+      paths, drive letters and ``..`` segments, and raises
+      ``SuspiciousFileOperation`` - which is *not* an ``Http404``, so without
+      this guard a crafted request would surface as a 500 rather than a clean
+      404.
+    * the resolved-path check afterwards additionally covers symlinks inside the
+      build directory, which ``safe_join`` cannot see.
+
+    ``safe_join`` is used rather than a hand-rolled ``root / relative`` because
+    concatenating first and validating second is what CodeQL flags as
+    ``py/path-injection``: the tainted value reaches a path expression before any
+    sanitiser runs. Joining through the recognised helper keeps the validation
+    ahead of the path construction.
     """
     try:
-        candidate = (root / relative).resolve()
+        joined = safe_join(str(root), relative)
+        candidate = Path(joined).resolve()
         root_resolved = root.resolve()
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, SuspiciousFileOperation) as exc:
         raise Http404("Invalid asset path") from exc
 
     if not candidate.is_relative_to(root_resolved):
-        logger.warning("Blocked path traversal attempt: %r", relative)
+        logger.warning("Blocked path traversal attempt: %r", log_safe(relative))
         raise Http404("Invalid asset path")
 
 

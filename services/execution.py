@@ -8,7 +8,6 @@ through :func:`evaluate_proposal`.
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass, field
 from decimal import ROUND_DOWN, Decimal
 from typing import TYPE_CHECKING
@@ -21,7 +20,9 @@ if TYPE_CHECKING:  # pragma: no cover - typing only, avoids importing CrewAI
     from ai_agent import TradeProposal
     from services.ledger import PositionState
 
-logger = logging.getLogger("alphaagent.execution")
+# Deliberately no module-level logger: the guard is a pure function and
+# performs no I/O, so it has nothing to log. Callers log the reasons it returns.
+# (An unused logger here was flagged as py/unused-global-variable.)
 
 __all__ = [
     "CENT",

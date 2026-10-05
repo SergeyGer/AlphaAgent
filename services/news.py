@@ -28,6 +28,7 @@ from django.conf import settings
 from django.core.cache import cache
 
 from services.sentiment import SentimentResult, aggregate_sentiment, score_text
+from services.tickers import normalise_ticker
 
 logger = logging.getLogger("alphaagent.news")
 
@@ -185,7 +186,15 @@ def _clean(text: str | None) -> str:
 
 
 def _rss_urls(ticker: str) -> list[tuple[str, str]]:
-    """Return ``(source_name, url)`` pairs for a ticker."""
+    """Return ``(source_name, url)`` pairs for a ticker.
+
+    The ticker is validated before it reaches the URL. Only the query string was
+    ever attacker-influenced (both hosts are hardcoded), but passing unvalidated
+    text into an outbound request is what CodeQL flags as ``py/partial-ssrf`` -
+    and the same string is logged, which is the log-injection finding. One check
+    at the boundary closes both.
+    """
+    ticker = normalise_ticker(ticker)
     q = quote_plus(f"{ticker} stock")
     return [
         (

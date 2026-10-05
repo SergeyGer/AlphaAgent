@@ -520,11 +520,13 @@ class PortfolioScopeTests(TestCase):
         fake = FakeTelegramClient()
         with (
             patch("telegram_bot.get_client", return_value=fake),
-            patch("tasks.advisory_sweep_task.delay") as delay,
+            # Dispatched by task name, not by importing tasks: telegram_bot must
+            # not depend on tasks, or the two form an import cycle.
+            patch("config.celery.app.send_task") as send_task,
         ):
             handle_update(message_update(8888, "/analyse"))
 
-        delay.assert_called_once_with(portfolio.id)
+        send_task.assert_called_once_with("tasks.advisory_sweep_task", args=[portfolio.id])
         self.assertIn("Advisory sweep queued", fake.last_text)
 
     def test_trade_recommendation_is_never_created_for_another_user(self):

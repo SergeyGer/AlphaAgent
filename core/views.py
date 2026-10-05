@@ -24,6 +24,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from core.log_safety import log_safe
 from core.models import (
     AgentDecisionLog,
     Asset,
@@ -85,7 +86,7 @@ def get_portfolio(user) -> Portfolio:
     """Return the user's portfolio, provisioning one on first access."""
     portfolio, created = Portfolio.objects.get_or_create(user=user)
     if created:
-        logger.info("Provisioned portfolio %s for user %s", portfolio.id, user.username)
+        logger.info("Provisioned portfolio %s for user %s", portfolio.id, log_safe(user.username))
     return portfolio
 
 
@@ -141,7 +142,7 @@ class ToggleAutonomyView(APIView):
             emit_autonomy_changed(request.user.id, portfolio)
             logger.info(
                 "User %s set is_autonomous=%s on portfolio %s",
-                request.user.username,
+                log_safe(request.user.username),
                 target,
                 portfolio.id,
             )
@@ -254,7 +255,7 @@ class RunAgentView(APIView):
             logger.info(
                 "On-demand sweep for portfolio %s debounced (user %s)",
                 portfolio.id,
-                request.user.username,
+                log_safe(request.user.username),
             )
             return Response(
                 {
@@ -272,7 +273,7 @@ class RunAgentView(APIView):
 
         logger.info(
             "User %s triggered a sweep for portfolio %s (%s tasks)",
-            request.user.username,
+            log_safe(request.user.username),
             portfolio.id,
             result.get("dispatched", 0),
         )
@@ -384,7 +385,7 @@ class RecommendationDecisionView(APIView):
             else:
                 outcome = reject_recommendation(recommendation.id, via=DecidedVia.WEB)
         except Exception as exc:
-            logger.exception("Recommendation %s decision failed: %s", pk, exc)
+            logger.exception("Recommendation %s decision failed: %s", pk, log_safe(exc))
             return Response(
                 {
                     "error": True,
@@ -397,7 +398,7 @@ class RecommendationDecisionView(APIView):
 
         logger.info(
             "User %s %sd recommendation %s -> %s",
-            request.user.username,
+            log_safe(request.user.username),
             self.decision,
             pk,
             outcome.recommendation.status,
@@ -427,7 +428,7 @@ class AdvisorySweepView(APIView):
         from tasks import advisory_sweep_task
 
         result = advisory_sweep_task.delay(portfolio.id)
-        logger.info("User %s queued an advisory sweep", request.user.username)
+        logger.info("User %s queued an advisory sweep", log_safe(request.user.username))
         return Response(
             {
                 "status": "queued",

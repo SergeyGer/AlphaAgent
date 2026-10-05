@@ -26,6 +26,10 @@ import requests
 from django.conf import settings
 from django.utils import timezone
 
+# Safe to import at module level: core.log_safety depends on nothing else in
+# the project, so it cannot participate in the tasks <-> telegram_bot cycle.
+from core.log_safety import log_safe
+
 logger = logging.getLogger("alphaagent.telegram")
 
 __all__ = [
@@ -399,7 +403,7 @@ def _reply(chat_id: int, text: str, markup: dict | None = None) -> None:
     try:
         get_client().send_message(chat_id, text, reply_markup=markup)
     except TelegramError as exc:
-        logger.warning("Failed to reply to chat %s: %s", chat_id, exc)
+        logger.warning("Failed to reply to chat %s: %s", chat_id, log_safe(exc))
 
 
 def _get_link(chat_id: int):
@@ -540,9 +544,14 @@ def _cmd_analyse(chat_id: int) -> None:
         return
     portfolio = _portfolio_for(link)
     try:
-        from tasks import advisory_sweep_task
+        # Dispatched by name rather than importing tasks: telegram_bot <-> tasks
+        # is a genuine cycle (tasks imports this module for its notification
+        # helpers), and a function-level import only hides it. Naming the task
+        # removes the telegram_bot -> tasks edge entirely, which is what CodeQL's
+        # py/cyclic-import was pointing at.
+        from config.celery import app as celery_app
 
-        advisory_sweep_task.delay(portfolio.id)
+        celery_app.send_task("tasks.advisory_sweep_task", args=[portfolio.id])
         _reply(
             chat_id,
             "🔍 Advisory sweep queued.\n\n"

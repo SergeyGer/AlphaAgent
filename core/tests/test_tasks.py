@@ -263,11 +263,16 @@ class MonitoringFanOutTests(TestCase):
         self.captured: list = []
 
         def inline_group(signatures):
-            self.captured = list(signatures)
+            # Bind to a local, not to `self`. The nested class below must name its
+            # first parameter `self`, so reaching the outer TestCase through
+            # `self.captured` would resolve to the _InlineGroup instance instead -
+            # the closure is what keeps the reference unambiguous.
+            captured = list(signatures)
+            self.captured = captured
 
             class _InlineGroup:
-                def apply_async(self_inner, *args, **kwargs):
-                    for signature in self.captured:
+                def apply_async(self, *args, **kwargs):
+                    for signature in captured:
                         signature.apply()
                     return SimpleNamespace(id="inline-group-id")
 

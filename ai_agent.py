@@ -562,11 +562,11 @@ class AlphaAgentOrchestrator:
         model = str(self.config.get("MODEL") or "deepseek-reasoner")
         provider = self.provider
 
-        # LiteLLM routes on a "<provider>/<model>" prefix.
+        # LiteLLM routes on a "<provider>/<model>" prefix. DeepSeek needs one
+        # prepended; OpenAI and Anthropic accept the bare name, so no branch is
+        # required for them (an empty branch would be dead code).
         if provider == "deepseek" and not model.startswith("deepseek/"):
             model = f"deepseek/{model}"
-        elif provider == "openai" and "/" not in model:
-            model = model  # OpenAI models need no prefix
 
         kwargs: dict[str, Any] = {
             "model": model,
