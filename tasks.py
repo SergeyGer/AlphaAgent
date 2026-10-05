@@ -531,9 +531,30 @@ def advisory_sweep_task(self, portfolio_id: int) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 @shared_task(bind=True, name="tasks.capture_portfolio_snapshots_task")
 def capture_portfolio_snapshots_task(self) -> dict[str, Any]:
-    """Write one valuation row per portfolio - the dashboard's equity series."""
+    """Write one valuation row per portfolio and publish it to live dashboards.
+
+    The write alone was not enough: this task recorded the equity series every
+    15 minutes but never emitted an event, so the metric cards and allocation
+    panel of an open dashboard stayed stale until a trade or a reconnect. It now
+    reuses the same payload builder as the REST endpoint and the post-trade
+    path, so all three describe the portfolio identically.
+    """
     captured = capture_all_snapshots()
-    return {"status": "ok", "captured": captured}
+
+    from core.serializers import build_portfolio_payload
+    from services.events import emit_portfolio_snapshot
+
+    emitted = 0
+    for portfolio, snapshot in captured:
+        try:
+            payload = build_portfolio_payload(portfolio)
+            payload["captured_at"] = snapshot.captured_at.isoformat()
+            emit_portfolio_snapshot(portfolio.user_id, payload)
+            emitted += 1
+        except Exception as exc:
+            logger.warning("Snapshot event failed for portfolio %s: %s", portfolio.id, exc)
+
+    return {"status": "ok", "captured": len(captured), "emitted": emitted}
 
 
 # ---------------------------------------------------------------------------

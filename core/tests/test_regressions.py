@@ -518,3 +518,116 @@ class TradeNotificationTests(TestCase):
             result = notify_trade.apply(args=[1]).get()
 
         self.assertEqual(result["status"], "error")
+
+
+# ---------------------------------------------------------------------------
+# 9. The scheduled snapshot sweep must publish what it writes.
+# ---------------------------------------------------------------------------
+
+
+@override_settings(CACHES=TEST_CACHES)
+class ScheduledSnapshotEmitTests(TestCase):
+    """The sweep wrote the equity series every 15 minutes but emitted nothing.
+
+    An open dashboard therefore kept stale metric cards and allocation until a
+    trade happened or the socket reconnected.
+    """
+
+    def setUp(self):
+        cache.clear()
+        self.user = make_user()
+        self.portfolio = make_portfolio(self.user, balance="5000.00")
+        make_asset(self.portfolio, "AAPL", "10", "100.00")
+
+    def test_the_task_emits_one_event_per_captured_portfolio(self):
+        from tasks import capture_portfolio_snapshots_task
+
+        with patch("services.events.emit_portfolio_snapshot") as emit:
+            result = capture_portfolio_snapshots_task.apply().get()
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["captured"], 1)
+        self.assertEqual(result["emitted"], 1)
+        emit.assert_called_once()
+
+    def test_the_emitted_payload_carries_metrics_and_assets(self):
+        from tasks import capture_portfolio_snapshots_task
+
+        with patch("services.events.emit_portfolio_snapshot") as emit:
+            capture_portfolio_snapshots_task.apply().get()
+
+        _user_id, payload = emit.call_args[0]
+        self.assertIn("metrics", payload)
+        self.assertIn("assets", payload)
+        self.assertIn("captured_at", payload)
+        self.assertEqual(len(payload["assets"]), 1)
+
+    def test_capture_all_snapshots_returns_the_rows_it_wrote(self):
+        """Returning a bare count is what made the sweep silent."""
+        from services.snapshots import capture_all_snapshots
+
+        captured = capture_all_snapshots()
+
+        self.assertEqual(len(captured), 1)
+        portfolio, snapshot = captured[0]
+        self.assertEqual(portfolio.id, self.portfolio.id)
+        self.assertIsNotNone(snapshot.captured_at)
+
+    def test_a_publish_failure_does_not_lose_the_row(self):
+        """The snapshot is already committed; a failed push must not roll it back."""
+        from core.models import PortfolioSnapshot
+        from tasks import capture_portfolio_snapshots_task
+
+        with patch(
+            "services.events.emit_portfolio_snapshot", side_effect=RuntimeError("channel down")
+        ):
+            result = capture_portfolio_snapshots_task.apply().get()
+
+        self.assertEqual(result["captured"], 1)
+        self.assertEqual(result["emitted"], 0)
+        self.assertEqual(PortfolioSnapshot.objects.count(), 1)
+
+
+# ---------------------------------------------------------------------------
+# 10. Execution preconditions must survive `python -O`.
+# ---------------------------------------------------------------------------
+
+
+@override_settings(CACHES=TEST_CACHES)
+class ExecutionPreconditionTests(TestCase):
+    """``apply_trade`` guarded its price with ``assert``.
+
+    Assertions are stripped under ``-O``/``PYTHONOPTIMIZE``, so the check would
+    vanish in exactly the environment where it matters, letting a None price
+    reach the sizing arithmetic.
+    """
+
+    def setUp(self):
+        cache.clear()
+        self.user = make_user()
+        self.portfolio = make_portfolio(self.user, balance="5000.00")
+
+    def test_a_decision_without_a_price_is_refused(self):
+        from services.execution import GuardDecision, GuardError, apply_trade
+
+        decision = GuardDecision(
+            approved=True, reason="approved", action="BUY", amount=Decimal("1"), price=None
+        )
+
+        with self.assertRaises(GuardError):
+            apply_trade(self.portfolio.id, "AAPL", decision)
+
+    def test_the_guard_error_is_a_real_exception_not_an_assertion(self):
+        """An AssertionError would be stripped; GuardError cannot be."""
+        from services.execution import GuardError
+
+        self.assertTrue(issubclass(GuardError, Exception))
+        self.assertFalse(issubclass(GuardError, AssertionError))
+
+    def test_no_bare_assert_remains_in_the_execution_path(self):
+        import inspect
+
+        from services import execution
+
+        source = inspect.getsource(execution)
+        self.assertNotIn("\n    assert ", source)

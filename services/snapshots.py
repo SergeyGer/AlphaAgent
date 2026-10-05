@@ -43,19 +43,25 @@ def capture_snapshot(
     )
 
 
-def capture_all_snapshots() -> int:
-    """Snapshot every portfolio. Returns the number of rows written."""
-    captured = 0
+def capture_all_snapshots() -> list[tuple[Portfolio, PortfolioSnapshot]]:
+    """Snapshot every portfolio, returning the rows that were written.
+
+    Returns ``(portfolio, snapshot)`` pairs rather than a bare count so the
+    caller can publish a live event per row. Returning only a number made the
+    scheduled sweep silent: it wrote the equity series to the database but never
+    told any connected dashboard, so metric cards went stale until the next
+    reconnect or trade.
+    """
+    captured: list[tuple[Portfolio, PortfolioSnapshot]] = []
     portfolios = Portfolio.objects.select_related("user").prefetch_related("assets")
 
     for portfolio in portfolios:
         try:
-            capture_snapshot(portfolio)
-            captured += 1
+            captured.append((portfolio, capture_snapshot(portfolio)))
         except Exception as exc:
             logger.exception("Snapshot failed for portfolio %s: %s", portfolio.id, exc)
 
-    logger.info("Captured %s portfolio snapshot(s)", captured)
+    logger.info("Captured %s portfolio snapshot(s)", len(captured))
     return captured
 
 

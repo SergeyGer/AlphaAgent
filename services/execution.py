@@ -28,6 +28,7 @@ __all__ = [
     "SATOSHI",
     "ZERO",
     "GuardDecision",
+    "GuardError",
     "apply_trade",
     "evaluate_proposal",
 ]
@@ -35,6 +36,17 @@ __all__ = [
 ZERO = Decimal("0")
 CENT = Decimal("0.01")
 SATOSHI = Decimal("0.00000001")
+
+
+class GuardError(Exception):
+    """An execution was attempted with a decision the guard never approved.
+
+    Raised instead of using ``assert``: assertions are silently stripped when
+    Python runs with ``-O``/``PYTHONOPTIMIZE``, which would let an unvalidated
+    decision reach the ledger in exactly the environment where the check matters
+    most. `apply_trade` is the only path that mutates money, so its preconditions
+    fail loudly and unconditionally.
+    """
 
 
 # ---------------------------------------------------------------------------
@@ -181,7 +193,13 @@ def apply_trade(
         portfolio=portfolio, ticker=ticker
     )
     price = decision.price
-    assert price is not None  # guaranteed by evaluate_proposal
+    if price is None:
+        # Not an ``assert``: assertions are stripped under ``python -O``, and a
+        # None price reaching the arithmetic below would size a trade from a
+        # missing market value. A guard that disappears in production is not a
+        # guard. evaluate_proposal already rejects this case, so reaching here
+        # means a caller bypassed it.
+        raise GuardError("Refusing to execute without a validated price.")
     amount = decision.amount
     notional = decision.notional
 
