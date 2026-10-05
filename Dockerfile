@@ -1,9 +1,13 @@
 # AlphaAgent application image.
 #
 # Serves all three application roles from one image:
-#   web    -> gunicorn config.wsgi:application
+#   web    -> daphne config.asgi:application   (ASGI - see note below)
 #   worker -> celery -A config worker
 #   beat   -> celery -A config beat
+#
+# The web role runs Daphne, not gunicorn, because the dashboard streams over
+# WebSocket and WSGI cannot hold a connection open. This comment previously
+# claimed gunicorn while the CMD below used daphne.
 #
 # Build:  docker build -t alphaagent:latest .
 # Run:    docker compose up -d
