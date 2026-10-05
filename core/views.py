@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import logging
 import secrets
-from datetime import timedelta
 
 from django.conf import settings
 from django.db.models import Prefetch
@@ -37,14 +36,13 @@ from core.models import (
 from core.serializers import (
     AgentDecisionLogSerializer,
     MarketNewsSerializer,
-    PortfolioSerializer,
     PortfolioSnapshotSerializer,
     TelegramLinkSerializer,
     ToggleAutonomySerializer,
     TradeRecommendationSerializer,
     TransactionSerializer,
+    build_portfolio_payload,
 )
-from services.portfolio_metrics import build_price_map, compute_metrics
 from services.recommendations import approve_recommendation, reject_recommendation
 from services.snapshots import equity_series
 from telegram_bot import handle_update
@@ -109,15 +107,12 @@ class PortfolioDetailView(APIView):
     def get(self, request: Request) -> Response:
         portfolio = _load_portfolio(request.user)
 
-        fallbacks = {a.ticker.upper(): a.avg_purchase_price for a in portfolio.assets.all()}
-        price_map = build_price_map(fallbacks.keys(), fallbacks=fallbacks)
-        metrics = compute_metrics(portfolio, price_map)
-
-        serializer = PortfolioSerializer(
-            portfolio,
-            context={"request": request, "price_map": price_map, "metrics": metrics.as_dict()},
+        # Shared with the WebSocket snapshot emitter so both surfaces always
+        # describe the portfolio identically.
+        return Response(
+            build_portfolio_payload(portfolio, request=request),
+            status=status.HTTP_200_OK,
         )
-        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class ToggleAutonomyView(APIView):
@@ -138,6 +133,12 @@ class ToggleAutonomyView(APIView):
         if changed:
             portfolio.is_autonomous = target
             portfolio.save(update_fields=["is_autonomous"])
+            # Only the Telegram path used to emit this, so toggling autonomy from
+            # the dashboard left other open surfaces showing a stale state.
+            from services.events import emit_autonomy_changed
+
+            # Takes the portfolio: the emitter reads id + current state from it.
+            emit_autonomy_changed(request.user.id, portfolio)
             logger.info(
                 "User %s set is_autonomous=%s on portfolio %s",
                 request.user.username,
@@ -240,16 +241,48 @@ class RunAgentView(APIView):
                 status=status.HTTP_409_CONFLICT,
             )
 
-        from tasks import autonomous_market_monitoring_task
+        # Dispatched inline rather than via .delay(): the fan-out only enqueues
+        # subtasks, and doing it here means the response can report the truth.
+        # Previously this called the *global* sweep (every autonomous portfolio,
+        # spending other users' LLM budget) and returned 202 even when the
+        # debounce had discarded the request entirely.
+        from tasks import dispatch_market_sweep
 
-        result = autonomous_market_monitoring_task.delay()
+        result = dispatch_market_sweep(portfolio.id)
+
+        if result.get("status") == "debounced":
+            logger.info(
+                "On-demand sweep for portfolio %s debounced (user %s)",
+                portfolio.id,
+                request.user.username,
+            )
+            return Response(
+                {
+                    "error": True,
+                    "status_code": status.HTTP_429_TOO_MANY_REQUESTS,
+                    "detail": (
+                        "A sweep for this portfolio was requested moments ago. "
+                        "Wait for it to finish before requesting another."
+                    ),
+                    "errors": None,
+                },
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+                headers={"Retry-After": "60"},
+            )
+
         logger.info(
-            "User %s triggered an on-demand sweep (task %s)",
+            "User %s triggered a sweep for portfolio %s (%s tasks)",
             request.user.username,
-            result.id,
+            portfolio.id,
+            result.get("dispatched", 0),
         )
         return Response(
-            {"status": "queued", "task_id": result.id, "portfolio_id": portfolio.id},
+            {
+                "status": "queued",
+                "portfolio_id": portfolio.id,
+                "dispatched": result.get("dispatched", 0),
+                "group_id": result.get("group_id"),
+            },
             status=status.HTTP_202_ACCEPTED,
         )
 
@@ -278,7 +311,13 @@ class PortfolioSnapshotListView(generics.ListAPIView):
     def get_queryset(self):
         portfolio = get_portfolio(self.request.user)
         hours = self.request.query_params.get("hours")
-        limit = min(int(self.request.query_params.get("limit", 2000) or 2000), 10000)
+        # `hours` below is parsed defensively; `limit` was not, so a non-numeric
+        # value raised ValueError and surfaced as a 500.
+        try:
+            limit = int(self.request.query_params.get("limit") or 2000)
+        except (TypeError, ValueError):
+            limit = 2000
+        limit = min(max(limit, 1), 10000)
 
         try:
             hours_value = int(hours) if hours else None
@@ -431,9 +470,11 @@ class TelegramLinkView(APIView):
             user=request.user, defaults={"chat_id": _placeholder_chat_id(request.user)}
         )
         link.link_code = secrets.token_hex(8).upper()
-        link.save(update_fields=["link_code"])
+        link.link_code_issued_at = timezone.now()
+        link.save(update_fields=["link_code", "link_code_issued_at"])
 
-        expires_at = timezone.now() + timedelta(minutes=15)
+        # Single source of truth: the TTL the bot enforces at redemption.
+        expires_at = link.link_code_issued_at + TelegramLink.LINK_CODE_TTL
         return Response(
             {
                 "link_code": link.link_code,
@@ -463,6 +504,20 @@ class TelegramWebhookView(APIView):
             return Response({"ok": True}, status=status.HTTP_200_OK)
 
         expected = str(telegram_config().get("WEBHOOK_SECRET") or "")
+        if not expected:
+            # Previously an unset secret skipped verification entirely, leaving
+            # the endpoint accepting unsigned POSTs from anyone. An unconfigured
+            # deployment should refuse the callback, not accept it blindly.
+            logger.error("Telegram webhook rejected: TELEGRAM_WEBHOOK_SECRET is not configured")
+            return Response(
+                {
+                    "error": True,
+                    "status_code": status.HTTP_503_SERVICE_UNAVAILABLE,
+                    "detail": "Telegram webhook is not configured on this deployment.",
+                    "errors": None,
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
         if expected:
             provided = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
             if not secrets.compare_digest(provided, expected):

@@ -69,7 +69,11 @@ class PortfolioEndpointTests(APITestCase):
     @patch("services.market_data._fetch_from_yfinance", side_effect=fake_quote("150.00"))
     def test_query_count_is_bounded(self, _mock):
         """select_related/prefetch_related must prevent an N+1 explosion."""
-        with self.assertNumQueries(5):  # token+user, portfolio, assets, ledger, (metrics)
+        # 6 now: token+user, the activity stamp, portfolio, assets, ledger, metrics.
+        # The stamp is a single constant write per authenticated request (rate
+        # limited to once per user per hour), not part of the per-asset path, so
+        # the N+1 guarantee this test exists for is unaffected.
+        with self.assertNumQueries(6):
             baseline = len(self.client.get(reverse("core:portfolio-detail")).json()["assets"])
 
         for ticker in ("TSLA", "MSFT", "NVDA", "BTC", "ETH"):

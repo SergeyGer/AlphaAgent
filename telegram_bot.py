@@ -453,11 +453,10 @@ def _cmd_start(chat_id: int, args: str, from_user: dict) -> None:
             )
         return
 
-    candidate = (
-        TelegramLink.objects.select_related("user")
-        .filter(link_code__iexact=code, is_active=True)
-        .first()
-    )
+    # Enforces the 15-minute window the API advertises. This previously filtered
+    # on `is_active` alone, so an unused code never expired and a leaked one was
+    # a permanent credential.
+    candidate = TelegramLink.redeemable(code).select_related("user").first()
     if candidate is None:
         _reply(chat_id, "❌ That link code is not valid or has expired.")
         return
@@ -467,8 +466,17 @@ def _cmd_start(chat_id: int, args: str, from_user: dict) -> None:
     candidate.chat_id = chat_id
     candidate.telegram_username = (from_user or {}).get("username", "")[:64]
     candidate.link_code = ""
+    candidate.link_code_issued_at = None
     candidate.last_seen_at = timezone.now()
-    candidate.save(update_fields=["chat_id", "telegram_username", "link_code", "last_seen_at"])
+    candidate.save(
+        update_fields=[
+            "chat_id",
+            "telegram_username",
+            "link_code",
+            "link_code_issued_at",
+            "last_seen_at",
+        ]
+    )
 
     logger.info("Telegram chat %s linked to user %s", chat_id, candidate.user.username)
     _reply(

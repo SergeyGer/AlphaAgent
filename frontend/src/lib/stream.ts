@@ -1,6 +1,12 @@
 import type { StreamMessage, StreamMessageType } from '../types';
 
+/**
+ * Every frame `type` the backend may push. `connection.established` is the
+ * greeting sent immediately after the socket is accepted; it carries no
+ * dashboard state but must not be dropped as unknown.
+ */
 const KNOWN_TYPES: ReadonlySet<string> = new Set<StreamMessageType>([
+  'connection.established',
   'portfolio.snapshot',
   'trade.executed',
   'decision.created',

@@ -300,8 +300,18 @@ export interface AutonomyChangedEvent {
   is_autonomous: boolean;
 }
 
+/**
+ * Greeting frame the consumer pushes right after it accepts the socket. It
+ * carries no portfolio state — it only confirms the stream is live.
+ */
+export interface ConnectionEstablishedEvent {
+  username: string;
+  group: string;
+}
+
 /** Discriminated union of every frame the backend may push. */
 export type StreamMessage =
+  | { type: 'connection.established'; payload: ConnectionEstablishedEvent }
   | { type: 'portfolio.snapshot'; payload: PortfolioSnapshotEvent }
   | { type: 'trade.executed'; payload: Transaction }
   | { type: 'decision.created'; payload: DecisionLog }

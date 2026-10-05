@@ -15,6 +15,7 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from django.test import TestCase, override_settings
+from django.utils import timezone
 
 from ai_agent import TradeProposal
 from core.models import (
@@ -155,8 +156,13 @@ class LinkingTests(TelegramTestCase):
         self.assertIn("/start YOUR-CODE", text)
 
     def test_start_with_valid_code_links_the_chat(self):
+        # A code is only redeemable inside its issue window, so the fixture must
+        # stamp one - an un-timestamped code is now correctly refused.
         link = TelegramLink.objects.create(
-            user=self.user, chat_id=-self.user.id, link_code="ABC12345"
+            user=self.user,
+            chat_id=-self.user.id,
+            link_code="ABC12345",
+            link_code_issued_at=timezone.now(),
         )
 
         handle_update(message_update(self.chat_id, "/start ABC12345"))

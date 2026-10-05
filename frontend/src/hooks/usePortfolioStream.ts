@@ -6,6 +6,18 @@ import type { ConnectionStatus, StreamMessage } from '../types';
 const INITIAL_RETRY_MS = 1_000;
 const MAX_RETRY_MS = 30_000;
 const JITTER_RATIO = 0.2;
+/**
+ * Consecutive failed attempts after which the hook stops reconnecting and
+ * reports the terminal `'offline'` status. Without it a dead endpoint would
+ * show RECONNECTING forever, because the backoff itself is capped.
+ */
+const MAX_RECONNECT_ATTEMPTS = 8;
+/**
+ * Application close codes (4000–4999) that a retry can never fix.
+ * `4401` is the consumer's "token rejected" code (`core/consumers.py`): the
+ * socket is accepted and then closed, so retrying only loops.
+ */
+const TERMINAL_CLOSE_CODES: ReadonlySet<number> = new Set<number>([4401]);
 
 export interface UsePortfolioStreamOptions {
   token: string | null;
@@ -29,6 +41,9 @@ export interface UsePortfolioStreamResult {
  * Single owner of the `/ws/portfolio/` socket.
  *
  * - reconnects with exponential backoff (1s → 30s, ±20% jitter)
+ * - gives up on a terminal close code (4401 = rejected token) or after
+ *   {@link MAX_RECONNECT_ATTEMPTS} consecutive failures, and then reports the
+ *   terminal `'offline'` status; `reconnect()` restarts the loop manually
  * - validates every frame against the frozen contract
  * - reports opens so the app can refetch REST state after a reconnect
  */
@@ -75,8 +90,20 @@ export function usePortfolioStream({
       }
     };
 
+    /** Terminal state: stop retrying and let the indicator offer a manual Retry. */
+    const goOffline = (): void => {
+      clearRetryTimer();
+      setNextRetryAt(null);
+      setStatus('offline');
+    };
+
     const scheduleReconnect = () => {
       if (disposed) return;
+      // Give up rather than count down forever once the attempts are exhausted.
+      if (attemptCount >= MAX_RECONNECT_ATTEMPTS) {
+        goOffline();
+        return;
+      }
       const backoff = Math.min(MAX_RETRY_MS, INITIAL_RETRY_MS * 2 ** attemptCount);
       const jitter = backoff * JITTER_RATIO * (Math.random() * 2 - 1);
       const delay = Math.max(500, Math.round(backoff + jitter));
@@ -124,16 +151,28 @@ export function usePortfolioStream({
         const message = parseStreamMessage(event.data);
         if (!message) return;
         setLastMessageAt(Date.now());
+        // The greeting proves the server-side consumer accepted us (a status of
+        // 'live' alone only means the handshake finished), so treat it as a
+        // liveness signal and clear any accumulated retry backoff.
+        if (message.type === 'connection.established') {
+          attemptCount = 0;
+          setAttempt(0);
+        }
         onMessageRef.current(message);
       };
 
       // `onerror` is always followed by `onclose`; reconnection is handled there.
       next.onerror = () => undefined;
 
-      next.onclose = () => {
+      next.onclose = (event: CloseEvent) => {
         if (disposed) return;
         socket = null;
-        setStatus('reconnecting');
+        // A rejected token can never succeed on retry: surface the terminal
+        // state instead of reconnecting until the attempts run out.
+        if (TERMINAL_CLOSE_CODES.has(event.code)) {
+          goOffline();
+          return;
+        }
         scheduleReconnect();
       };
     }

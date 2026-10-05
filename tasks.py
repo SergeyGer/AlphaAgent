@@ -32,7 +32,7 @@ from typing import Any
 from celery import group, shared_task
 from django.conf import settings
 from django.db import DatabaseError, OperationalError
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Q
 from django.utils import timezone
 
 from ai_agent import (
@@ -234,6 +234,7 @@ def run_alpha_agent_task(
             logger.exception("Trade execution failed for %s/%s: %s", portfolio_id, ticker, exc)
         else:
             emit_trade(user_id, transaction_row)
+            notify_trade.delay(transaction_row.id)
             _capture_after_trade(portfolio)
 
     # ---- 4. Explainability log (always written) -------------------------
@@ -315,28 +316,39 @@ def run_alpha_agent_task(
 
 # ---------------------------------------------------------------------------
 # Fan-out entrypoint
+#
+# Plain function, deliberately not a task: the API calls it inline so it can
+# report what happened (including a debounced no-op) instead of handing back a
+# task id and asserting success. `autonomous_market_monitoring_task` below is
+# the Celery wrapper Beat uses.
 # ---------------------------------------------------------------------------
-@shared_task(bind=True, name="tasks.autonomous_market_monitoring_task")
-def autonomous_market_monitoring_task(self) -> dict[str, Any]:
-    """Query all autonomous portfolios and fan out one subtask per ticker.
+def dispatch_market_sweep(portfolio_id: int | None = None) -> dict[str, Any]:
+    """Fan out one subtask per ``(portfolio, ticker)`` pair.
 
     A single ``group`` publish replaces a nested loop, so N portfolios x M tickers
     are dispatched to the worker pool concurrently instead of being processed
     sequentially inside one task.
-    """
-    if not claim_sweep_slot():
-        logger.info("autonomous_market_monitoring_task: skipped by the sweep debounce")
-        return {"status": "debounced", "dispatched": 0}
 
-    logger.info("autonomous_market_monitoring_task: sweep starting")
+    ``portfolio_id`` scopes the sweep to a single portfolio. The API uses this:
+    the on-demand endpoint authenticates one user, so dispatching the *global*
+    sweep from it let one user's click spend every other user's LLM budget.
+
+    Returns the summary rather than a task handle so the caller can report what
+    actually happened - the endpoint previously returned 202 even when the
+    debounce had silently discarded the request.
+    """
+    if not claim_sweep_slot(portfolio_id=portfolio_id):
+        logger.info("market sweep skipped by the debounce (portfolio_id=%s)", portfolio_id)
+        return {"status": "debounced", "dispatched": 0, "portfolio_id": portfolio_id}
+
+    logger.info("market sweep starting (portfolio_id=%s)", portfolio_id)
 
     # One query, joined/prefetched - no per-portfolio round trips.
-    portfolios = (
-        Portfolio.objects.filter(is_autonomous=True)
-        .select_related("user")
-        .prefetch_related(
-            Prefetch("assets", queryset=Asset.objects.only("id", "portfolio_id", "ticker"))
-        )
+    portfolios = Portfolio.objects.filter(is_autonomous=True)
+    if portfolio_id is not None:
+        portfolios = portfolios.filter(pk=portfolio_id)
+    portfolios = portfolios.select_related("user").prefetch_related(
+        Prefetch("assets", queryset=Asset.objects.only("id", "portfolio_id", "ticker"))
     )
 
     watchlist = _watchlist()
@@ -363,9 +375,16 @@ def autonomous_market_monitoring_task(self) -> dict[str, Any]:
         "dispatched": len(signatures),
         "group_id": async_result.id,
         "watchlist": watchlist,
+        "portfolio_id": portfolio_id,
     }
-    logger.info("autonomous_market_monitoring_task: %s", summary)
+    logger.info("market sweep: %s", summary)
     return summary
+
+
+@shared_task(bind=True, name="tasks.autonomous_market_monitoring_task")
+def autonomous_market_monitoring_task(self, portfolio_id: int | None = None) -> dict[str, Any]:
+    """Beat entry point: fans out across every autonomous portfolio."""
+    return dispatch_market_sweep(portfolio_id)
 
 
 # ---------------------------------------------------------------------------
@@ -424,12 +443,31 @@ def daily_loss_limit_sweep_task(self) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 @shared_task(bind=True, name="tasks.purge_expired_auth_tokens_task")
 def purge_expired_auth_tokens_task(self, max_age_days: int = 30) -> dict[str, Any]:
-    """Delete DRF auth tokens that have not been used for ``max_age_days``."""
+    """Delete auth tokens whose owner has not been active for ``max_age_days``.
+
+    "Last used" is the owning user's ``last_login``, which
+    :class:`core.auth.ActivityTokenAuthentication` keeps current on every
+    authenticated request.
+
+    This previously filtered on ``Token.created`` while documenting itself as
+    last-use based: an actively-used token was deleted 30 days after issue, and
+    an abandoned-but-recent one was kept. A token is now retained when *either*
+    signal is recent, so the failure mode is keeping a token rather than
+    revoking a live client.
+    """
     from rest_framework.authtoken.models import Token
 
     cutoff = timezone.now() - timedelta(days=max_age_days)
-    deleted, _detail = Token.objects.filter(created__lt=cutoff).delete()
-    logger.info("purge_expired_auth_tokens_task: removed %s token rows", deleted)
+    deleted, _detail = (
+        Token.objects.filter(created__lt=cutoff)
+        .filter(Q(user__last_login__isnull=True) | Q(user__last_login__lt=cutoff))
+        .delete()
+    )
+    logger.info(
+        "purge_expired_auth_tokens_task: removed %s token row(s) inactive for %s days",
+        deleted,
+        max_age_days,
+    )
     return {"deleted": deleted, "max_age_days": max_age_days}
 
 
@@ -440,9 +478,13 @@ def _capture_after_trade(portfolio: Portfolio) -> None:
     """Record a snapshot immediately after execution so the chart has a marker."""
     try:
         snapshot = capture_snapshot(portfolio)
+
+        from core.serializers import build_portfolio_payload
         from services.events import emit_portfolio_snapshot
 
-        emit_portfolio_snapshot(portfolio.user_id, snapshot)
+        payload = build_portfolio_payload(portfolio)
+        payload["captured_at"] = snapshot.captured_at.isoformat()
+        emit_portfolio_snapshot(portfolio.user_id, payload)
     except Exception as exc:
         logger.warning("Post-trade snapshot failed for %s: %s", portfolio.id, exc)
 
@@ -457,8 +499,8 @@ def advisory_sweep_task(self, portfolio_id: int) -> dict[str, Any]:
     Used by the dashboard's "Analyse now" action and by the Telegram bot. Never
     executes: ``run_alpha_agent_task`` is dispatched in advisory mode.
     """
-    if not claim_sweep_slot():
-        logger.info("advisory_sweep_task: skipped by the sweep debounce")
+    if not claim_sweep_slot(portfolio_id=portfolio_id):
+        logger.info("advisory sweep skipped by the debounce (portfolio_id=%s)", portfolio_id)
         return {"status": "debounced", "dispatched": 0}
 
     try:
@@ -502,6 +544,24 @@ def expire_stale_recommendations_task(self) -> dict[str, Any]:
     """Auto-expire recommendations nobody acted on before their TTL."""
     expired = expire_stale_recommendations()
     return {"status": "ok", "expired": expired}
+
+
+@shared_task(bind=True, name="tasks.notify_trade_task")
+def notify_trade(self, transaction_id: int) -> dict[str, Any]:
+    """Push an executed trade to the owner's Telegram chat, if linked.
+
+    ``telegram_bot.notify_trade`` (and the ``notify_trades`` preference it
+    honours) existed but had no caller anywhere, so the setting silently did
+    nothing. Kept off the agent's critical path: a Telegram outage must not
+    affect execution.
+    """
+    try:
+        from telegram_bot import notify_trade as send
+
+        return send(transaction_id)
+    except Exception as exc:
+        logger.warning("Trade notification failed for %s: %s", transaction_id, exc)
+        return {"status": "error", "error": str(exc)}
 
 
 @shared_task(bind=True, name="tasks.notify_recommendation_task")

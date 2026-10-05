@@ -10,7 +10,7 @@ import { useToasts } from '../hooks/useToasts';
 import { useTransactions } from '../hooks/useTransactions';
 import { feedItemFromLog, feedItemFromThinking, mergeFeed } from '../lib/feed';
 import { formatCurrency, formatQuantity } from '../lib/format';
-import type { FeedItem, SnapshotRange, StreamMessage } from '../types';
+import type { FeedItem, PortfolioSnapshotEvent, SnapshotRange, StreamMessage } from '../types';
 import { AllocationChart } from './AllocationChart';
 import { ErrorState } from './Feedback';
 import { EquityChart } from './EquityChart';
@@ -70,8 +70,17 @@ export function Dashboard(): ReactElement {
     (message: StreamMessage) => {
       switch (message.type) {
         case 'portfolio.snapshot': {
-          const { metrics, assets } = message.payload;
-          setPortfolioData((previous) => (previous ? { ...previous, metrics, assets } : previous));
+          // A malformed or partial frame must never blank the dashboard, so
+          // only keys that are actually present and non-null are merged; every
+          // missing key keeps its previous value until the next REST resync.
+          const snapshot: Partial<PortfolioSnapshotEvent> = message.payload;
+          setPortfolioData((previous) => {
+            if (!previous) return previous;
+            const next = { ...previous };
+            if (snapshot.metrics != null) next.metrics = snapshot.metrics;
+            if (snapshot.assets != null) next.assets = snapshot.assets;
+            return next;
+          });
           break;
         }
 

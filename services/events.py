@@ -149,17 +149,22 @@ def emit_trade(user_id: int | None, transaction) -> None:
     )
 
 
-def emit_portfolio_snapshot(user_id: int | None, snapshot) -> None:
+def emit_portfolio_snapshot(user_id: int | None, payload: dict) -> None:
+    """Publish a portfolio snapshot built by ``build_portfolio_payload``.
+
+    ``payload`` must already carry ``metrics`` and ``assets``: the client's
+    ``PortfolioSnapshotEvent`` type destructures exactly those two keys. This
+    function deliberately does not reshape the data - it previously published
+    the flat snapshot-row fields instead, which the dashboard silently wrote
+    over its own state as ``undefined``.
+    """
     publish(
         user_id,
         EventType.PORTFOLIO_SNAPSHOT,
         {
-            "captured_at": snapshot.captured_at,
-            "total_equity_usd": snapshot.total_equity_usd,
-            "cash_balance_usd": snapshot.cash_balance_usd,
-            "positions_value_usd": snapshot.positions_value_usd,
-            "unrealised_pnl_usd": snapshot.unrealised_pnl_usd,
-            "realised_pnl_today_usd": snapshot.realised_pnl_today_usd,
+            "metrics": payload.get("metrics"),
+            "assets": payload.get("assets"),
+            "captured_at": payload.get("captured_at"),
         },
     )
 

@@ -269,7 +269,9 @@ CELERY_BEAT_SCHEDULE = {
 # ---------------------------------------------------------------------------
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework.authentication.TokenAuthentication",
+        # Records last use so the token purge can delete genuinely abandoned
+        # tokens rather than every token older than the cutoff. See core/auth.py.
+        "core.auth.ActivityTokenAuthentication",
         "rest_framework.authentication.SessionAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],

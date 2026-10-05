@@ -233,6 +233,17 @@ def approve_recommendation(recommendation_id: int, via: str = DecidedVia.WEB) ->
     emit_trade(portfolio.user_id, transaction_row)
     emit_recommendation(portfolio.user_id, recommendation, created=False)
 
+    # A human-approved trade deserves the same Telegram notification as an
+    # autonomous one. Dispatched by name to avoid importing tasks.py here
+    # (tasks imports this module), and best-effort so a broker hiccup cannot
+    # fail an approval that has already been committed.
+    try:
+        from config.celery import app as celery_app
+
+        celery_app.send_task("tasks.notify_trade_task", args=[transaction_row.id])
+    except Exception as exc:
+        logger.warning("Could not enqueue trade notification for %s: %s", transaction_row.id, exc)
+
     message = (
         f"Executed {recommendation.action} {decision.amount.normalize()} "
         f"{recommendation.ticker} @ ${decision.price}"

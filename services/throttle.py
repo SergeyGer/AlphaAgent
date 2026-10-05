@@ -45,6 +45,9 @@ __all__ = [
 
 _COOLDOWN_KEY = "alpha:cooldown:{portfolio_id}:{ticker}"
 _SWEEP_KEY = "alpha:sweep:debounce"
+# Scoped variant: a user-triggered sweep for one portfolio must not be debounced
+# by an unrelated global sweep that Beat started seconds earlier.
+_SCOPED_SWEEP_KEY = "alpha:sweep:debounce:{portfolio_id}"
 
 
 def _ai_config() -> dict:
@@ -106,18 +109,27 @@ def release_ticker_slot(portfolio_id: int, ticker: str) -> None:
         logger.warning("Could not release the cooldown slot: %s", exc)
 
 
-def claim_sweep_slot(*, window: int | None = None) -> bool:
-    """Debounce fan-outs so Beat and a manual trigger cannot both dispatch."""
+def claim_sweep_slot(*, window: int | None = None, portfolio_id: int | None = None) -> bool:
+    """Debounce fan-outs so two dispatches cannot both enqueue the same work.
+
+    ``portfolio_id`` scopes the key. Sharing one global key meant a user asking
+    for an on-demand sweep was silently debounced by an unrelated sweep Beat had
+    started seconds earlier - and the endpoint still answered 202 as though it
+    had dispatched.
+    """
     window = window if window is not None else sweep_debounce_seconds()
     if window <= 0:
         return True
 
+    key = (
+        _SWEEP_KEY if portfolio_id is None else _SCOPED_SWEEP_KEY.format(portfolio_id=portfolio_id)
+    )
     try:
-        claimed = cache.add(_SWEEP_KEY, uuid.uuid4().hex, window)
+        claimed = cache.add(key, uuid.uuid4().hex, window)
     except Exception as exc:
         logger.warning("Sweep debounce check failed (allowing the sweep): %s", exc)
         return True
 
     if not claimed:
-        logger.info("Skipping sweep: another fan-out started within %ss", window)
+        logger.info("Skipping sweep for %s: another fan-out started within %ss", key, window)
     return bool(claimed)

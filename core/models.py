@@ -10,6 +10,7 @@ Four tables back the platform:
 
 from __future__ import annotations
 
+from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib.auth.models import User
@@ -415,6 +416,11 @@ class TelegramLink(models.Model):
     chat_id = models.BigIntegerField(unique=True, db_index=True)
     telegram_username = models.CharField(max_length=64, blank=True)
     link_code = models.CharField(max_length=32, blank=True, db_index=True)
+    # When the current ``link_code`` was issued. The API has always advertised a
+    # 15-minute window (it returns ``expires_at``), but the bot's lookup had no
+    # time comparison at all, so an unused code stayed valid forever. A leaked
+    # code was therefore a permanent credential.
+    link_code_issued_at = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
     notify_trades = models.BooleanField(default=True)
     notify_recommendations = models.BooleanField(default=True)
@@ -426,5 +432,24 @@ class TelegramLink(models.Model):
         verbose_name_plural = "Telegram links"
         ordering = ["-linked_at"]
 
+    #: How long an unused ``link_code`` stays valid.
+    LINK_CODE_TTL = timedelta(minutes=15)
+
     def __str__(self) -> str:
         return f"{self.user.username} <-> chat {self.chat_id}"
+
+    def link_code_is_valid(self, now=None) -> bool:
+        """Whether the stored ``link_code`` may still be redeemed."""
+        if not self.link_code or not self.link_code_issued_at:
+            return False
+        return (now or timezone.now()) < self.link_code_issued_at + self.LINK_CODE_TTL
+
+    @classmethod
+    def redeemable(cls, code: str, now=None):
+        """QuerySet of links whose ``code`` is live and unexpired."""
+        now = now or timezone.now()
+        return cls.objects.filter(
+            link_code__iexact=code,
+            link_code_issued_at__gte=now - cls.LINK_CODE_TTL,
+            is_active=True,
+        )

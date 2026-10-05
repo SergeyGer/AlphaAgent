@@ -99,6 +99,39 @@ class AssetSerializer(serializers.ModelSerializer):
         return str((obj.market_value_usd(self._price(obj)) / total * Decimal("100")).quantize(CENT))
 
 
+def build_portfolio_payload(portfolio, *, request=None) -> dict:
+    """Serialise ``portfolio`` with live metrics and nested assets.
+
+    The single source of truth for how a portfolio is described. Both surfaces
+    use it:
+
+    * ``GET /api/portfolio/`` returns it verbatim.
+    * ``emit_portfolio_snapshot`` forwards ``metrics`` and ``assets`` from it.
+
+    They previously disagreed. The event pushed the flat snapshot-row fields
+    (``total_equity_usd``, ``cash_balance_usd``, ...) while the dashboard's
+    ``PortfolioSnapshotEvent`` expects ``{metrics, assets, captured_at}``. The
+    client destructured two absent keys and wrote ``undefined`` over its own
+    state, blanking the metric cards and allocation panel until the next REST
+    resync.
+
+    One builder makes that drift impossible rather than merely fixed.
+
+    Performs network I/O: quotes are fetched (cache-first) for live valuation.
+    """
+    from services.portfolio_metrics import build_price_map, compute_metrics
+
+    assets = list(portfolio.assets.all())
+    fallbacks = {a.ticker.upper(): a.avg_purchase_price for a in assets}
+    price_map = build_price_map(fallbacks.keys(), fallbacks=fallbacks)
+    metrics = compute_metrics(portfolio, price_map)
+
+    return PortfolioSerializer(
+        portfolio,
+        context={"request": request, "price_map": price_map, "metrics": metrics.as_dict()},
+    ).data
+
+
 class PortfolioSerializer(serializers.ModelSerializer):
     """The authenticated user's portfolio + nested assets + live metrics."""
 

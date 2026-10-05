@@ -10,6 +10,12 @@
 *.token
 *.pat
 
+# Release archives and database exports never belong in git.
+*.tar.gz
+*.tgz
+*.zip
+.runtime/exports/
+
 # ---------------------------------------------------------------------------
 # Python
 # ---------------------------------------------------------------------------
