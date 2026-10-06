@@ -31,13 +31,12 @@ jobs:
         with:
           languages: python
           queries: security-and-quality
-          # Loads this repository's model pack, which declares
-          # `log_safe` and `normalise_ticker` as taint barriers. Without it the
-          # analysis cannot see that those helpers neutralise their input, and
-          # reports the call sites as py/log-injection. See the pack's README
-          # comment for why this is preferable to inlining the sanitiser.
-          packs: |
-            ./.github/codeql/model-pack
+          # NOTE: `.github/codeql/model-pack` is deliberately NOT loaded here.
+          # The `packs` input accepts only *published* pack references
+          # ("owner/name"), not a path in the repository - passing a path fails
+          # the job with `"./.github/codeql/model-pack" is not a valid pack`.
+          # The pack is kept in the tree because it is the correct fix once it is
+          # published; see its README for the one command required.
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@v4

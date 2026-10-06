@@ -27,6 +27,7 @@ from defusedxml.common import DefusedXmlException
 from django.conf import settings
 from django.core.cache import cache
 
+from core.log_safety import log_safe
 from services.sentiment import SentimentResult, aggregate_sentiment, score_text
 from services.tickers import normalise_ticker
 
@@ -277,7 +278,9 @@ def fetch_news_articles(ticker: str, limit: int = 10) -> tuple[list[NewsArticle]
             )
             response.raise_for_status()
         except requests.RequestException as exc:
-            logger.warning("RSS fetch failed (%s) for %s: %s", source_name, ticker, exc)
+            logger.warning(
+                "RSS fetch failed (%s) for %s: %s", source_name, log_safe(ticker), log_safe(exc)
+            )
             continue
 
         parsed = _parse_rss(response.content, source_name)
@@ -299,7 +302,7 @@ def build_news_report(ticker: str, limit: int | None = None, use_cache: bool = T
         try:
             cached = cache.get(cache_key)
         except Exception as exc:
-            logger.warning("News cache read failed for %s: %s", symbol, exc)
+            logger.warning("News cache read failed for %s: %s", log_safe(symbol), log_safe(exc))
             cached = None
         if isinstance(cached, dict) and cached.get("articles") is not None:
             articles = [
@@ -327,7 +330,7 @@ def build_news_report(ticker: str, limit: int | None = None, use_cache: bool = T
     try:
         articles, sources = fetch_news_articles(symbol, effective_limit)
     except Exception as exc:
-        logger.exception("Unexpected news failure for %s: %s", symbol, exc)
+        logger.exception("Unexpected news failure for %s: %s", log_safe(symbol), log_safe(exc))
 
     articles = [_score_article(article) for article in articles]
     sentiment = aggregate_sentiment([a.as_text() for a in articles])
@@ -351,6 +354,6 @@ def build_news_report(ticker: str, limit: int | None = None, use_cache: bool = T
             ttl,
         )
     except Exception as exc:
-        logger.warning("News cache write failed for %s: %s", symbol, exc)
+        logger.warning("News cache write failed for %s: %s", log_safe(symbol), log_safe(exc))
 
     return report
