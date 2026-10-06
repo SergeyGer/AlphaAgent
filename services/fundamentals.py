@@ -198,11 +198,18 @@ def get_price_history(ticker: str, period: str = "1y") -> PriceHistory | None:
     """Default window is 1y so the 200-day average is computable."""
     """Daily closes plus moving averages. Returns ``None`` if unavailable."""
     from services.market_data import normalize_ticker
+    from services.tickers import normalise_period
 
     try:
         symbol = normalize_ticker(ticker)
     except Exception:
         return None
+
+    # The window comes from the model. yfinance rejects anything outside its own
+    # set with "Period '6m' is invalid", and the tool then returned None - so a
+    # model asking for six months silently removed the price evidence from both
+    # sides of the debate. Normalised once, here, at the boundary.
+    period = normalise_period(period)
 
     key = f"market:history:v1:{symbol}:{period}"
     try:

@@ -1,11 +1,15 @@
-"""Ticker normalisation and validation.
+"""Validation for the market identifiers a language model supplies.
 
-A ticker is the one piece of user-supplied text that reaches the most dangerous
-places in this codebase: it is interpolated into outbound request URLs and
-written into log lines. Validating it once, at the boundary, is what keeps both
-of those safe.
+Two things an LLM passes into this codebase reach external systems verbatim: a
+**ticker**, which is interpolated into outbound request URLs and written to log
+lines, and a **history window**, which is handed to yfinance. Both are validated
+here, once, at the boundary.
 
-Without this, CodeQL correctly flagged two things:
+Fixing the input rather than escaping every downstream use is deliberate: a
+sanitiser applied at each sink is a rule someone has to remember, whereas a value
+that is rejected on entry cannot reach any sink at all.
+
+Tickers — without this, CodeQL correctly flagged two things:
 
 * ``py/partial-ssrf`` — the raw string reached ``requests.get`` via the RSS URL
   builders. The hosts are hardcoded, so the impact was limited to the query
@@ -13,21 +17,31 @@ Without this, CodeQL correctly flagged two things:
 * ``py/log-injection`` — the same raw string was logged, so a value containing
   newlines could forge additional log entries.
 
-Fixing the input rather than escaping every downstream use is deliberate: a
-sanitiser applied at each sink is a rule someone has to remember, whereas an
-invalid ticker that never enters the system cannot reach any sink at all.
+Accepted ticker form: 1-15 characters of ``A-Z a-z 0-9 . - ^ =``. That covers
+equities (``AAPL``, ``BRK.B``), indices (``^GSPC``), crypto pairs (``BTC-USD``)
+and Yahoo's ``=X`` / ``=F`` suffixes, while excluding whitespace, path
+separators, control characters and scheme syntax.
 
-Accepted form: 1-15 characters of ``A-Z a-z 0-9 . - ^ =``. That covers equities
-(``AAPL``, ``BRK.B``), indices (``^GSPC``), crypto pairs (``BTC-USD``) and
-Yahoo's ``=X`` / ``=F`` suffixes, while excluding whitespace, path separators,
-control characters and scheme syntax.
+Windows — yfinance accepts exactly ``1d 5d 1mo 3mo 6mo 1y 2y 5y 10y ytd max``.
+A model asked for six months writes ``6m``, which yfinance rejects outright with
+``Period '6m' is invalid``, so the tool returned nothing and both debating agents
+silently lost their price evidence. The aliases below map what a model naturally
+writes onto what the API accepts.
 """
 
 from __future__ import annotations
 
 import re
 
-__all__ = ["TICKER_PATTERN", "InvalidTicker", "is_valid_ticker", "normalise_ticker"]
+__all__ = [
+    "DEFAULT_PERIOD",
+    "TICKER_PATTERN",
+    "VALID_PERIODS",
+    "InvalidTicker",
+    "is_valid_ticker",
+    "normalise_period",
+    "normalise_ticker",
+]
 
 #: Anchored, so a partial match cannot smuggle a suffix such as "\nInjected".
 TICKER_PATTERN = re.compile(r"\A[A-Za-z0-9.\-^=]{1,15}\Z")
@@ -62,3 +76,59 @@ def normalise_ticker(raw: object) -> str:
         raise InvalidTicker("ticker contains characters that are not permitted")
 
     return candidate
+
+
+# ---------------------------------------------------------------------------
+# History windows
+# ---------------------------------------------------------------------------
+#: Exactly what yfinance accepts. Anything else raises inside yfinance.
+VALID_PERIODS = frozenset({"1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "ytd", "max"})
+
+#: Used when a window cannot be understood. One year is the tool's own default
+#: and the shortest span for which a 200-day average is computable.
+DEFAULT_PERIOD = "1y"
+
+#: What a model writes -> what yfinance accepts. Only windows yfinance actually
+#: offers are targets: a request for 2 months rounds up to 3mo rather than
+#: falling all the way back to a year, which would quietly change the evidence
+#: the agents reason from.
+_PERIOD_ALIASES = {
+    "1w": "5d",
+    "1wk": "5d",
+    "1week": "5d",
+    "1m": "1mo",
+    "2m": "3mo",
+    "3m": "3mo",
+    "4m": "3mo",
+    "6m": "6mo",
+    "9m": "1y",
+    "12m": "1y",
+    "1yr": "1y",
+    "2yr": "2y",
+    "5yr": "5y",
+    "10yr": "10y",
+    "year": "1y",
+    "month": "1mo",
+    "day": "1d",
+    "all": "max",
+}
+
+
+def normalise_period(raw: object, *, default: str = DEFAULT_PERIOD) -> str:
+    """Return a window yfinance will accept, or ``default``.
+
+    Never raises. A model that asks for an odd window should get sensible data
+    back, not a failed tool call that silently removes price evidence from both
+    sides of the debate - which is exactly what happened with ``"6m"``.
+    """
+    if not isinstance(raw, str):
+        return default
+
+    candidate = raw.strip().lower().replace(" ", "")
+    if not candidate:
+        return default
+    if candidate in VALID_PERIODS:
+        return candidate
+    if candidate in _PERIOD_ALIASES:
+        return _PERIOD_ALIASES[candidate]
+    return default

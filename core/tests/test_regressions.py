@@ -713,6 +713,56 @@ class TickerValidationTests(TestCase):
                 )
 
 
+class PeriodNormalisationTests(TestCase):
+    """A model asking for "6 months" wrote ``6m``, which yfinance rejects.
+
+    Live run: ``yfinance - AAPL: Period '6m' is invalid`` followed by
+    ``No price history returned for AAPL``. The tool returned None, so both the
+    bull and the bear silently lost their price evidence - and nothing surfaced
+    it, because a missing tool result is not an error to an agent.
+    """
+
+    def test_what_a_model_writes_is_mapped_onto_what_yfinance_accepts(self):
+        from services.tickers import VALID_PERIODS, normalise_period
+
+        for raw in ["6m", "6M", " 6m ", "3m", "2m", "4m", "1m", "1w", "12m", "9m", "1yr", "all"]:
+            with self.subTest(raw=raw):
+                self.assertIn(normalise_period(raw), VALID_PERIODS)
+
+    def test_the_specific_case_that_broke(self):
+        from services.tickers import normalise_period
+
+        self.assertEqual(normalise_period("6m"), "6mo")
+
+    def test_valid_windows_pass_through_unchanged(self):
+        from services.tickers import VALID_PERIODS, normalise_period
+
+        for period in sorted(VALID_PERIODS):
+            with self.subTest(period=period):
+                self.assertEqual(normalise_period(period), period)
+
+    def test_an_unusable_window_falls_back_instead_of_raising(self):
+        from services.tickers import DEFAULT_PERIOD, normalise_period
+
+        for raw in ["", "bogus", None, 42, ["1y"], "6 months"]:
+            with self.subTest(raw=raw):
+                self.assertEqual(normalise_period(raw), DEFAULT_PERIOD)
+
+    def test_the_tool_normalises_before_reaching_yfinance(self):
+        """The guard must sit on the path to the API, not beside it."""
+        import inspect
+
+        from services import fundamentals
+
+        source = inspect.getsource(fundamentals.get_price_history)
+        self.assertIn("normalise_period(period)", source)
+        # And it must run before the cache key is built from the raw value.
+        self.assertLess(
+            source.index("normalise_period(period)"),
+            source.index("market:history:v1"),
+        )
+
+
 class LogSafetyTests(TestCase):
     """``py/log-injection``: a value with newlines must not forge a log entry."""
 
