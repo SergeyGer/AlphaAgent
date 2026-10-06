@@ -1,4 +1,0 @@
-# Отключение блокировок сетевого скоупинга для CrewAI
-sandbox:
-  scoping:
-    enabled: false

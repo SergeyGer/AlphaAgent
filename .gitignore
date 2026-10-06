@@ -10,6 +10,10 @@
 *.token
 *.pat
 
+# Sandbox/tooling artefacts from the development environment. Not part of
+# the project: nothing in the codebase references this file.
+cordis.patch.yml
+
 # Release archives and database exports never belong in git.
 *.tar.gz
 *.tgz
