@@ -11,6 +11,6 @@
 
 -r requirements.in
 
-ruff==0.16.9          # linting + formatting (replaces flake8/isort/black)
+ruff==0.16.10          # linting + formatting (replaces flake8/isort/black)
 pre-commit==4.6.2     # git hook runner
 pip-tools==7.6.1      # `make lock` / `make lock-dev`
