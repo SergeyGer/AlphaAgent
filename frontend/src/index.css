@@ -1,6 +1,10 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+/* Tailwind 4 reads theme config from CSS by default. The existing
+   tailwind.config.js is still honoured through @config, which keeps the
+   terminal-* palette, fonts, shadows and keyframes in one place until the
+   project migrates to the CSS-first @theme syntax. */
+@config "../tailwind.config.js";
 
 @layer base {
   :root {
