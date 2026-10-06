@@ -1,0 +1,55 @@
+# CodeQL data extensions for AlphaAgent.
+#
+# Why this file exists
+# --------------------
+# `py/log-injection` was reporting every log statement that carried a
+# user-supplied value, including the ones wrapped in `core.log_safety.log_safe`.
+# That function is a genuine sanitiser - it replaces CR, LF, the C0/C1 control
+# range and the U+2028/U+2029 separators, and bounds the length - and it is
+# covered by tests in `core/tests/test_regressions.py`. CodeQL simply had no way
+# to know that: an unrecognised helper is a black box, so taint flows straight
+# through it.
+#
+# The alternatives were worse:
+#   * Inline `.replace("\n", "?")` at each of the twelve call sites duplicates the
+#     rule twelve times and still is not modelled.
+#   * Logging something other than the useful value (a user id instead of a
+#     username, an exception class instead of its message) removes information an
+#     operator needs, to satisfy a tool.
+#   * Dismissing the alerts hides a real class of finding for the whole rule,
+#     including future genuine ones.
+#
+# Declaring the barrier keeps the sanitiser where it belongs and tells the
+# analyzer the truth about it.
+#
+# Syntax reference:
+#   https://codeql.github.com/docs/codeql-language-guides/customizing-library-models-for-python/
+# Model packs with barriers require CodeQL 2.25.2 or later.
+
+extensions:
+  # -------------------------------------------------------------------------
+  # core.log_safety.log_safe(value) -> str
+  #
+  # Returns a single-line, control-character-free, length-bounded string, so its
+  # return value cannot forge a log entry. Modelled as a barrier for the
+  # `log-injection` kind, which is the sink kind CodeQL uses for logging calls.
+  # -------------------------------------------------------------------------
+  - addsTo:
+      pack: codeql/python-all
+      extensible: barrierModel
+    data:
+      - ["core.log_safety", "Member[log_safe].ReturnValue", "log-injection"]
+
+  # -------------------------------------------------------------------------
+  # services.tickers.normalise_ticker(value) -> str
+  #
+  # The strict allowlist (`\A[A-Za-z0-9.\-^=]{1,15}\Z`) means the result cannot
+  # contain a newline, a path separator or scheme syntax. It is the boundary
+  # check for both the ticker log statements and the outbound RSS URLs.
+  # -------------------------------------------------------------------------
+  - addsTo:
+      pack: codeql/python-all
+      extensible: barrierModel
+    data:
+      - ["services.tickers", "Member[normalise_ticker].ReturnValue", "log-injection"]
+      - ["services.tickers", "Member[normalise_ticker].ReturnValue", "path-injection"]

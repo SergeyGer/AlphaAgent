@@ -1,0 +1,16 @@
+name: "SergeyGer/alphaagent-codeql-models"
+version: 0.0.1
+description: >-
+  Declares this project's own sanitisation helpers to CodeQL, so the taint
+  analysis can see them. Without it, a value that has demonstrably been
+  neutralised still flows to a sink as far as the analyzer is concerned.
+
+library: false
+
+# The standard Python library pack this model extends.
+extensionTargets:
+  codeql/python-all: "*"
+
+# Data extensions contributed by this pack.
+dataExtensions:
+  - alphaagent.models.yml
