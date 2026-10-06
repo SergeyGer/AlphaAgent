@@ -37,7 +37,7 @@ openai==2.54.0                 # GPT-4o / OpenAI-compatible gateways (DeepSeek)
 pydantic==2.12.5               # guardrail payload validation
 
 # --- Support --------------------------------------------------------------
-python-dotenv==1.2.3           # .env loading
+python-dotenv==1.2.4           # .env loading
 requests==2.34.2               # RSS / HTTP client
 defusedxml==0.7.1              # hardened XML parsing for untrusted RSS feeds
 beautifulsoup4==4.15.0
