@@ -997,11 +997,32 @@ def _extract_tokens(result: Any) -> int:
 
 
 def estimate_cost(tokens_used: int, model: str) -> Decimal:
-    """Approximate USD cost from the configured price table."""
+    """Approximate USD cost from the configured price table.
+
+    Matches the exact model id first, then the longest prefix, so a dated id like
+    ``claude-haiku-4-5-20251001`` resolves against the ``claude-haiku-4-5`` entry.
+
+    Logs a warning when it falls back. Previously every model absent from the
+    table was priced at the default with no signal at all, which is how a
+    ``claude-*`` model came to be reported at DeepSeek rates - roughly half the
+    real cost - with nothing in the logs to suggest anything was wrong.
+    """
     pricing = getattr(settings, "AI_MODEL_PRICING", {})
-    default = getattr(settings, "AI_DEFAULT_PRICING", {"input": 0.55, "output": 2.19})
+    default = getattr(settings, "AI_DEFAULT_PRICING", {"input": 0.27, "output": 1.10})
     key = (model or "").split("/")[-1]
-    rates = pricing.get(key, default)
+
+    rates = pricing.get(key)
+    if rates is None and key:
+        candidates = [k for k in pricing if key.startswith(k)]
+        if candidates:
+            rates = pricing[max(candidates, key=len)]
+    if rates is None:
+        logger.warning(
+            "No price entry for model %r - cost is approximate. Add it to "
+            "AI_MODEL_PRICING in config/settings.py.",
+            key or "<unset>",
+        )
+        rates = default
     # Token split is not exposed per-bucket; assume a 70/30 input/output mix.
     blended_per_million = rates["input"] * 0.7 + rates["output"] * 0.3
     cost = Decimal(str(tokens_used)) / Decimal("1000000") * Decimal(str(blended_per_million))

@@ -315,13 +315,30 @@ AI_CONFIG = {
 }
 
 # USD per 1M tokens, used to populate AgentDecisionLog.api_cost_usd.
+# USD per million tokens, used only to show an approximate cost on the dashboard.
+# Matched by exact id first, then by longest prefix, so dated variants such as
+# `claude-haiku-4-5-20251001` resolve against the family entry.
+#
+# This table had no Anthropic entries at all, so every `claude-*` model silently
+# fell through to the DeepSeek default and the dashboard reported a cost roughly
+# half of the real one for Haiku. Add a verified rate here when you switch
+# models; `estimate_cost` logs a warning when it has to guess, so an unpriced
+# model is visible rather than quietly mispriced.
+#
+# Rates verified 2026-10: https://llm-stats.com/models/claude-haiku-4-5-20251001
 AI_MODEL_PRICING = {
+    # --- Anthropic -------------------------------------------------------
+    "claude-haiku-4-5": {"input": 1.00, "output": 5.00},
+    # --- DeepSeek --------------------------------------------------------
     "deepseek-reasoner": {"input": 0.55, "output": 2.19},
     "deepseek-chat": {"input": 0.27, "output": 1.10},
+    # --- OpenAI ----------------------------------------------------------
     "gpt-4o": {"input": 2.50, "output": 10.00},
     "gpt-4o-mini": {"input": 0.15, "output": 0.60},
 }
-AI_DEFAULT_PRICING = {"input": 0.55, "output": 2.19}
+# Deliberately the cheapest rate in the table: an unpriced model should not look
+# more expensive than it is. The warning in estimate_cost is what flags it.
+AI_DEFAULT_PRICING = {"input": 0.27, "output": 1.10}
 
 # ---------------------------------------------------------------------------
 # Human-in-the-loop approvals and Telegram integration

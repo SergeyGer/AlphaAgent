@@ -763,6 +763,74 @@ class PeriodNormalisationTests(TestCase):
         )
 
 
+class CostEstimationTests(TestCase):
+    """The price table had no Anthropic entries at all.
+
+    Every ``claude-*`` model fell through to the DeepSeek default, so the cost on
+    the dashboard understated a Haiku run by roughly half - with nothing in the
+    logs to suggest the number was wrong.
+    """
+
+    def test_a_dated_anthropic_id_resolves_by_prefix(self):
+        from django.test import override_settings
+
+        from ai_agent import estimate_cost
+
+        with override_settings(
+            AI_MODEL_PRICING={"claude-haiku-4-5": {"input": 1.0, "output": 5.0}}
+        ):
+            dated = estimate_cost(1_000_000, "claude-haiku-4-5-20251001")
+            family = estimate_cost(1_000_000, "claude-haiku-4-5")
+
+        self.assertEqual(dated, family)
+
+    def test_haiku_is_not_priced_at_the_deepseek_rate(self):
+        """The specific regression: 0.55/2.19 was applied to an Anthropic model."""
+        from ai_agent import estimate_cost
+
+        haiku = estimate_cost(1_000_000, "claude-haiku-4-5-20251001")
+        deepseek = estimate_cost(1_000_000, "deepseek-reasoner")
+
+        self.assertGreater(haiku, deepseek)
+
+    def test_the_longest_prefix_wins(self):
+        from django.test import override_settings
+
+        from ai_agent import estimate_cost
+
+        pricing = {
+            "claude": {"input": 10.0, "output": 10.0},
+            "claude-haiku-4-5": {"input": 1.0, "output": 5.0},
+        }
+        with override_settings(AI_MODEL_PRICING=pricing):
+            # The family entry must beat the bare vendor prefix.
+            self.assertEqual(
+                estimate_cost(1_000_000, "claude-haiku-4-5-20251001"),
+                estimate_cost(1_000_000, "claude-haiku-4-5"),
+            )
+
+    def test_an_unpriced_model_warns_instead_of_guessing_silently(self):
+        from ai_agent import estimate_cost
+
+        with self.assertLogs("alphaagent.ai", level="WARNING") as captured:
+            estimate_cost(1000, "totally-unknown-model")
+
+        self.assertTrue(any("No price entry" in line for line in captured.output))
+
+    def test_a_provider_prefixed_id_still_matches(self):
+        from django.test import override_settings
+
+        from ai_agent import estimate_cost
+
+        with override_settings(
+            AI_MODEL_PRICING={"claude-haiku-4-5": {"input": 1.0, "output": 5.0}}
+        ):
+            self.assertEqual(
+                estimate_cost(1_000_000, "anthropic/claude-haiku-4-5-20251001"),
+                estimate_cost(1_000_000, "claude-haiku-4-5"),
+            )
+
+
 class LogSafetyTests(TestCase):
     """``py/log-injection``: a value with newlines must not forge a log entry."""
 
