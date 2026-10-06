@@ -10,7 +10,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 [See it running](#see-it-running) ·
-[What I built](#what-i-built) ·
+[What this project demonstrates](#what-this-project-demonstrates) ·
 [Skills](#skills-demonstrated) ·
 [How it works](#how-it-works-in-one-minute) ·
 [Run it yourself](#run-it-yourself) ·
@@ -97,7 +97,7 @@ unit-tested and has no knowledge of language models. The AI proposes; the code
 decides. If the model is wrong, confused, or actively manipulated, the worst it
 can do is make a suggestion that gets rejected.
 
-## What I built
+## What this project demonstrates
 
 Everything below is in this repository and runs today.
 
