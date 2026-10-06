@@ -254,6 +254,14 @@ class AgentDecisionLog(models.Model):
         db_index=True,
     )
     tokens_used = models.IntegerField(default=0)
+    # The billed split behind `tokens_used`. Recorded so the stored cost is
+    # arithmetic that can be re-checked rather than a figure taken on trust, and
+    # so a rate change can be re-applied to history. `input_tokens` is the full
+    # prompt count and already includes the cached and cache-write portions.
+    input_tokens = models.IntegerField(default=0)
+    output_tokens = models.IntegerField(default=0)
+    cached_input_tokens = models.IntegerField(default=0)
+    cache_write_tokens = models.IntegerField(default=0)
     api_cost_usd = models.DecimalField(max_digits=8, decimal_places=5, default=Decimal("0.00000"))
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 

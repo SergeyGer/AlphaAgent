@@ -271,6 +271,10 @@ def run_alpha_agent_task(
             action_taken=action_taken[:255],
             market_sentiment=proposal.sentiment,
             tokens_used=run_result.tokens_used,
+            input_tokens=run_result.input_tokens,
+            output_tokens=run_result.output_tokens,
+            cached_input_tokens=run_result.cached_input_tokens,
+            cache_write_tokens=run_result.cache_write_tokens,
             api_cost_usd=run_result.api_cost_usd,
         )
         emit_decision(user_id, decision_log)

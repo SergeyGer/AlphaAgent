@@ -831,6 +831,118 @@ class CostEstimationTests(TestCase):
             )
 
 
+class ExactCostTests(TestCase):
+    """Cost must be arithmetic over the real token buckets.
+
+    The estimator was handed a single total and assumed a fixed 70/30
+    input/output split. On a real run that was wrong twice over: the mix is
+    nothing like 70/30 for a debate prompt, and it ignored the cache discount
+    entirely. A measured sample came out at $0.01607 blended against $0.00831
+    exact - 93% too high.
+    """
+
+    MODEL = "claude-haiku-4-5-20251001"
+
+    def test_a_cached_run_is_cheaper_than_the_same_tokens_uncached(self):
+        from ai_agent import TokenUsage, estimate_cost
+
+        cached = TokenUsage(
+            total=7303, input_tokens=5785, output_tokens=1518, cached_read_tokens=5624
+        )
+        fresh = TokenUsage(total=7303, input_tokens=5785, output_tokens=1518)
+
+        self.assertLess(estimate_cost(cached, self.MODEL), estimate_cost(fresh, self.MODEL))
+
+    def test_the_blend_is_not_used_when_a_split_is_available(self):
+        from ai_agent import TokenUsage, estimate_cost
+
+        usage = TokenUsage(
+            total=7303, input_tokens=5785, output_tokens=1518, cached_read_tokens=5624
+        )
+
+        self.assertNotEqual(estimate_cost(usage, self.MODEL), estimate_cost(7303, self.MODEL))
+
+    def test_cache_writes_cost_more_than_fresh_input(self):
+        from ai_agent import TokenUsage, estimate_cost
+
+        written = TokenUsage(
+            total=1000, input_tokens=1000, output_tokens=0, cache_write_tokens=1000
+        )
+        fresh = TokenUsage(total=1000, input_tokens=1000, output_tokens=0)
+
+        self.assertGreater(estimate_cost(written, self.MODEL), estimate_cost(fresh, self.MODEL))
+
+    def test_output_tokens_cost_more_than_input(self):
+        from ai_agent import TokenUsage, estimate_cost
+
+        heavy_out = TokenUsage(total=1000, input_tokens=0, output_tokens=1000)
+        heavy_in = TokenUsage(total=1000, input_tokens=1000, output_tokens=0)
+
+        self.assertGreater(
+            estimate_cost(heavy_out, self.MODEL), estimate_cost(heavy_in, self.MODEL)
+        )
+
+    def test_a_total_without_a_split_still_produces_a_figure(self):
+        """Heuristic runs and providers that report only a total must not break."""
+        from ai_agent import TokenUsage, estimate_cost
+
+        self.assertGreater(estimate_cost(TokenUsage(total=5000), self.MODEL), 0)
+        self.assertGreater(estimate_cost(5000, self.MODEL), 0)
+
+    def test_the_split_survives_extraction_from_a_crew_dict(self):
+        """usage_metrics arrives as a plain dict from CrewAI, not an object."""
+        from ai_agent import _extract_usage
+
+        class FakeResult:
+            def __init__(self) -> None:
+                self.usage_metrics = {
+                    "total_tokens": 73,
+                    "prompt_tokens": 69,
+                    "completion_tokens": 4,
+                    "cached_prompt_tokens": 0,
+                    "cache_creation_tokens": 0,
+                }
+
+        usage = _extract_usage(FakeResult())
+        self.assertEqual(usage.total, 73)
+        self.assertEqual(usage.input_tokens, 69)
+        self.assertEqual(usage.output_tokens, 4)
+        self.assertTrue(usage.has_split)
+
+    def test_cached_tokens_are_not_double_counted(self):
+        """input_tokens already includes the cached portion; fresh excludes it."""
+        from ai_agent import TokenUsage
+
+        usage = TokenUsage(input_tokens=1000, cached_read_tokens=400, cache_write_tokens=100)
+        self.assertEqual(usage.fresh_input_tokens, 500)
+
+    def test_fresh_input_never_goes_negative(self):
+        from ai_agent import TokenUsage
+
+        usage = TokenUsage(input_tokens=100, cached_read_tokens=400)
+        self.assertEqual(usage.fresh_input_tokens, 0)
+
+    def test_the_audit_row_records_every_bucket(self):
+        from core.models import AgentDecisionLog
+        from core.tests.helpers import make_portfolio, make_user
+
+        portfolio = make_portfolio(make_user("cost-user"))
+        log = AgentDecisionLog.objects.create(
+            portfolio=portfolio,
+            action_taken="HOLD",
+            reasoning="r",
+            tokens_used=7303,
+            input_tokens=5785,
+            output_tokens=1518,
+            cached_input_tokens=5624,
+            cache_write_tokens=0,
+        )
+        log.refresh_from_db()
+
+        self.assertEqual(log.input_tokens, 5785)
+        self.assertEqual(log.cached_input_tokens, 5624)
+
+
 class LogSafetyTests(TestCase):
     """``py/log-injection``: a value with newlines must not forge a log entry."""
 

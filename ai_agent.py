@@ -251,6 +251,14 @@ class AgentRunResult:
     bull_case: str = ""
     bear_case: str = ""
     tokens_used: int = 0
+    #: The billed split, so cost is arithmetic rather than an estimate. Without
+    #: these the estimator had to assume a fixed 70/30 input/output mix, which is
+    #: wrong for any real prompt - a debate run is heavily input-weighted, and
+    #: cached reads cost a fraction of fresh input.
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cached_input_tokens: int = 0
+    cache_write_tokens: int = 0
     api_cost_usd: Decimal = Decimal("0.00000")
     source: str = "crewai"  # crewai | heuristic_fallback
     error: str | None = None
@@ -896,15 +904,19 @@ class AlphaAgentOrchestrator:
                 latency_ms=int((time.monotonic() - started) * 1000),
             )
 
-        tokens_used = _extract_tokens(result)
+        usage = _extract_usage(result)
         bull_case, bear_case = _extract_debate(result)
         return AgentRunResult(
             bull_case=bull_case,
             bear_case=bear_case,
             proposal=proposal,
             reasoning=proposal.reasoning or str(getattr(result, "raw", "")),
-            tokens_used=tokens_used,
-            api_cost_usd=estimate_cost(tokens_used, str(self.config.get("MODEL", ""))),
+            tokens_used=usage.total,
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+            cached_input_tokens=usage.cached_read_tokens,
+            cache_write_tokens=usage.cache_write_tokens,
+            api_cost_usd=estimate_cost(usage, str(self.config.get("MODEL", ""))),
             source="crewai",
             latency_ms=int((time.monotonic() - started) * 1000),
         )
@@ -982,21 +994,77 @@ def _extract_debate(result: Any) -> tuple[str, str]:
     return raw(0), raw(1)
 
 
-def _extract_tokens(result: Any) -> int:
-    """Pull a total token count out of a CrewOutput across API variants."""
-    for source in (getattr(result, "token_usage", None), getattr(result, "usage_metrics", None)):
-        if source is None:
-            continue
-        for attr in ("total_tokens", "total"):
-            value = getattr(source, attr, None)
-            if value is None and isinstance(source, dict):
-                value = source.get(attr)
-            if isinstance(value, (int, float)) and value > 0:
-                return int(value)
+@dataclass(frozen=True)
+class TokenUsage:
+    """The billed token split for one agent run.
+
+    ``input_tokens`` is the **full** prompt count and already includes the cached
+    and cache-write portions - CrewAI's Anthropic provider folds those counters
+    into ``input_tokens`` before they reach ``usage_metrics``. The cached figures
+    are therefore broken out here for pricing, not added to the total.
+    """
+
+    total: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cached_read_tokens: int = 0
+    cache_write_tokens: int = 0
+
+    @property
+    def fresh_input_tokens(self) -> int:
+        """Prompt tokens billed at the full input rate."""
+        return max(0, self.input_tokens - self.cached_read_tokens - self.cache_write_tokens)
+
+    @property
+    def has_split(self) -> bool:
+        """True when the provider reported a real input/output breakdown."""
+        return self.input_tokens > 0 or self.output_tokens > 0
+
+
+def _read_number(source: Any, *names: str) -> int:
+    """First positive integer among ``names``, on a dict or an object."""
+    for name in names:
+        value = getattr(source, name, None)
+        if value is None and isinstance(source, dict):
+            value = source.get(name)
+        if isinstance(value, (int, float)) and value > 0:
+            return int(value)
     return 0
 
 
-def estimate_cost(tokens_used: int, model: str) -> Decimal:
+def _extract_usage(result: Any) -> TokenUsage:
+    """Pull the full billed split out of a CrewOutput across API variants."""
+    for source in (getattr(result, "token_usage", None), getattr(result, "usage_metrics", None)):
+        if source is None:
+            continue
+
+        input_tokens = _read_number(source, "prompt_tokens", "input_tokens", "prompt_token_count")
+        output_tokens = _read_number(source, "completion_tokens", "output_tokens")
+        cached = _read_number(source, "cached_prompt_tokens", "cache_read_input_tokens")
+        written = _read_number(source, "cache_creation_tokens", "cache_creation_input_tokens")
+
+        total = _read_number(source, "total_tokens", "total")
+        if not total:
+            total = input_tokens + output_tokens
+
+        if total:
+            return TokenUsage(
+                total=total,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cached_read_tokens=cached,
+                cache_write_tokens=written,
+            )
+
+    return TokenUsage()
+
+
+def _extract_tokens(result: Any) -> int:
+    """Total token count for one run. Retained for callers that only need it."""
+    return _extract_usage(result).total
+
+
+def estimate_cost(usage: TokenUsage | int, model: str) -> Decimal:
     """Approximate USD cost from the configured price table.
 
     Matches the exact model id first, then the longest prefix, so a dated id like
@@ -1023,9 +1091,30 @@ def estimate_cost(tokens_used: int, model: str) -> Decimal:
             key or "<unset>",
         )
         rates = default
-    # Token split is not exposed per-bucket; assume a 70/30 input/output mix.
-    blended_per_million = rates["input"] * 0.7 + rates["output"] * 0.3
-    cost = Decimal(str(tokens_used)) / Decimal("1000000") * Decimal(str(blended_per_million))
+    rate_in = Decimal(str(rates.get("input", 0)))
+    rate_out = Decimal(str(rates.get("output", 0)))
+    # Cached reads are billed at a discount and cache writes at a premium on
+    # Anthropic (0.1x and 1.25x of the input rate). Providers without those
+    # entries simply price every prompt token at the input rate, which is the
+    # conservative default rather than a guess.
+    rate_cached = Decimal(str(rates.get("cached_input", rates.get("input", 0))))
+    rate_write = Decimal(str(rates.get("cache_write", rates.get("input", 0))))
+
+    if isinstance(usage, TokenUsage) and usage.has_split:
+        million = Decimal("1000000")
+        cost = (
+            Decimal(usage.fresh_input_tokens) * rate_in
+            + Decimal(usage.cached_read_tokens) * rate_cached
+            + Decimal(usage.cache_write_tokens) * rate_write
+            + Decimal(usage.output_tokens) * rate_out
+        ) / million
+    else:
+        # No breakdown available (a heuristic run, or a provider that reports only
+        # a total). Fall back to a blend rather than pretending to precision.
+        total = usage.total if isinstance(usage, TokenUsage) else int(usage)
+        blended = rate_in * Decimal("0.7") + rate_out * Decimal("0.3")
+        cost = Decimal(total) / Decimal("1000000") * blended
+
     return cost.quantize(Decimal("0.00001"))
 
 

@@ -328,7 +328,15 @@ AI_CONFIG = {
 # Rates verified 2026-10: https://llm-stats.com/models/claude-haiku-4-5-20251001
 AI_MODEL_PRICING = {
     # --- Anthropic -------------------------------------------------------
-    "claude-haiku-4-5": {"input": 1.00, "output": 5.00},
+    # Anthropic bills cache reads at 0.1x and cache writes at 1.25x the input
+    # rate. Both are spelled out rather than derived at runtime so a rate change
+    # is a one-line edit here.
+    "claude-haiku-4-5": {
+        "input": 1.00,
+        "output": 5.00,
+        "cached_input": 0.10,
+        "cache_write": 1.25,
+    },
     # --- DeepSeek --------------------------------------------------------
     "deepseek-reasoner": {"input": 0.55, "output": 2.19},
     "deepseek-chat": {"input": 0.27, "output": 1.10},

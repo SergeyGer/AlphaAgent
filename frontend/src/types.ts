@@ -142,6 +142,16 @@ export interface DecisionLog {
   ticker: string | null;
   transaction_id: number | null;
   tokens_used: number | null;
+  /**
+   * Billed split behind `tokens_used`, so the stored cost reads as arithmetic
+   * rather than a figure taken on trust. `input_tokens` is the full prompt count
+   * and already includes the cached and cache-write portions, billed at 0.1x and
+   * 1.25x of the input rate — ignoring that overstated a real run by 93%.
+   */
+  input_tokens: number | null;
+  output_tokens: number | null;
+  cached_input_tokens: number | null;
+  cache_write_tokens: number | null;
   api_cost_usd: Decimal | null;
   /** The CIO's verdict — which argument won, and why. */
   reasoning: string | null;
