@@ -1,0 +1,44 @@
+# AlphaAgent - runtime dependencies (DIRECT ONLY).
+#
+# This is the file you edit. `requirements.txt` is GENERATED from it by:
+#
+#     make lock          # or: pip-compile --generate-hashes requirements.in
+#
+# Do not edit requirements.txt by hand - it is overwritten on the next compile.
+# Its expanded content is also what gives Dependabot visibility into the
+# transitive tree: GitHub builds its dependency graph from manifest files, so a
+# hand-written list of 16 direct pins leaves the ~180 packages resolved beneath
+# them untracked and unauditable.
+
+# --- Web / API tier -------------------------------------------------------
+Django==5.2.17                 # LTS
+djangorestframework==3.18.1    # REST API
+
+# --- Real-time / ASGI -----------------------------------------------------
+# Daphne is not optional: the dashboard streams over WebSocket, which a WSGI
+# server cannot serve. The extra also pulls in the `daphne` runserver.
+channels[daphne]==4.3.2        # ASGI + WebSocket protocol handling
+channels-redis==4.3.0          # Redis-backed channel layer
+
+# --- Async engine ---------------------------------------------------------
+celery==5.6.3                  # worker + Celery Beat scheduler
+redis==8.1.0                   # broker, result backend and Django cache
+
+# --- Database -------------------------------------------------------------
+psycopg2-binary==2.9.13        # PostgreSQL driver
+
+# --- AI layer -------------------------------------------------------------
+# Extras matter: CrewAI resolves some models through *native* providers that
+# need their SDK installed (e.g. `claude-*` -> anthropic). Without the extra,
+# crew construction dies with "Anthropic native provider not available".
+crewai[anthropic]==1.15.23     # agent orchestration
+yfinance==1.7.0                # live market prices
+openai==2.54.0                 # GPT-4o / OpenAI-compatible gateways (DeepSeek)
+pydantic==2.12.5               # guardrail payload validation
+
+# --- Support --------------------------------------------------------------
+python-dotenv==1.2.3           # .env loading
+requests==2.34.2               # RSS / HTTP client
+defusedxml==0.7.1              # hardened XML parsing for untrusted RSS feeds
+beautifulsoup4==4.15.0
+lxml==6.1.3

@@ -5,8 +5,9 @@
 SHELL := /bin/bash
 PYTHON ?= venv/bin/python
 PIP ?= venv/bin/pip
+PIP_COMPILE ?= venv/bin/pip-compile
 
-.PHONY: help venv install install-dev env up down logs migrate makemigrations \
+.PHONY: help venv lock lock-dev install install-dev env up down logs migrate makemigrations \
         seed shell test test-guardrails lint format check docker-build docker-up \
         docker-down dry-run clean
 
@@ -17,12 +18,23 @@ help: ## Show this help
 venv: ## Create the virtual environment
 	python3 -m venv venv
 
-install: venv ## Install runtime dependencies
-	$(PIP) install --upgrade pip
-	$(PIP) install -r requirements.txt
+lock: ## Re-resolve requirements.txt from requirements.in (pip-tools)
+	$(PIP_COMPILE) --generate-hashes --resolver=backtracking \
+		--strip-extras --output-file=requirements.txt requirements.in
+	@echo "requirements.txt regenerated - commit it alongside requirements.in"
 
-install-dev: install ## Install runtime + development dependencies
-	$(PIP) install -r requirements-dev.txt
+lock-dev: ## Re-resolve requirements-dev.txt (--allow-unsafe pins pip/setuptools)
+	$(PIP_COMPILE) --generate-hashes --allow-unsafe --resolver=backtracking \
+		--strip-extras --output-file=requirements-dev.txt requirements-dev.in
+	@echo "requirements-dev.txt regenerated - commit it alongside requirements-dev.in"
+
+install: venv ## Install runtime dependencies (hash-verified)
+	$(PIP) install --upgrade pip
+	$(PIP) install --require-hashes -r requirements.txt
+	$(PIP) install pip-tools   # provides `make lock`
+
+install-dev: install ## Install runtime + development dependencies (hash-verified)
+	$(PIP) install --require-hashes -r requirements-dev.txt
 
 env: ## Create .env from the template (fails if one already exists)
 	@test -f .env && echo ".env already exists - not overwriting" || cp .env.example .env

@@ -31,6 +31,25 @@ updates:
     commit-message:
       prefix: "chore(deps)"
     ignore:
+      # ------------------------------------------------------------------
+      # chromadb: no fix exists, and none can be installed.
+      #
+      # requirements.txt is a pip-tools lockfile now, so chromadb is visible to
+      # the dependency graph for the first time - it arrives transitively via
+      # crewai. Four advisories apply (PYSEC-2026-311, -3813, -3814, -3815) and
+      # every one reports "no fix available": crewai 1.15.23 pins
+      # `chromadb~=1.1.0`, and 1.15.23 is the newest crewai on PyPI, so no
+      # release both fixes them and satisfies the constraint.
+      #
+      # Triage: all four are server-side - pre-auth code injection against a
+      # running Chroma server, malicious model-repo loading, and two RBAC /
+      # tenant-isolation flaws. This project never imports chromadb, runs no
+      # Chroma server, publishes no port for one, and constructs its Crew with
+      # memory=False, so the vulnerable surfaces are unreachable.
+      #
+      # Remove this entry once crewai widens the pin AND a patched release
+      # exists, or it silently suppresses an alert that has become fixable.
+      - dependency-name: "chromadb"
       # crewai 1.15.23 pins `openai<3,>=2.30.0`. Proposing 3.x produces a PR
       # that cannot install (pip: ResolutionImpossible). Remove once crewai
       # widens the bound.
