@@ -108,3 +108,10 @@ class SharedSecretGuard:
                 "body": b'{"error":"unauthorized","detail":"Missing or invalid X-AlphaAgent-MCP-Key header."}',
             }
         )
+        # Explicit, not an implicit fall-through. The two pass-through paths
+        # above `return await self.app(...)` with a value, so this function mixed
+        # explicit returns with an implicit one - which CodeQL reports as
+        # py/mixed-returns, and which is a fair reading: the reader cannot tell
+        # whether the fall-through was intended. Returning None here is the
+        # rejection path completing, so say so.
+        return None
