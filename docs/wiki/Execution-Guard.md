@@ -143,6 +143,24 @@ interaction between them, including:
 Because there is no I/O, these are fast, deterministic tests rather than
 integration tests with mocks. See [[Quality-and-Testing]].
 
+## What this guard does *not* bound
+
+The guard limits what the system may **trade**. It says nothing about what the
+system may **cost**, and those are different risks with different owners: one
+protects the portfolio, the other protects the operator.
+
+A separate control covers the second: a daily ceiling on model spend, checked
+before any run is dispatched, with the remaining budget shown on the dashboard
+beside the daily loss budget. Reaching it writes a `HALT - AI spend ceiling
+reached` row to this same audit log, so "why did the agent stop?" is answerable in
+one place.
+
+Because it is not part of this guard, a run that begins just below the ceiling can
+overshoot it by the cost of that run (around $0.15). See
+[Configuration](Configuration) for `AI_DAILY_SPEND_LIMIT_USD` and
+[ADR-0012](https://github.com/SergeyGer/AlphaAgent/blob/main/docs/adr/0012-daily-ai-spend-ceiling.md)
+for the reasoning.
+
 ## Related pages
 
 - [[Engineering-Decisions]] — ADR-001, and ADR-003 on the derived ledger

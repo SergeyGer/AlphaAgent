@@ -637,7 +637,26 @@ class AlphaAgentOrchestrator:
             name = str(tool.get("name", ""))
             return any(name.endswith(suffix) for suffix in allowed)
 
-        return [MCPServerHTTP(url=url, streamable=True, tool_filter=predicate)]
+        # The server refuses anonymous HTTP requests, so the shared secret
+        # travels with every call. An empty secret is a misconfiguration rather
+        # than a reason to call anyway: the request would be rejected, and a
+        # silent failure would look like "the tools returned nothing".
+        secret = str(self.config.get("MCP_SHARED_SECRET") or "").strip()
+        if not secret:
+            logger.warning(
+                "TOOLS_VIA_MCP is on but AI_MCP_SHARED_SECRET is empty; the MCP "
+                "server rejects anonymous requests, falling back to in-process tools"
+            )
+            return []
+
+        return [
+            MCPServerHTTP(
+                url=url,
+                streamable=True,
+                headers={"X-AlphaAgent-MCP-Key": secret},
+                tool_filter=predicate,
+            )
+        ]
 
     # -- Agents ------------------------------------------------------------
     def _build_crew(self, context: DecisionContext, tools: dict[str, Any]) -> Any:

@@ -118,6 +118,28 @@ export function Dashboard(): ReactElement {
           break;
         }
 
+        case 'budget.updated': {
+          // Replaced wholesale from the server figure rather than accumulated
+          // client-side: the number has to agree with the audit trail, and the
+          // worker may have completed a run this tab never saw start.
+          setPortfolioData((previous) =>
+            previous ? { ...previous, ai_budget: message.payload } : previous,
+          );
+          break;
+        }
+
+        case 'budget.exhausted': {
+          setPortfolioData((previous) =>
+            previous ? { ...previous, ai_budget: message.payload } : previous,
+          );
+          push(
+            'error',
+            `AI spend ceiling reached — $${message.payload.spent_usd} of $${message.payload.limit_usd}. ` +
+              'Agent runs are halted until 00:00 UTC.',
+          );
+          break;
+        }
+
         case 'autonomy.changed': {
           const next = message.payload.is_autonomous;
           setPortfolioData((previous) => (previous ? { ...previous, is_autonomous: next } : previous));

@@ -44,6 +44,17 @@ export function MetricsGrid({ portfolio, loading }: MetricsGridProps): ReactElem
   const lossRemaining = toNumber(metrics?.daily_loss_remaining_usd);
   const lossUsed = toNumberOrZero(metrics?.daily_loss_used_usd);
   const lossLimit = toNumberOrZero(metrics?.daily_loss_limit_usd);
+
+  // AI spend is an operating limit, not a trading one, but it halts the agent
+  // just as absolutely as the loss limit halts trading - so it is shown with the
+  // same weight rather than buried in the meta strip.
+  const aiBudget = portfolio?.ai_budget ?? null;
+  const aiSpent = toNumberOrZero(aiBudget?.spent_usd);
+  const aiLimit = toNumberOrZero(aiBudget?.limit_usd);
+  const aiRemaining = toNumber(aiBudget?.remaining_usd);
+  const aiEnforced = aiBudget?.enforced ?? true;
+  const aiExhausted = aiBudget?.exhausted ?? false;
+  const aiUsedRatio = aiLimit > 0 ? aiSpent / aiLimit : 0;
   const unpriced = metrics?.unpriced_tickers ?? [];
 
   const equityShare =
@@ -75,7 +86,23 @@ export function MetricsGrid({ portfolio, loading }: MetricsGridProps): ReactElem
         </p>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      {aiExhausted ? (
+        <div
+          role="alert"
+          className="flex items-start gap-2 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-200"
+        >
+          <span aria-hidden="true" className="font-mono">
+            ⛔
+          </span>
+          <p>
+            <strong className="font-semibold">AI spend ceiling reached.</strong> No further agent
+            runs will be dispatched until 00:00 UTC. Raise{' '}
+            <code className="font-mono">AI_DAILY_SPEND_LIMIT_USD</code> to continue.
+          </p>
+        </div>
+      ) : null}
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">
         <LiveMetric
           label="Total Equity"
           numeric={equity}
@@ -134,6 +161,26 @@ export function MetricsGrid({ portfolio, loading }: MetricsGridProps): ReactElem
             metrics?.daily_loss_limit_usd,
           )} consumed`}
           progress={{ value: lossUsed, max: lossLimit }}
+        />
+
+        <LiveMetric
+          label="AI Spend Today"
+          numeric={aiRemaining}
+          loading={loading}
+          value={formatCurrency(aiBudget?.remaining_usd)}
+          valueClassName={
+            aiExhausted || aiUsedRatio >= 0.9
+              ? 'text-rose-400'
+              : aiUsedRatio >= 0.6
+                ? 'text-amber-300'
+                : 'text-slate-100'
+          }
+          hint={
+            aiEnforced
+              ? `${formatCurrency(aiBudget?.spent_usd)} of ${formatCurrency(aiBudget?.limit_usd)} · enforced`
+              : `${formatCurrency(aiBudget?.spent_usd)} of ${formatCurrency(aiBudget?.limit_usd)} · not enforced`
+          }
+          progress={{ value: aiSpent, max: aiLimit }}
         />
       </div>
 

@@ -7,7 +7,7 @@
 [![CI](https://github.com/SergeyGer/AlphaAgent/actions/workflows/ci.yml/badge.svg)](https://github.com/SergeyGer/AlphaAgent/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/SergeyGer/AlphaAgent/actions/workflows/codeql.yml/badge.svg)](https://github.com/SergeyGer/AlphaAgent/actions/workflows/codeql.yml)
 [![Docs](https://github.com/SergeyGer/AlphaAgent/actions/workflows/docs.yml/badge.svg)](https://github.com/SergeyGer/AlphaAgent/actions/workflows/docs.yml)
-[![Tests](https://img.shields.io/badge/tests-401%20passing-brightgreen.svg)](https://github.com/SergeyGer/AlphaAgent/wiki/Quality-and-Testing)
+[![Tests](https://img.shields.io/badge/tests-418%20passing-brightgreen.svg)](https://github.com/SergeyGer/AlphaAgent/wiki/Quality-and-Testing)
 [![Coverage](coverage.svg)](https://github.com/SergeyGer/AlphaAgent/wiki/Quality-and-Testing)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -114,7 +114,7 @@ Everything below is in this repository and runs today.
 | **Tool server** | Market and news data published over the Model Context Protocol, so external AI tools can consume it without touching this codebase |
 | **Telegram bot** | Inline-keyboard control: approvals, balance reports, open positions, pending queue, on-demand analysis, autopilot toggle |
 | **Operations** | Containerised multi-service stack, health checks, a pruning command for the audit trail, and documented failure modes |
-| **Quality gates** | 401 automated tests at 76% coverage, continuous integration on every push, static analysis, security scanning and automated dependency management |
+| **Quality gates** | 418 automated tests at 77% coverage, continuous integration on every push, static analysis, security scanning and automated dependency management |
 
 ## Skills demonstrated
 
@@ -179,7 +179,7 @@ Tailwind CSS · Recharts · Docker Compose · GitHub Actions
 
 **Try the risk guard without an account, a key or a database:**
 
-[![Try the offline demo](https://img.shields.io/badge/▶_Try_the_offline_demo-FF4B4B?logo=streamlit&logoColor=white)](https://alphaagent-demo.streamlit.app)
+[![Try the offline demo](https://img.shields.io/badge/▶_Try_the_offline_demo-FF4B4B?logo=streamlit&logoColor=white)](https://alphaagent-6stcj667tqeawiupedhygh.streamlit.app)
 
 A single page that drives the project's **real risk guard** — the same
 `services/execution.py` the live system runs — so you can push the sliders until
@@ -230,8 +230,8 @@ configuration reference: [Configuration](https://github.com/SergeyGer/AlphaAgent
 
 | | |
 | --- | --- |
-| **401 automated tests** | Covering the risk guard, the ledger, the API, the task pipeline, WebSockets, the Telegram bot and the tool server |
-| **76% coverage, enforced** | CI fails below a 70% floor, and the badge above is regenerated from the real run on every push to `main` |
+| **418 automated tests** | Covering the risk guard, the ledger, the API, the task pipeline, WebSockets, the Telegram bot and the tool server |
+| **77% coverage, enforced** | CI fails below a 70% floor, and the badge above is regenerated from the real run on every push to `main` |
 | **Continuous integration** | Lint, format, the full test suite against PostgreSQL 16, and a Docker image build — on every push |
 | **Security scanning** | CodeQL analysis plus a test that walks every publishable file looking for committed credentials |
 | **Supply chain** | Automated dependency updates, grouped and scheduled to stay reviewable |

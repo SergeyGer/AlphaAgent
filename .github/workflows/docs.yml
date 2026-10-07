@@ -56,10 +56,12 @@ jobs:
             --exclude '^https?://(localhost|127\.0\.0\.1)'
             --exclude '^https?://github\.com/SergeyGer/AlphaAgent/wiki'
             --exclude '^https?://(www\.)?(anthropic|platform\.claude)\.com'
-            # Streamlit Community Cloud deploy target. Live only once the
-            # maintainer creates the app; until then it redirects to a
-            # sign-in page, which is not a broken link but is not a 200.
-            --exclude '^https?://alphaagent-demo\.streamlit\.app'
+            # The Streamlit demo. Excluded because the app is currently set to
+            # private, so an anonymous request bounces to a login page and back
+            # again - a redirect loop the checker cannot resolve. Remove this
+            # exclusion once the app is shared publicly; leaving it in would hide
+            # a genuinely dead demo link.
+            --exclude '^https?://alphaagent-[a-z0-9]+\.streamlit\.app'
             './**/*.md'
           fail: true
         env:

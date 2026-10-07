@@ -308,6 +308,10 @@ class McpCrewRoutingTests(TestCase):
             "ALLOW_HEURISTIC_FALLBACK": True,
             "TOOLS_VIA_MCP": False,
             "MCP_SERVER_URL": "",
+            # Part of the config contract: the server rejects anonymous requests,
+            # so the client refuses to call it without a secret rather than
+            # building a reference that would fail at runtime.
+            "MCP_SHARED_SECRET": "test-shared-secret",
         }
         config.update(overrides)
         return AlphaAgentOrchestrator(config)

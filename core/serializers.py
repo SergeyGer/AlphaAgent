@@ -141,6 +141,7 @@ class PortfolioSerializer(serializers.ModelSerializer):
     metrics = serializers.SerializerMethodField()
     is_autonomous = serializers.BooleanField(read_only=True)
     max_trade_budget_usd = serializers.SerializerMethodField()
+    ai_budget = serializers.SerializerMethodField()
 
     class Meta:
         model = Portfolio
@@ -154,6 +155,7 @@ class PortfolioSerializer(serializers.ModelSerializer):
             "max_trade_allocation_pct",
             "max_trade_budget_usd",
             "daily_loss_limit_usd",
+            "ai_budget",
             "created_at",
             "metrics",
             "assets",
@@ -162,6 +164,18 @@ class PortfolioSerializer(serializers.ModelSerializer):
 
     def get_metrics(self, obj: Portfolio) -> dict:
         return self.context.get("metrics") or {}
+
+    def get_ai_budget(self, obj) -> dict:
+        """Today's AI spend against the daily ceiling.
+
+        Exposed on the portfolio payload because it is an operating limit the
+        holder needs to see next to the trading limits - the ceiling halts the
+        agent entirely, so a dashboard that shows the loss limit but not the
+        spend limit is hiding the reason decisions stop arriving.
+        """
+        from services.budget import budget_state
+
+        return budget_state().as_dict()
 
     def get_max_trade_budget_usd(self, obj: Portfolio) -> str:
         return str(obj.max_trade_budget_usd)

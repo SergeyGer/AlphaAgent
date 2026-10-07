@@ -20,6 +20,8 @@ __all__ = [
     "EventType",
     "emit_agent_thinking",
     "emit_autonomy_changed",
+    "emit_budget_exhausted",
+    "emit_budget_updated",
     "emit_decision",
     "emit_portfolio_snapshot",
     "emit_recommendation",
@@ -41,6 +43,10 @@ class EventType:
     RECOMMENDATION_CREATED = "recommendation.created"
     RECOMMENDATION_UPDATED = "recommendation.updated"
     AUTONOMY_CHANGED = "autonomy.changed"
+    #: Carries today's AI spend against the ceiling, so the dashboard meter
+    #: moves as runs happen rather than only on a page reload.
+    BUDGET_UPDATED = "budget.updated"
+    BUDGET_EXHAUSTED = "budget.exhausted"
 
 
 def portfolio_group(user_id: int) -> str:
@@ -197,3 +203,21 @@ def emit_autonomy_changed(user_id: int | None, portfolio) -> None:
         EventType.AUTONOMY_CHANGED,
         {"portfolio_id": portfolio.id, "is_autonomous": portfolio.is_autonomous},
     )
+
+
+def emit_budget_updated(user_id: int | None, payload: dict) -> None:
+    """Publish the current spend against the ceiling.
+
+    Sent after every agent run so the meter on the dashboard reflects money that
+    has actually been spent, without the client polling for it.
+    """
+    publish(user_id, EventType.BUDGET_UPDATED, payload)
+
+
+def emit_budget_exhausted(user_id: int | None, payload: dict) -> None:
+    """Publish that the ceiling has been reached and runs are halted.
+
+    Separate from ``budget.updated`` because it is the one budget event a client
+    must not ignore: it explains why no further decisions are arriving.
+    """
+    publish(user_id, EventType.BUDGET_EXHAUSTED, payload)

@@ -69,18 +69,22 @@ class PortfolioEndpointTests(APITestCase):
     @patch("services.market_data._fetch_from_yfinance", side_effect=fake_quote("150.00"))
     def test_query_count_is_bounded(self, _mock):
         """select_related/prefetch_related must prevent an N+1 explosion."""
-        # 6 now: token+user, the activity stamp, portfolio, assets, ledger, metrics.
+        # 7 now: token+user, the activity stamp, portfolio, assets, ledger, metrics,
+        # and the daily AI spend aggregate.
         # The stamp is a single constant write per authenticated request (rate
-        # limited to once per user per hour), not part of the per-asset path, so
-        # the N+1 guarantee this test exists for is unaffected.
-        with self.assertNumQueries(6):
+        # limited to once per user per hour), and the spend aggregate is one SUM
+        # over an indexed created_at that returns a single row. Neither is part of
+        # the per-asset path, so the N+1 guarantee this test exists for is
+        # unaffected - the second assertion below is what proves that.
+        with self.assertNumQueries(7):
             baseline = len(self.client.get(reverse("core:portfolio-detail")).json()["assets"])
 
         for ticker in ("TSLA", "MSFT", "NVDA", "BTC", "ETH"):
             make_asset(self.portfolio, ticker, "1", "50.00")
 
-        # Adding 5 more positions must not add queries to the hot path.
-        with self.assertNumQueries(5):
+        # Adding 5 more positions must not add queries to the hot path. One fewer
+        # than the baseline because the hourly activity stamp is already fresh.
+        with self.assertNumQueries(6):
             body = self.client.get(reverse("core:portfolio-detail")).json()
         self.assertEqual(len(body["assets"]), baseline + 5)
 

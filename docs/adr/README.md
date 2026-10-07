@@ -66,6 +66,8 @@ maintainer".
 | [0009](0009-per-portfolio-sweep-scoping.md) | Scope sweeps and throttling per portfolio | Accepted | Debounce and cooldown keys are namespaced per portfolio, and the on-demand endpoint reports whether it actually dispatched. |
 | [0010](0010-bounded-agent-runs.md) | Bound each agent run with iteration, retry and time caps | Accepted | Explicit `max_iter`, retry, request and Celery time limits keep cost and worker time bounded across a whole watchlist. |
 | [0011](0011-pip-tools-locked-dependencies.md) | Lock Python dependencies with pip-tools so the full tree is visible | Accepted | Committed hash-pinned lockfiles make all 180 Python packages visible to Dependabot instead of the 34 that direct pins exposed. |
+| [0012](0012-daily-ai-spend-ceiling.md) | Cap daily AI spend, separately from the trading limits | Accepted | A hard daily ceiling, defaulting to a non-zero $5.00, checked before dispatch and shown live on the dashboard. The trading guard caps what the system may trade; this caps what it may cost. |
+| [0013](0013-mcp-shared-secret-and-network-boundary.md) | Authenticate the MCP server and keep it off the host network | Accepted | The tool server was reachable on host port 8100 with no authentication. Now unpublished, plus a shared-secret header required on every request. |
 
 ## Adding a new ADR
 

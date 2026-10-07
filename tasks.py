@@ -49,8 +49,11 @@ from core.models import (
     TradeRecommendation,
     Transaction,
 )
+from services.budget import budget_state
 from services.events import (
     emit_agent_thinking,
+    emit_budget_exhausted,
+    emit_budget_updated,
     emit_decision,
     emit_trade,
 )
@@ -124,7 +127,53 @@ def run_alpha_agent_task(
     require_approval = require_approval and not portfolio.is_autonomous
     user_id = portfolio.user_id
 
-    # ---- 0. Throttle ------------------------------------------------------
+    # ---- 0. AI spend ceiling ---------------------------------------------
+    # Checked after the throttle but before any work that costs money, and before
+    # the context is built. The guard limits what the system may trade; this
+    # limits what it may spend. Without it an unattended Beat schedule keeps
+    # calling the model forever, refusing every trade on risk grounds while the
+    # API bill grows.
+    #
+    # Deliberately checked whole-run rather than mid-run: a run that starts
+    # finishes and writes its audit row, so the log never contains a half-recorded
+    # decision.
+    budget = budget_state()
+    if budget.exhausted:
+        logger.warning(
+            "AI spend ceiling reached: $%s of $%s today; skipping %s on portfolio %s",
+            budget.spent_usd,
+            budget.limit_usd,
+            ticker,
+            portfolio_id,
+        )
+        # Recorded as a decision row so the halt is auditable in the same place as
+        # every other decision, rather than only in the worker log.
+        # The ticker goes in the reasoning, not a column: AgentDecisionLog has no
+        # ticker field - the API derives it from the related transaction, which a
+        # halt by definition does not have.
+        AgentDecisionLog.objects.create(
+            portfolio=portfolio,
+            action_taken="HALT - AI spend ceiling reached",
+            market_sentiment=MarketSentiment.NEUTRAL,
+            reasoning=(
+                f"Daily AI spend ceiling reached: ${budget.spent_usd} of "
+                f"${budget.limit_usd} spent today. Skipped {ticker}. No further "
+                f"agent runs are dispatched until 00:00 UTC. Raise "
+                f"AI_DAILY_SPEND_LIMIT_USD or set AI_SPEND_LIMIT_ENFORCED=false "
+                f"to keep running."
+            ),
+        )
+        emit_budget_exhausted(user_id, budget.as_dict())
+        return {
+            "status": "halted",
+            "reason": "ai_spend_ceiling",
+            "portfolio_id": portfolio_id,
+            "ticker": ticker,
+            "spent_usd": str(budget.spent_usd),
+            "limit_usd": str(budget.limit_usd),
+        }
+
+    # ---- 1. Throttle ------------------------------------------------------
     # Claimed before any expensive work. The allocation ceiling is per-trade, so
     # without this two overlapping sweeps could each trade inside their own
     # limit and compound the portfolio's real exposure.
@@ -136,7 +185,7 @@ def run_alpha_agent_task(
             "ticker": ticker,
         }
 
-    # ---- 1. Read-only context -------------------------------------------
+    # ---- 2. Read-only context -------------------------------------------
     positions = replay_positions(portfolio)
     position = positions.get(ticker, PositionState(ticker=ticker))
     realised_today = sum((s.realised_pnl_today for s in positions.values()), ZERO).quantize(CENT)
@@ -203,6 +252,7 @@ def run_alpha_agent_task(
         )
         emit_agent_thinking(user_id, portfolio.id, ticker, "failed", str(exc)[:200])
         emit_decision(user_id, failure_log)
+        emit_budget_updated(user_id, budget_state().as_dict())
         return {"status": "error", "ticker": ticker, "error": str(exc)}
 
     emit_agent_thinking(
@@ -278,6 +328,9 @@ def run_alpha_agent_task(
             api_cost_usd=run_result.api_cost_usd,
         )
         emit_decision(user_id, decision_log)
+        # Re-read rather than adding this run's cost locally: the figure must
+        # match what the audit trail says, including any run from another worker.
+        emit_budget_updated(user_id, budget_state().as_dict())
     except Exception as exc:
         logger.exception("Failed to persist AgentDecisionLog for %s: %s", portfolio_id, exc)
 

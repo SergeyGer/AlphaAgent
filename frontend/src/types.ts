@@ -81,6 +81,24 @@ export interface Asset {
   allocation_pct: Decimal;
 }
 
+/**
+ * Today's AI spend against the daily ceiling, as returned by the API and pushed
+ * on every `budget.updated`.
+ *
+ * All three money values are decimal strings, like every other amount on the
+ * wire, so they are parsed before formatting rather than coerced.
+ */
+export interface AiBudget {
+  spent_usd: Decimal;
+  limit_usd: Decimal;
+  remaining_usd: Decimal;
+  used_pct: number;
+  /** False when the ceiling is tracked but not enforced. */
+  enforced: boolean;
+  /** True when runs are halted until the UTC day rolls over. */
+  exhausted: boolean;
+}
+
 export interface Portfolio {
   id: number;
   username: string;
@@ -94,6 +112,7 @@ export interface Portfolio {
   created_at: string;
   metrics: PortfolioMetrics;
   assets: Asset[];
+  ai_budget: AiBudget;
 }
 
 /* ------------------------------------------------------------------ */
@@ -328,7 +347,9 @@ export type StreamMessage =
   | { type: 'agent.thinking'; payload: AgentThinkingEvent }
   | { type: 'recommendation.created'; payload: Recommendation }
   | { type: 'recommendation.updated'; payload: Recommendation }
-  | { type: 'autonomy.changed'; payload: AutonomyChangedEvent };
+  | { type: 'autonomy.changed'; payload: AutonomyChangedEvent }
+  | { type: 'budget.updated'; payload: AiBudget }
+  | { type: 'budget.exhausted'; payload: AiBudget };
 
 export type StreamMessageType = StreamMessage['type'];
 

@@ -10,6 +10,7 @@ import os
 import secrets
 import sys
 from datetime import timedelta
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from celery.schedules import crontab
@@ -44,6 +45,34 @@ def env_float(name: str, default: float) -> float:
         return float(os.environ.get(name, default))
     except (TypeError, ValueError):
         return default
+
+
+def env_decimal(name: str, default: str) -> Decimal:
+    """Decimal from the environment, falling back to ``default``.
+
+    Never raises: a typo in a spend ceiling should leave the ceiling at its
+    default, not stop the process from importing settings. A silently ignored
+    typo is a real risk here, so a rejected value is reported on stderr rather
+    than swallowed.
+    """
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return Decimal(default)
+    try:
+        value = Decimal(raw)
+    except (InvalidOperation, ValueError):
+        print(
+            f"warning: {name}={raw!r} is not a number; using {default}",
+            file=sys.stderr,
+        )
+        return Decimal(default)
+    if value < 0:
+        print(
+            f"warning: {name}={raw!r} is negative; using {default}",
+            file=sys.stderr,
+        )
+        return Decimal(default)
+    return value
 
 
 def env_list(name: str, default: str = "") -> list[str]:
@@ -307,6 +336,11 @@ AI_CONFIG = {
     # client; off by default because in-process calls are one less hop.
     "TOOLS_VIA_MCP": env_bool("AI_TOOLS_VIA_MCP", False),
     "MCP_SERVER_URL": os.environ.get("AI_MCP_SERVER_URL", "").strip(),
+    # Shared secret presented as the X-AlphaAgent-MCP-Key header. The MCP server
+    # refuses to start on an HTTP transport without it, so an empty value here
+    # means the crew falls back to the in-process tools rather than calling a
+    # server that would reject it.
+    "MCP_SHARED_SECRET": os.environ.get("MCP_SHARED_SECRET", "").strip(),
     # Providers that need request headers the LLM library omits. The motivating
     # case is Anthropic workspace scoping: an unscoped key is rejected with
     # "must include the anthropic-workspace-id header".
@@ -354,6 +388,30 @@ AI_DEFAULT_PRICING = {"input": 0.27, "output": 1.10}
 # How long an AI recommendation stays actionable before it is auto-expired.
 # Prices move; a stale proposal is worse than no proposal.
 RECOMMENDATION_TTL_MINUTES = env_int("RECOMMENDATION_TTL_MINUTES", 60)
+
+# ---------------------------------------------------------------------------
+# AI spend ceiling
+# ---------------------------------------------------------------------------
+# A hard daily ceiling on language-model spend, in USD, across every portfolio.
+#
+# Why this exists alongside the trading limits: the execution guard caps how much
+# the system can *trade* (per-trade allocation, daily loss) but nothing capped
+# what it could *cost*. Celery Beat sweeps every portfolio and ticker on a
+# schedule, so an unattended deployment could run up an API bill with no ceiling
+# and no warning - the guard would keep refusing trades and the meter would keep
+# running.
+#
+# The default is deliberately non-zero. A limit of 0 would be indistinguishable
+# from "disabled", and a spending control that silently defaults to off is worse
+# than none because it implies protection that is not there. Five dollars a day
+# is a few hundred Haiku debate runs - enough to be useful, small enough that a
+# runaway loop is caught within one billing cycle.
+AI_DAILY_SPEND_LIMIT_USD = env_decimal("AI_DAILY_SPEND_LIMIT_USD", "5.00")
+
+# Behaviour once the ceiling is reached. The ceiling is checked before a run is
+# dispatched, never mid-run, so a single run always completes rather than leaving
+# a half-written decision.
+AI_SPEND_LIMIT_ENFORCED = env_bool("AI_SPEND_LIMIT_ENFORCED", True)
 
 # Sweep throttling. The allocation ceiling is per-trade, so without a cooldown
 # two overlapping sweeps can each buy inside their own limit and compound the

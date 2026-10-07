@@ -100,10 +100,13 @@ used instead.
 | `AI_REQUEST_TIMEOUT` | `REQUEST_TIMEOUT` | `90` | No | Per-request timeout in seconds |
 | `AI_MAX_RETRIES` | `MAX_RETRIES` | `2` | No | LLM retries; also drives market-data attempts (`retries + 1` = 3) |
 | `AI_ALLOW_HEURISTIC_FALLBACK` | `ALLOW_HEURISTIC_FALLBACK` | `true` | No | See the fallback table below |
+| `AI_DAILY_SPEND_LIMIT_USD` | `AI_DAILY_SPEND_LIMIT_USD` | `5.00` | **Yes, in effect** | Hard daily ceiling on model spend across every portfolio. Must be non-zero — a ceiling of `0` would be indistinguishable from "disabled" |
+| `AI_SPEND_LIMIT_ENFORCED` | `AI_SPEND_LIMIT_ENFORCED` | `true` | No | `false` tracks and displays spend without halting runs. A demo convenience, a production footgun |
 | `AI_NEWS_ARTICLE_LIMIT` | `NEWS_ARTICLE_LIMIT` | `10` | No | Headlines fetched per ticker when the caller does not pass `limit` |
 | `AI_PRICE_CACHE_TTL` | `PRICE_CACHE_TTL` | `60` | No | Quote cache TTL in seconds |
 | `AI_NEWS_CACHE_TTL` | `NEWS_CACHE_TTL` | `900` | No | News cache TTL in seconds |
 | `AI_TOOLS_VIA_MCP` | `TOOLS_VIA_MCP` | `false` | No | Route crew tools through the MCP server instead of in-process calls |
+| `MCP_SHARED_SECRET` | `MCP_SHARED_SECRET` | *(must be set)* | **Yes** | Shared secret sent as the `X-AlphaAgent-MCP-Key` header. The MCP server refuses to start on an HTTP transport without it |
 | `AI_MCP_SERVER_URL` | `MCP_SERVER_URL` | — | When MCP routing is on | MCP endpoint; Compose sets `http://mcp:8100/mcp` |
 | `AI_LLM_WORKSPACE_ID` | `WORKSPACE_ID` | — | For unscoped Anthropic keys | Injects the `anthropic-workspace-id` request header |
 | `AI_LLM_EXTRA_HEADERS` | `EXTRA_HEADERS` | — | No | JSON **object** of extra request headers; invalid JSON is logged and ignored |

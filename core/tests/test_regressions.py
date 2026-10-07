@@ -8,10 +8,14 @@ future regression reads as a sentence.
 
 from __future__ import annotations
 
+import inspect
+import os
+import pathlib
 import tempfile
 from datetime import timedelta
 from decimal import Decimal
 from pathlib import Path
+from unittest import mock
 from unittest.mock import patch
 
 from django.core.cache import cache
@@ -628,7 +632,6 @@ class ExecutionPreconditionTests(TestCase):
         self.assertFalse(issubclass(GuardError, AssertionError))
 
     def test_no_bare_assert_remains_in_the_execution_path(self):
-        import inspect
 
         from services import execution
 
@@ -750,7 +753,6 @@ class PeriodNormalisationTests(TestCase):
 
     def test_the_tool_normalises_before_reaching_yfinance(self):
         """The guard must sit on the path to the API, not beside it."""
-        import inspect
 
         from services import fundamentals
 
@@ -941,6 +943,260 @@ class ExactCostTests(TestCase):
 
         self.assertEqual(log.input_tokens, 5785)
         self.assertEqual(log.cached_input_tokens, 5624)
+
+
+class AiSpendCeilingTests(TestCase):
+    """Nothing capped language-model spend before this.
+
+    The execution guard limits what the system may trade; it says nothing about
+    what the system may cost. Beat sweeps every portfolio and ticker on a
+    schedule, so an unattended deployment could call the model indefinitely while
+    the guard kept refusing trades on risk grounds.
+    """
+
+    def setUp(self):
+        from core.tests.helpers import make_portfolio, make_user
+
+        # The throttle claims a slot in the shared cache, which outlives a single
+        # test. Without this the second test to use a ticker sees "cooldown".
+        cache.clear()
+        self.portfolio = make_portfolio(make_user("budget-user"))
+
+    def _log(self, cost: str):
+        from core.models import AgentDecisionLog
+
+        return AgentDecisionLog.objects.create(
+            portfolio=self.portfolio,
+            action_taken="HOLD",
+            reasoning="test",
+            api_cost_usd=Decimal(cost),
+        )
+
+    def test_the_default_ceiling_is_non_zero(self):
+        """A limit of zero is indistinguishable from 'disabled'."""
+        from django.conf import settings
+
+        self.assertGreater(settings.AI_DAILY_SPEND_LIMIT_USD, Decimal("0"))
+
+    def test_a_value_that_does_not_parse_falls_back_to_the_default(self):
+        from config.settings import env_decimal
+
+        with mock.patch.dict(os.environ, {"AI_DAILY_SPEND_LIMIT_USD": "not-a-number"}):
+            self.assertEqual(env_decimal("AI_DAILY_SPEND_LIMIT_USD", "5.00"), Decimal("5.00"))
+
+    def test_a_negative_ceiling_is_rejected(self):
+        from config.settings import env_decimal
+
+        with mock.patch.dict(os.environ, {"AI_DAILY_SPEND_LIMIT_USD": "-1"}):
+            self.assertEqual(env_decimal("AI_DAILY_SPEND_LIMIT_USD", "5.00"), Decimal("5.00"))
+
+    def test_spend_today_sums_the_audit_trail(self):
+        from services.budget import spend_today
+
+        self._log("0.25")
+        self._log("0.75")
+
+        self.assertEqual(spend_today(), Decimal("1.00"))
+
+    def test_spend_excludes_yesterday(self):
+        from core.models import AgentDecisionLog
+        from services.budget import spend_today
+
+        old = self._log("9.99")
+        AgentDecisionLog.objects.filter(pk=old.pk).update(
+            created_at=timezone.now() - timedelta(days=1)
+        )
+        self._log("0.10")
+
+        self.assertEqual(spend_today(), Decimal("0.10"))
+
+    def test_budget_is_exhausted_only_at_or_above_the_ceiling(self):
+        from django.test import override_settings
+
+        from services.budget import budget_state
+
+        with override_settings(
+            AI_DAILY_SPEND_LIMIT_USD=Decimal("1.00"), AI_SPEND_LIMIT_ENFORCED=True
+        ):
+            self._log("0.99")
+            self.assertFalse(budget_state().exhausted)
+
+            self._log("0.01")
+            self.assertTrue(budget_state().exhausted)
+
+    def test_an_unenforced_ceiling_is_tracked_but_does_not_halt(self):
+        from django.test import override_settings
+
+        from services.budget import budget_state
+
+        with override_settings(
+            AI_DAILY_SPEND_LIMIT_USD=Decimal("0.01"), AI_SPEND_LIMIT_ENFORCED=False
+        ):
+            self._log("5.00")
+            state = budget_state()
+
+            self.assertFalse(state.exhausted)
+            self.assertGreater(state.spent_usd, Decimal("0"))
+
+    def test_the_task_halts_and_records_why(self):
+        """The halt must be auditable in the same place as every other decision."""
+        from django.test import override_settings
+
+        from core.models import AgentDecisionLog
+        from tasks import run_alpha_agent_task
+
+        # The ceiling is checked after the autonomy gate - a manual portfolio
+        # costs nothing whatever the budget says - so this needs autonomy on.
+        self.portfolio.is_autonomous = True
+        self.portfolio.save(update_fields=["is_autonomous"])
+
+        self._log("10.00")
+        with override_settings(
+            AI_DAILY_SPEND_LIMIT_USD=Decimal("1.00"), AI_SPEND_LIMIT_ENFORCED=True
+        ):
+            result = run_alpha_agent_task.apply(
+                kwargs={"portfolio_id": self.portfolio.id, "ticker": "AAPL"}
+            ).get()
+
+        self.assertEqual(result["status"], "halted")
+        self.assertEqual(result["reason"], "ai_spend_ceiling")
+        halt = AgentDecisionLog.objects.filter(action_taken__startswith="HALT - AI spend").first()
+        self.assertIsNotNone(halt)
+        self.assertIn("ceiling reached", halt.reasoning)
+
+    def test_the_payload_exposes_the_budget(self):
+        from core.serializers import build_portfolio_payload
+
+        payload = build_portfolio_payload(self.portfolio)
+        budget = payload["ai_budget"]
+
+        for key in ("spent_usd", "limit_usd", "remaining_usd", "used_pct", "enforced", "exhausted"):
+            self.assertIn(key, budget)
+
+    def test_used_pct_is_clamped_for_display(self):
+        from services.budget import BudgetState
+
+        over = BudgetState(spent_usd=Decimal("10"), limit_usd=Decimal("5"), enforced=True)
+        self.assertEqual(over.used_pct, 100.0)
+        self.assertEqual(over.remaining_usd, Decimal("0.00"))
+
+
+class McpAuthTests(TestCase):
+    """The MCP server ran unauthenticated on a host-published port."""
+
+    def test_no_secret_refuses_to_start(self):
+        """Failing at construction, not per request: a server that boots while
+        silently accepting anonymous traffic is the failure being prevented."""
+        from mcp_server.auth import SharedSecretGuard
+
+        with self.assertRaises(ValueError):
+            SharedSecretGuard(lambda *a: None, "")
+
+    def test_a_request_without_the_header_is_rejected(self):
+        import asyncio
+
+        from mcp_server.auth import SharedSecretGuard
+
+        sent: list[dict] = []
+
+        async def app(scope, receive, send):  # pragma: no cover - must not run
+            raise AssertionError("the guard let an unauthenticated request through")
+
+        async def send(message):
+            sent.append(message)
+
+        guard = SharedSecretGuard(app, "s3cret")
+        asyncio.run(
+            guard({"type": "http", "method": "POST", "path": "/mcp", "headers": []}, None, send)
+        )
+
+        self.assertEqual(sent[0]["type"], "http.response.start")
+        self.assertEqual(sent[0]["status"], 401)
+
+    def test_a_wrong_secret_is_rejected(self):
+        import asyncio
+
+        from mcp_server.auth import SharedSecretGuard
+
+        sent: list[dict] = []
+
+        async def app(scope, receive, send):  # pragma: no cover
+            raise AssertionError("wrong secret accepted")
+
+        async def send(message):
+            sent.append(message)
+
+        guard = SharedSecretGuard(app, "s3cret")
+        scope = {
+            "type": "http",
+            "method": "POST",
+            "path": "/mcp",
+            "headers": [(b"x-alphaagent-mcp-key", b"wrong")],
+        }
+        asyncio.run(guard(scope, None, send))
+
+        self.assertEqual(sent[0]["status"], 401)
+
+    def test_the_correct_secret_is_allowed_through(self):
+        import asyncio
+
+        from mcp_server.auth import SharedSecretGuard
+
+        reached = []
+
+        async def app(scope, receive, send):
+            reached.append(True)
+            await send({"type": "http.response.start", "status": 200, "headers": []})
+            await send({"type": "http.response.body", "body": b"ok"})
+
+        async def send(message):  # pragma: no cover - no assertion needed
+            pass
+
+        guard = SharedSecretGuard(app, "s3cret")
+        scope = {
+            "type": "http",
+            "method": "POST",
+            "path": "/mcp",
+            "headers": [(b"x-alphaagent-mcp-key", b"s3cret")],
+        }
+        asyncio.run(guard(scope, None, send))
+
+        self.assertEqual(reached, [True])
+
+    def test_lifespan_is_not_blocked(self):
+        """Refusing lifespan would stop the transport booting its session manager."""
+        import asyncio
+
+        from mcp_server.auth import SharedSecretGuard
+
+        reached = []
+
+        async def app(scope, receive, send):
+            reached.append(scope["type"])
+
+        guard = SharedSecretGuard(app, "s3cret")
+        asyncio.run(guard({"type": "lifespan"}, None, None))
+
+        self.assertEqual(reached, ["lifespan"])
+
+    def test_the_worker_sends_the_header(self):
+        """The client half has to exist, or enabling MCP breaks at runtime."""
+
+        from ai_agent import AlphaAgentOrchestrator
+
+        source = inspect.getsource(AlphaAgentOrchestrator.mcp_servers)
+        self.assertIn("X-AlphaAgent-MCP-Key", source)
+        self.assertIn("headers=", source)
+
+    def test_mcp_is_not_published_on_the_host(self):
+        """The port mapping was the exposure; it must stay removed."""
+        import yaml
+
+        compose = yaml.safe_load(pathlib.Path("docker-compose.yml").read_text())
+        mcp = compose["services"]["mcp"]
+
+        self.assertNotIn("ports", mcp)
+        self.assertIn("8100", mcp.get("expose", []))
 
 
 class LogSafetyTests(TestCase):

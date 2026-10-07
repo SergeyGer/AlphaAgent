@@ -29,7 +29,8 @@ Two consequences matter for the architecture:
 | Tools | 6, all read-only | `@mcp.tool()` declarations |
 | Default transport | `stdio` | `run(transport="stdio")` |
 | HTTP bind | `0.0.0.0:8100`, path `/mcp` | `MCP_HOST`, `MCP_PORT`, `mcp.settings.streamable_http_path` |
-| Compose service | `mcp` (container `alpha_mcp`), port `8100:8100` | `docker-compose.yml` |
+| Authentication | `X-AlphaAgent-MCP-Key` required on every request | `MCP_SHARED_SECRET`, `mcp_server/auth.py` |
+| Compose service | `mcp` (container `alpha_mcp`), **not published to the host** (`expose: 8100`) | `docker-compose.yml` |
 
 ## Tools
 
@@ -67,6 +68,43 @@ Notes that are verifiable in the source:
   provider is unavailable. `get_financial_health` never returns `None`: an unavailable ticker —
   including any crypto pair, which has no balance sheet — yields a degraded object, so a
   consumer can state that it found no evidence rather than crashing.
+
+## Authentication and network boundary
+
+The server applies two independent controls, because either alone has a failure
+mode: a published port with no authentication is open to anything that can route
+to it, and an unpublished port with authentication still trusts the network it
+sits on.
+
+| Control | Effect |
+| --- | --- |
+| Not published | The service uses `expose: ["8100"]`, so it is reachable only from inside the compose network. There is no host socket |
+| Shared secret | Every HTTP request must carry `X-AlphaAgent-MCP-Key`. Missing or wrong returns `401` |
+
+The check is an **ASGI middleware wrapping the whole transport**, not a decorator
+per tool, so it covers the `initialize` handshake, tool enumeration, and any route
+a future version of the library adds. A per-tool check would miss all three.
+
+```
+$ curl -s -o /dev/null -w '%{http_code}' -X POST http://mcp:8100/mcp   # inside the network
+401
+$ curl -s -o /dev/null -w '%{http_code}' -H 'X-AlphaAgent-MCP-Key: wrong' ...
+401
+$ curl -s -o /dev/null -w '%{http_code}' -H "X-AlphaAgent-MCP-Key: $MCP_SHARED_SECRET" ...
+200
+```
+
+**The server will not start without a secret.** Launching an HTTP transport with
+`MCP_SHARED_SECRET` unset exits with status 2 and an explanation, rather than
+serving anonymous traffic with a warning in the log. `stdio` is exempt: it is not
+a network transport.
+
+The secret is compared with `hmac.compare_digest`, not `==`, so the comparison
+does not leak it one byte at a time to a caller measuring response times.
+
+> **Debugging note.** Because the port is no longer published, you cannot reach the
+> server with `curl` from the host. Use `docker compose exec worker curl ...`, or
+> run `python -m mcp_server --transport stdio` locally for a single-client session.
 
 ## Transports
 

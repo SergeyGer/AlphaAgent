@@ -38,6 +38,40 @@ def main() -> int:
         server.mcp.settings.port = args.port
 
     transport = args.transport or server.os.environ.get("MCP_TRANSPORT", "stdio")
+
+    # HTTP transports serve over the network, so they require the shared secret.
+    # stdio does not: the caller already has whatever access this process has.
+    if transport in ("http", "streamable-http", "sse"):
+        from mcp_server.auth import SharedSecretGuard, resolve_secret
+
+        secret = resolve_secret()
+        if not secret:
+            print(
+                "refusing to start: MCP_SHARED_SECRET is not set.\n"
+                "The HTTP transports are network-reachable and will not run "
+                "unauthenticated. Set MCP_SHARED_SECRET to a random value "
+                "(the application sends it as the X-AlphaAgent-MCP-Key header), "
+                "or use --transport stdio.",
+                file=sys.stderr,
+            )
+            return 2
+
+        # Built rather than delegated to ``mcp.run()`` so the guard wraps the
+        # whole transport, including the initialise handshake and any route the
+        # library adds in future.
+        import uvicorn
+
+        from mcp_server.server import mcp
+
+        app = SharedSecretGuard(mcp.streamable_http_app(), secret)
+        uvicorn.run(
+            app,
+            host=mcp.settings.host,
+            port=mcp.settings.port,
+            log_level=mcp.settings.log_level.lower(),
+        )
+        return 0
+
     server.run(transport)
     return 0
 

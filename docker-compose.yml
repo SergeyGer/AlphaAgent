@@ -29,6 +29,10 @@ x-app: &app
     DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,0.0.0.0,web
     # Points the crew at the MCP service. Only used when AI_TOOLS_VIA_MCP=true.
     AI_MCP_SERVER_URL: http://mcp:8100/mcp
+    # Shared with the MCP service so the worker can authenticate to it. Every
+    # service receives it because the anchor is shared; only the worker and the
+    # server actually use it.
+    MCP_SHARED_SECRET: ${MCP_SHARED_SECRET:-dev-only-mcp-shared-secret-change-me}
   restart: unless-stopped
   depends_on:
     db:
@@ -144,11 +148,21 @@ services:
       MCP_LOG_LEVEL: INFO
       # Never leave the stdio transport's framing to chance: logs go to stderr.
       PYTHONUNBUFFERED: "1"
-    ports:
-      # Published so external MCP clients on the host can connect. The tools are
-      # read-only and serve public market data; drop this mapping if only the
-      # worker needs them.
-      - "8100:8100"
+    # Deliberately NOT published to the host.
+    #
+    # This used to map 8100:8100, with no authentication on the server at all -
+    # an anonymous HTTP endpoint on the host's network, for no reason. The tools
+    # are read-only public market data, so the exposure was not severe, but "the
+    # data is public anyway" stops being true the moment a tool is added that is
+    # not.
+    #
+    # The service is now reachable only from inside the compose network, and each
+    # request must also carry the shared secret. Two independent controls, because
+    # either alone has a failure mode: a published port with no auth is open to
+    # anyone who can route to it, and an unpublished port with auth still trusts
+    # the network it sits on.
+    expose:
+      - "8100"
     healthcheck:
       # A TCP connect is enough: the MCP endpoint needs a JSON-RPC handshake.
       test:
