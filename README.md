@@ -22,8 +22,6 @@
 [![Tailwind CSS 4](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
 [![Docker Compose](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
 
-### ▶ [Try the live demo](https://alphaagent-6stcj667tqeawiupedhygh.streamlit.app/) — the real UI in a browser, no installation and no API keys
-
 [See it running](#see-it-running) ·
 [What this project demonstrates](#what-this-project-demonstrates) ·
 [Skills](#skills-demonstrated) ·
@@ -36,6 +34,8 @@
 ---
 
 ## See it running
+
+### ▶ [Try the live demo](https://alphaagent-6stcj667tqeawiupedhygh.streamlit.app/) — the real UI in a browser, no installation and no API keys
 
 ![AlphaAgent guided tour](docs/demo.gif)
 
