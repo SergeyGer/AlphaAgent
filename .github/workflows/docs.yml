@@ -43,6 +43,20 @@ jobs:
       - name: Link check
         uses: lycheeverse/lychee-action@v2
         with:
+          # NOTE: everything under `args` is a folded scalar, so a `#` inside it
+          # is literal text passed to lychee, not a comment. Comments about a
+          # flag belong above this block, not in it. Putting one inline silently
+          # consumed the trailing input glob and made lychee exit 2 with
+          # "the following required arguments were not provided: <inputs>".
+          #
+          # Exclusions, and why:
+          #   localhost/127.0.0.1  - not resolvable from a runner
+          #   the wiki URLs        - a separate repo, mirrored from docs/wiki/
+          #   anthropic/claude.com - bot-blocked; 403s look like broken links
+          #   the Streamlit demo   - currently private, so an anonymous request
+          #                          bounces to a login page and back. Remove this
+          #                          exclusion once the app is shared publicly, or
+          #                          it will hide a genuinely dead demo link.
           args: >-
             --verbose
             --no-progress
@@ -56,11 +70,6 @@ jobs:
             --exclude '^https?://(localhost|127\.0\.0\.1)'
             --exclude '^https?://github\.com/SergeyGer/AlphaAgent/wiki'
             --exclude '^https?://(www\.)?(anthropic|platform\.claude)\.com'
-            # The Streamlit demo. Excluded because the app is currently set to
-            # private, so an anonymous request bounces to a login page and back
-            # again - a redirect loop the checker cannot resolve. Remove this
-            # exclusion once the app is shared publicly; leaving it in would hide
-            # a genuinely dead demo link.
             --exclude '^https?://alphaagent-[a-z0-9]+\.streamlit\.app'
             './**/*.md'
           fail: true

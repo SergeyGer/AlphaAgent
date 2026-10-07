@@ -106,8 +106,11 @@ jobs:
           python-version: ${{ matrix.python }}
           cache: pip
 
+      # requirements-dev.txt, not requirements.txt: it is a superset that adds
+      # coverage, which this job now needs. Installing the runtime file alone
+      # failed with "coverage: command not found".
       - name: Install dependencies
-        run: pip install --require-hashes -r requirements.txt
+        run: pip install --require-hashes -r requirements-dev.txt
 
       - name: Wait for PostgreSQL
         run: |

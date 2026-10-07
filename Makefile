@@ -66,15 +66,26 @@ test: ## Run the full test suite
 	$(PYTHON) manage.py test core.tests
 
 wiki-push: ## Mirror docs/wiki/ to the GitHub Wiki (README.md is repo-only, not a page)
-	@tmp=$$(mktemp -d) && \
-	git clone --depth 1 https://github.com/SergeyGer/AlphaAgent.wiki.git $$tmp/wiki 2>/dev/null && \
+	@# The wiki is a separate repository, so it needs its own credentials. When
+	@# .git-token exists it is used for this push only, via a throwaway credential
+	@# file that is removed afterwards; otherwise git falls back to whatever
+	@# credential helper the machine already has configured.
+	@cred=""; \
+	tmp=$$(mktemp -d) && \
+	if [ -s .git-token ]; then \
+	  cred=$$tmp/.gc; \
+	  printf 'https://SergeyGer:%s@github.com\n' "$$(tr -d '[:space:]' < .git-token)" > $$cred; \
+	  chmod 600 $$cred; \
+	fi; \
+	git -c credential.helper="$${cred:+store --file=$$cred}" clone --depth 1 https://github.com/SergeyGer/AlphaAgent.wiki.git $$tmp/wiki 2>/dev/null && \
 	rm -f $$tmp/wiki/*.md && \
 	find docs/wiki -maxdepth 1 -name '*.md' ! -name 'README.md' -exec cp {} $$tmp/wiki/ \; && \
 	cd $$tmp/wiki && \
 	git add -A && \
 	(git diff --cached --quiet && echo "wiki already up to date" || \
 	 (git -c user.name="AlphaAgent" -c user.email="noreply@github.com" \
-	    commit -m "docs: sync wiki from docs/wiki" && git push origin master)) ; \
+	    commit -m "docs: sync wiki from docs/wiki" && \
+	  git -c credential.helper="$${cred:+store --file=$$cred}" push origin master)) ; \
 	rm -rf $$tmp
 
 coverage: ## Run the suite under coverage and print the report
