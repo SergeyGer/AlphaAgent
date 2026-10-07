@@ -57,11 +57,21 @@ jobs:
           #                          bounces to a login page and back. Remove this
           #                          exclusion once the app is shared publicly, or
           #                          it will hide a genuinely dead demo link.
+          #
+          # --fallback-extensions md is what makes the wiki pages checkable at all.
+          # Wiki pages cross-reference each other without an extension -
+          # `[Configuration](Configuration)` - because that is how GitHub wiki
+          # links work. To a filesystem check that reads as a missing file, so
+          # lychee reported two failures that were the convention working as
+          # intended. Trying `.md` before giving up resolves them while still
+          # failing a link that points nowhere real, which is better than
+          # excluding the pages from checking.
           args: >-
             --verbose
             --no-progress
             --accept 200,206,429
             --max-retries 2
+            --fallback-extensions md
             --exclude-path node_modules
             --exclude-path venv
             --exclude-path .runtime
