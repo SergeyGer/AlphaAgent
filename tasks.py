@@ -41,6 +41,7 @@ from ai_agent import (
     build_news_report,
     run_alpha_agent,
 )
+from core.log_safety import log_safe
 from core.models import (
     AgentDecisionLog,
     Asset,
@@ -139,11 +140,15 @@ def run_alpha_agent_task(
     # decision.
     budget = budget_state()
     if budget.exhausted:
+        # The ceiling is checked before the ticker reaches normalise_ticker, so
+        # this is the one log line in the task that still sees the raw argument.
+        # Wrapped for the same reason as every other sink: a value containing a
+        # newline would otherwise forge an extra log entry.
         logger.warning(
             "AI spend ceiling reached: $%s of $%s today; skipping %s on portfolio %s",
             budget.spent_usd,
             budget.limit_usd,
-            ticker,
+            log_safe(ticker),
             portfolio_id,
         )
         # Recorded as a decision row so the halt is auditable in the same place as

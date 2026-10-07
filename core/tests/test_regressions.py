@@ -1199,6 +1199,39 @@ class McpAuthTests(TestCase):
         self.assertIn("8100", mcp.get("expose", []))
 
 
+class NewLogSinkSafetyTests(TestCase):
+    """The two log sinks added with the spend ceiling and the MCP guard.
+
+    Both take values an outside party controls: the MCP one logs the request path
+    of an *unauthenticated* request, and the spend-ceiling halt logs the ticker
+    before it has been through normalise_ticker. Either would let a newline forge
+    an extra log entry - the same py/log-injection pattern fixed elsewhere.
+    """
+
+    def test_the_mcp_rejection_log_sanitises_the_request_path(self):
+        import inspect
+
+        from mcp_server import auth
+
+        source = inspect.getsource(auth.SharedSecretGuard.__call__)
+        self.assertIn("log_safe(scope.get(", source)
+        self.assertNotIn('scope.get("path"),', source)
+
+    def test_the_spend_halt_log_sanitises_the_ticker(self):
+        import inspect
+
+        import tasks
+
+        source = inspect.getsource(tasks.run_alpha_agent_task)
+        self.assertIn("log_safe(ticker)", source)
+
+    def test_a_hostile_path_cannot_forge_a_log_line(self):
+        from core.log_safety import log_safe
+
+        forged = "/mcp\n2030-01-01 INFO injected"
+        self.assertNotIn("\n", log_safe(forged))
+
+
 class LogSafetyTests(TestCase):
     """``py/log-injection``: a value with newlines must not forge a log entry."""
 

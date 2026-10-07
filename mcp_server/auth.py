@@ -22,6 +22,8 @@ from __future__ import annotations
 import hmac
 import logging
 
+from core.log_safety import log_safe
+
 __all__ = ["HEADER_NAME", "SharedSecretGuard", "resolve_secret"]
 
 logger = logging.getLogger(__name__)
@@ -79,10 +81,15 @@ class SharedSecretGuard:
         if presented is not None and hmac.compare_digest(presented, self._secret):
             return await self.app(scope, receive, send)
 
+        # `log_safe` on both: the method and path come straight off the ASGI
+        # scope, so an unauthenticated caller controls them. Without it a request
+        # to /mcp%0aInjected%20line forges an extra entry in the log - this is the
+        # same py/log-injection sink that was fixed elsewhere in the codebase, and
+        # it is on the one endpoint an anonymous caller can reach.
         logger.warning(
             "Rejected unauthenticated MCP request: %s %s",
-            scope.get("method"),
-            scope.get("path"),
+            log_safe(scope.get("method")),
+            log_safe(scope.get("path")),
         )
         await send(
             {
