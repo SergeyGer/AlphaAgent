@@ -1,0 +1,24 @@
+# Coverage configuration for `make coverage` and the CI test job.
+#
+# Scope is deliberate: the Django app packages plus the MCP microservice. The
+# frontend is TypeScript and measured elsewhere, and migrations are generated
+# code that no test should be written against.
+[run]
+source = core,services,config,mcp_server
+omit =
+    */migrations/*
+    */tests/*
+    */__pycache__/*
+    manage.py
+    config/asgi.py
+    config/wsgi.py
+
+[report]
+# A file at 100% is not interesting in the output; fully-covered modules are
+# hidden so the uncovered ones are what stands out.
+skip_covered = True
+show_missing = True
+precision = 1
+
+[html]
+directory = htmlcov

@@ -8,6 +8,8 @@ PIP ?= venv/bin/pip
 PIP_COMPILE ?= venv/bin/pip-compile
 
 .PHONY: help venv lock lock-dev install install-dev env up down logs migrate makemigrations \
+        wiki-push \
+        coverage coverage-badge \
         seed shell test test-guardrails lint format check docker-build docker-up \
         docker-down dry-run clean
 
@@ -62,6 +64,25 @@ shell: ## Open a Django shell
 
 test: ## Run the full test suite
 	$(PYTHON) manage.py test core.tests
+
+wiki-push: ## Mirror docs/wiki/ to the GitHub Wiki (README.md is repo-only, not a page)
+	@tmp=$$(mktemp -d) && \
+	git clone --depth 1 https://github.com/SergeyGer/AlphaAgent.wiki.git $$tmp/wiki 2>/dev/null && \
+	rm -f $$tmp/wiki/*.md && \
+	find docs/wiki -maxdepth 1 -name '*.md' ! -name 'README.md' -exec cp {} $$tmp/wiki/ \; && \
+	cd $$tmp/wiki && \
+	git add -A && \
+	(git diff --cached --quiet && echo "wiki already up to date" || \
+	 (git -c user.name="AlphaAgent" -c user.email="noreply@github.com" \
+	    commit -m "docs: sync wiki from docs/wiki" && git push origin master)) ; \
+	rm -rf $$tmp
+
+coverage: ## Run the suite under coverage and print the report
+	$(PYTHON) -m coverage run manage.py test core.tests
+	$(PYTHON) -m coverage report
+
+coverage-badge: coverage ## Regenerate coverage.svg for the README
+	$(PYTHON) scripts/coverage_badge.py -o coverage.svg
 
 test-guardrails: ## Run only the safety-critical guardrail tests
 	$(PYTHON) manage.py test core.tests.test_guardrails core.tests.test_security

@@ -85,8 +85,55 @@ is allowed to move money.
 ```bash
 make test                 # everything
 make test-guardrails      # safety-critical subset
+make coverage             # suite under coverage, with a report
 python manage.py test core.tests.test_tasks -v 2
 ```
+
+CI enforces a coverage floor of 70% (`coverage report --fail-under=70`). It is a
+ratchet, not a target: it exists so a change cannot quietly delete tests. Raise it
+when coverage rises; do not lower it to get a pull request through.
+
+## Documentation is part of the change
+
+**A pull request that changes behaviour updates the page that documents it, in the
+same pull request.** This is not a courtesy — it is the rule that keeps the
+documentation from diverging from the code, and it is what a reviewer is expected
+to check.
+
+There are three places documentation lives, and they have different audiences:
+
+| Where | Audience | What belongs there |
+| --- | --- | --- |
+| `README.md` | someone deciding whether to care | what the project is, what it demonstrates, how to see it running. No implementation detail. |
+| `docs/wiki/` | someone using or operating it | architecture, configuration, the API, runbooks, incident history |
+| `docs/adr/` | someone asking *why* | one decision per file, with the alternatives that were rejected |
+
+Concretely, depending on what you changed:
+
+| If you changed | Then update |
+| --- | --- |
+| A risk limit, or the guard's behaviour | `docs/wiki/Execution-Guard.md`, and `core/tests/test_guardrails.py` |
+| A setting or environment variable | `docs/wiki/Configuration.md` and `.env.example` |
+| An endpoint, payload or status code | `docs/wiki/API-Reference.md` |
+| A model field, or a migration | `docs/wiki/Data-Model.md` |
+| How the agents debate, or the prompt shape | `docs/wiki/Agent-Debate.md` |
+| Something a runbook covers | `docs/wiki/Operations.md` |
+| A new architectural choice, or reversing one | a **new** ADR in `docs/adr/` — never edit an accepted one |
+
+Then publish:
+
+```bash
+make wiki-push            # mirrors docs/wiki/ to the GitHub Wiki
+```
+
+The repository copy is the source of truth. Editing a wiki page in the GitHub web
+UI works until the next `make wiki-push`, which overwrites it — so make the change
+here instead.
+
+`Docs` CI checks all of this on every pull request: it link-checks every Markdown
+file with lychee, verifies that every image and file referenced actually exists in
+the repository, and confirms that wiki pages only cross-reference pages that
+exist. A renamed screenshot or a retitled page fails the build.
 
 ## Reporting bugs and requesting features
 

@@ -6,7 +6,9 @@
 
 [![CI](https://github.com/SergeyGer/AlphaAgent/actions/workflows/ci.yml/badge.svg)](https://github.com/SergeyGer/AlphaAgent/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/SergeyGer/AlphaAgent/actions/workflows/codeql.yml/badge.svg)](https://github.com/SergeyGer/AlphaAgent/actions/workflows/codeql.yml)
-[![Tests](https://img.shields.io/badge/tests-324%20passing-brightgreen.svg)](https://github.com/SergeyGer/AlphaAgent/wiki/Quality-and-Testing)
+[![Docs](https://github.com/SergeyGer/AlphaAgent/actions/workflows/docs.yml/badge.svg)](https://github.com/SergeyGer/AlphaAgent/actions/workflows/docs.yml)
+[![Tests](https://img.shields.io/badge/tests-401%20passing-brightgreen.svg)](https://github.com/SergeyGer/AlphaAgent/wiki/Quality-and-Testing)
+[![Coverage](coverage.svg)](https://github.com/SergeyGer/AlphaAgent/wiki/Quality-and-Testing)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 [See it running](#see-it-running) ·
@@ -112,7 +114,7 @@ Everything below is in this repository and runs today.
 | **Tool server** | Market and news data published over the Model Context Protocol, so external AI tools can consume it without touching this codebase |
 | **Telegram bot** | Inline-keyboard control: approvals, balance reports, open positions, pending queue, on-demand analysis, autopilot toggle |
 | **Operations** | Containerised multi-service stack, health checks, a pruning command for the audit trail, and documented failure modes |
-| **Quality gates** | 324 automated tests, continuous integration on every push, static analysis, security scanning and automated dependency management |
+| **Quality gates** | 401 automated tests at 76% coverage, continuous integration on every push, static analysis, security scanning and automated dependency management |
 
 ## Skills demonstrated
 
@@ -165,6 +167,7 @@ the wiki:
 | [**API Reference**](https://github.com/SergeyGer/AlphaAgent/wiki/API-Reference) | Every endpoint, with request and response shapes |
 | [**Operations**](https://github.com/SergeyGer/AlphaAgent/wiki/Operations) | Runbook, scheduled jobs, failure modes |
 | [**Engineering Decisions**](https://github.com/SergeyGer/AlphaAgent/wiki/Engineering-Decisions) | The trade-offs behind each significant choice |
+| [**Architecture Decision Records**](docs/adr/README.md) | Eleven decisions, each with the alternatives that were rejected |
 | [**Incident Log**](https://github.com/SergeyGer/AlphaAgent/wiki/Incident-Log) | Real defects, root-cause analysis and the fixes |
 | [**Quality & Testing**](https://github.com/SergeyGer/AlphaAgent/wiki/Quality-and-Testing) | Test strategy, CI pipeline, security scanning |
 
@@ -174,8 +177,37 @@ Tailwind CSS · Recharts · Docker Compose · GitHub Actions
 
 ## Run it yourself
 
-Requires Docker. No API key is needed — without one, a deterministic engine keeps
-the whole pipeline running so you can explore it offline.
+**Try the risk guard without an account, a key or a database:**
+
+[![Try the offline demo](https://img.shields.io/badge/▶_Try_the_offline_demo-FF4B4B?logo=streamlit&logoColor=white)](https://alphaagent-demo.streamlit.app)
+
+A single page that drives the project's **real risk guard** — the same
+`services/execution.py` the live system runs — so you can push the sliders until
+it refuses a trade and read its actual reason string.
+
+If the hosted demo is not up, run the identical thing locally in two commands:
+
+```bash
+pip install -r demo/requirements.txt
+streamlit run demo/app.py
+```
+
+**Or run the whole stack.** Two commands, no build step — the image is published
+to GHCR:
+
+```bash
+docker compose -f docker-compose.ghcr.yml up
+```
+
+Open **<http://127.0.0.1:8000/>** and sign in as `demo` / `demo-pass-123`. The
+demo credentials are committed on purpose so the stack starts with no
+configuration at all; they are demo values, not secrets.
+
+No API key is needed either — without one a deterministic engine keeps the whole
+pipeline running so you can explore it offline.
+
+<details>
+<summary>Prefer to build from source?</summary>
 
 ```bash
 git clone https://github.com/SergeyGer/AlphaAgent.git
@@ -189,7 +221,7 @@ docker compose up -d --build
 docker compose exec web python manage.py seed_demo
 ```
 
-Open **<http://127.0.0.1:8000/>** and sign in as `demo` / `demo-pass-123`.
+</details>
 
 To enable live AI reasoning, add an `AI_LLM_API_KEY` to `.env`. Full
 configuration reference: [Configuration](https://github.com/SergeyGer/AlphaAgent/wiki/Configuration).
@@ -198,7 +230,8 @@ configuration reference: [Configuration](https://github.com/SergeyGer/AlphaAgent
 
 | | |
 | --- | --- |
-| **324 automated tests** | Covering the risk guard, the ledger, the API, the task pipeline, WebSockets, the Telegram bot and the tool server |
+| **401 automated tests** | Covering the risk guard, the ledger, the API, the task pipeline, WebSockets, the Telegram bot and the tool server |
+| **76% coverage, enforced** | CI fails below a 70% floor, and the badge above is regenerated from the real run on every push to `main` |
 | **Continuous integration** | Lint, format, the full test suite against PostgreSQL 16, and a Docker image build — on every push |
 | **Security scanning** | CodeQL analysis plus a test that walks every publishable file looking for committed credentials |
 | **Supply chain** | Automated dependency updates, grouped and scheduled to stay reviewable |

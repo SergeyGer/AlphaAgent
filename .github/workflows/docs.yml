@@ -1,0 +1,151 @@
+# Documentation integrity.
+#
+# Documentation does not rot because anyone decided to let it; it rots because
+# nothing checks it. A screenshot gets renamed, a page gets retitled, a badge URL
+# starts pointing at a deleted workflow, and the breakage is invisible until a
+# reader hits it.
+#
+# This job exists so a documentation defect fails a pull request instead of
+# reaching a reader. It is deliberately cheap: no services, no database, a couple
+# of minutes at most.
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**/*.md"
+      - "docs/**"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    paths:
+      - "**/*.md"
+      - "docs/**"
+      - ".github/workflows/docs.yml"
+  schedule:
+    # Catches rot that no commit caused: an external link that starts 404ing, or
+    # a badge whose upstream workflow was renamed. Weekly is enough for that and
+    # rare enough not to be noise.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  links:
+    name: Check links
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # lychee rather than markdown-link-check: it checks links concurrently, has
+      # a built-in cache, and understands fragment anchors (a link to
+      # `page#section` fails if that heading no longer exists), which is the case
+      # most likely to break on a documentation edit.
+      - name: Link check
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: >-
+            --verbose
+            --no-progress
+            --accept 200,206,429
+            --max-retries 2
+            --exclude-path node_modules
+            --exclude-path venv
+            --exclude-path .runtime
+            --exclude-path frontend/dist
+            --exclude-path CHANGELOG.md
+            --exclude '^https?://(localhost|127\.0\.0\.1)'
+            --exclude '^https?://github\.com/SergeyGer/AlphaAgent/wiki'
+            --exclude '^https?://(www\.)?(anthropic|platform\.claude)\.com'
+            # Streamlit Community Cloud deploy target. Live only once the
+            # maintainer creates the app; until then it redirects to a
+            # sign-in page, which is not a broken link but is not a 200.
+            --exclude '^https?://alphaagent-demo\.streamlit\.app'
+            './**/*.md'
+          fail: true
+        env:
+          # Raises the rate limit for github.com checks; without it a large diff
+          # can produce spurious 429s that look like broken links.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # The wiki pages link to each other by relative name, which lychee cannot
+      # resolve from the filesystem. This verifies those targets exist as pages,
+      # so a retitled page cannot leave dangling cross-references behind.
+      - name: Verify wiki cross-references resolve
+        run: |
+          python - <<'PY'
+          import pathlib, re, sys
+
+          wiki = pathlib.Path("docs/wiki")
+          pages = {p.stem for p in wiki.glob("*.md")}
+          broken = []
+
+          for page in sorted(wiki.glob("*.md")):
+              text = re.sub(r"```.*?```", "", page.read_text(), flags=re.S)
+              for target in re.findall(r"\]\(([^)#:]+?)(?:#[^)]*)?\)", text):
+                  target = target.strip()
+                  if target.startswith(("http", "mailto:", "/")):
+                      continue
+                  name = pathlib.Path(target).stem
+                  if name not in pages and not (wiki.parent / target).exists():
+                      broken.append(f"{page.name} -> {target}")
+
+          if broken:
+              print("Dangling wiki references:")
+              for b in broken:
+                  print(f"  {b}")
+              sys.exit(1)
+          print(f"All cross-references resolve across {len(pages)} wiki pages.")
+          PY
+
+  media:
+    name: Check referenced media exists
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # This check was run once by hand and then forgotten, which is the failure
+      # mode it is meant to prevent. Renaming or deleting an image under docs/
+      # used to leave a broken embed in the README that nobody noticed until a
+      # reader did.
+      - name: Every referenced image must exist
+        run: |
+          python - <<'PY'
+          import pathlib, re, sys
+
+          root = pathlib.Path(".")
+          missing, checked = [], 0
+
+          sources = [
+              p for p in root.rglob("*.md")
+              if not any(part in {".git", "node_modules", "venv", ".runtime", "dist"}
+                         for part in p.parts)
+          ]
+
+          # Markdown image/link syntax referencing a local path, plus HTML <img src>.
+          md = re.compile(r"!?\[[^\]]*\]\(([^)\s]+)")
+          html = re.compile(r"""<img[^>]+src=["']([^"']+)["']""", re.I)
+
+          for page in sources:
+              text = page.read_text()
+              for raw in md.findall(text) + html.findall(text):
+                  if raw.startswith(("http://", "https://", "data:", "mailto:", "#")):
+                      continue
+                  target = raw.split("#")[0].strip()
+                  # Extensionless targets are wiki page references such as
+                  # `[Architecture](Architecture)`, which the wiki job resolves
+                  # against the page list. Only real files are checked here, so
+                  # that naming convention does not read as a missing asset.
+                  if not target or not pathlib.PurePosixPath(target).suffix:
+                      continue
+                  checked += 1
+                  if not (page.parent / target).resolve().exists():
+                      missing.append(f"{page} -> {raw}")
+
+          print(f"Checked {checked} local file references across {len(sources)} Markdown files.")
+          if missing:
+              print("\nReferenced but NOT present in the repository:")
+              for m in missing:
+                  print(f"  {m}")
+              sys.exit(1)
+          print("Every referenced file exists.")
+          PY

@@ -1,0 +1,13 @@
+# AlphaAgent offline demo - deliberately minimal.
+#
+# WHY so short: Streamlit Community Cloud installs this file for the demo app.
+# The repository root requirements.txt is a ~355 KB hash-pinned lockfile for the
+# whole platform (Celery, PostgreSQL, CrewAI, Redis, yfinance...), which would
+# take many minutes to resolve here and is not needed: the demo calls exactly one
+# pure function from the project plus two model/dataclass modules.
+#
+# streamlit - the web UI (pinned: widget API changes between minor releases).
+# Django    - ONLY to configure minimal settings so `services/execution.py` can
+#             import `core.models`. No database driver, no server: DATABASES={}.
+streamlit==1.65.0
+Django==5.2.17

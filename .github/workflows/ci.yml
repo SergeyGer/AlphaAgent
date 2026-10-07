@@ -65,6 +65,8 @@ jobs:
     name: Tests (PostgreSQL ${{ matrix.postgres }})
     runs-on: ubuntu-latest
     needs: lint
+    permissions:
+      contents: write # to commit the regenerated coverage badge
     strategy:
       fail-fast: false
       matrix:
@@ -138,8 +140,35 @@ jobs:
       - name: Apply migrations
         run: python manage.py migrate --noinput
 
-      - name: Run test suite
-        run: python manage.py test core.tests --verbosity=2
+      - name: Run test suite under coverage
+        run: |
+          coverage run manage.py test core.tests --verbosity=2
+          coverage report
+
+      # The floor is a ratchet, not a target: it exists so a change cannot quietly
+      # delete coverage. Measured at 76% when introduced, so 70% leaves room for
+      # an honest dip without failing on noise.
+      - name: Enforce coverage floor
+        run: coverage report --fail-under=70
+
+      - name: Render the coverage badge
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: python scripts/coverage_badge.py -o coverage.svg
+
+      # Committed back so the README badge is live without a third-party service
+      # such as Codecov. `[skip ci]` stops the badge commit re-triggering CI.
+      - name: Commit the badge if it changed
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          if git diff --quiet -- coverage.svg; then
+            echo "coverage.svg unchanged"
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add coverage.svg
+          git commit -m "chore: update coverage badge [skip ci]"
+          git push
 
   docker:
     name: Docker image builds

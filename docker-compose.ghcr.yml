@@ -1,0 +1,102 @@
+# AlphaAgent - run the published image, with no build step.
+#
+#   docker compose -f docker-compose.ghcr.yml up
+#
+# then open http://127.0.0.1:8000/ and sign in as demo / demo-pass-123.
+#
+# Why a second compose file rather than a flag on the first: `docker-compose.yml`
+# carries `build:` keys, so compose rebuilds the image locally even when a
+# registry copy exists. Overriding that reliably is fiddlier than keeping the two
+# intents - develop here, run that - in separate files.
+#
+# The secrets below are literal demo values. They are committed on purpose so the
+# stack starts with no configuration at all, which is the entire point of this
+# file. Do not reuse them for anything reachable from a network you do not own;
+# for a real deployment supply your own via a .env file or the environment.
+name: alphaagent-demo
+
+x-app: &app
+  image: ghcr.io/sergeyger/alphaagent:latest
+  pull_policy: always
+  restart: unless-stopped
+  environment: &app-env
+    DJANGO_DEBUG: "false"
+    DJANGO_SECRET_KEY: demo-only-secret-key-not-for-production-use
+    DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,0.0.0.0,web
+    POSTGRES_DB: alpha_agent_db
+    POSTGRES_USER: alpha_user
+    POSTGRES_PASSWORD: demo-only-postgres-password
+    POSTGRES_HOST: db
+    POSTGRES_PORT: "5432"
+    REDIS_HOST: redis
+    REDIS_PORT: "6379"
+    CELERY_BROKER_URL: redis://redis:6379/0
+    CELERY_RESULT_BACKEND: redis://redis:6379/1
+    AI_MCP_SERVER_URL: http://mcp:8100/mcp
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: alpha_agent_db
+      POSTGRES_USER: alpha_user
+      POSTGRES_PASSWORD: demo-only-postgres-password
+    volumes:
+      - demo-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U alpha_user -d alpha_agent_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - demo-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  # Migrate, then seed, then serve. `seed_demo` is idempotent, so restarting the
+  # container does not duplicate the demo portfolio.
+  web:
+    <<: *app
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    ports:
+      - "8000:8000"
+    command:
+      - sh
+      - -c
+      - |
+        python manage.py migrate --noinput &&
+        python manage.py seed_demo --autonomous --risk high --balance 25000 --seed-position &&
+        exec daphne -b 0.0.0.0 -p 8000 config.asgi:application
+
+  worker:
+    <<: *app
+    depends_on:
+      web: { condition: service_started }
+    command: ["celery", "-A", "config", "worker", "-l", "info", "--concurrency", "2"]
+
+  beat:
+    <<: *app
+    depends_on:
+      web: { condition: service_started }
+    command: ["celery", "-A", "config", "beat", "-l", "info"]
+
+  # The news and market tools, exposed over MCP. Optional: the dashboard and the
+  # REST API work without it, and a live crew degrades to its own tools.
+  mcp:
+    <<: *app
+    depends_on:
+      web: { condition: service_started }
+    command: ["python", "-m", "mcp_server", "--transport", "http", "--host", "0.0.0.0", "--port", "8100"]
+
+volumes:
+  demo-db:
+  demo-redis:

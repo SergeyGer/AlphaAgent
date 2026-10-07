@@ -1,0 +1,102 @@
+# Publishes a ready-to-run image to the GitHub Container Registry.
+#
+# The point is to remove the cold start. Without this, seeing the project at all
+# means cloning it and building an image with CrewAI and a Postgres driver in it,
+# which is several minutes and a working Docker install before anything appears on
+# screen. With it, the whole stack is three commands and no build.
+#
+# The image is built for both amd64 and arm64 because Apple Silicon is now a
+# common development machine, and an amd64-only manifest would either fail there
+# or fall back to slow emulation.
+name: Publish image
+
+on:
+  push:
+    tags: ["v*"]
+    branches: [main]
+    paths:
+      - "Dockerfile"
+      - "requirements.txt"
+      - "frontend/**"
+      - "docker/**"
+      - ".github/workflows/publish.yml"
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  publish:
+    name: Build and push to GHCR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      attestations: write # provenance for the published artefact
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Tags are derived, not hand-written: a version tag publishes that version
+      # plus `latest`, a main build publishes `edge`. `edge` exists so the README
+      # can offer a stable moving target without implying a release.
+      - name: Derive tags and labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch,suffix=-{{sha}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=edge,enable={{is_default_branch}}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # The image is built from the same Dockerfile CI already verifies, so a
+          # broken build fails here too rather than publishing something unusable.
+          provenance: true
+          sbom: true
+
+      - name: Summarise
+        run: |
+          {
+            echo "### Published to GHCR"
+            echo
+            echo '```'
+            echo "${{ steps.meta.outputs.tags }}"
+            echo '```'
+            echo
+            echo "Run it with:"
+            echo
+            echo '```bash'
+            echo "docker run --rm -p 8000:8000 \\"
+            echo "  -e DJANGO_SECRET_KEY=dev-only-not-for-production \\"
+            echo "  -e POSTGRES_PASSWORD=dev-only-not-for-production \\"
+            echo "  ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
