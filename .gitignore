@@ -38,6 +38,10 @@ env/
 # Django
 # ---------------------------------------------------------------------------
 *.log
+
+# Vitest coverage output (the badge and the floor are computed in CI; this is
+# local scratch, and it rewrites on every run)
+frontend/coverage/
 logs/
 db.sqlite3
 db.sqlite3-journal

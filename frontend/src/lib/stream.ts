@@ -14,6 +14,12 @@ const KNOWN_TYPES: ReadonlySet<string> = new Set<StreamMessageType>([
   'recommendation.created',
   'recommendation.updated',
   'autonomy.changed',
+  // These must be listed here or the validator drops them before the dashboard's
+  // switch ever sees them, and the spend meter stops updating live - it would
+  // only move on a REST resync. A dropped frame is invisible: nothing errors,
+  // the number is just quietly stale. Both names are asserted in stream.test.ts.
+  'budget.updated',
+  'budget.exhausted',
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {

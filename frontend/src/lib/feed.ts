@@ -28,7 +28,11 @@ export function deriveAction(action: string | null): ActionDescriptor {
   if (text.trim() === '') return { label: 'N/A', tone: 'slate' };
   if (/purchas|bought|buy|accumulat|adding|added/.test(text)) return { label: 'BUY', tone: 'emerald' };
   if (/sold|sell|liquidat|trimmed|exit|closed/.test(text)) return { label: 'SELL', tone: 'rose' };
-  if (/block|rejected|denied|halted/.test(text)) return { label: 'BLOCKED', tone: 'rose' };
+  // `halt`, not `halted`: the backend writes rows beginning "HALT - ..." (the
+  // daily loss freeze and the AI spend ceiling both do). Matching only the past
+  // tense let every halt row fall through to the generic ACTION badge, which
+  // presented the two most serious states in the system as ordinary activity.
+  if (/block|rejected|denied|halt/.test(text)) return { label: 'BLOCKED', tone: 'rose' };
   if (/hold|no action|no trade|wait|skip|monitor/.test(text)) return { label: 'HOLD', tone: 'slate' };
   return { label: 'ACTION', tone: 'sky' };
 }

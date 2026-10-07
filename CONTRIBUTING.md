@@ -93,6 +93,31 @@ CI enforces a coverage floor of 70% (`coverage report --fail-under=70`). It is a
 ratchet, not a target: it exists so a change cannot quietly delete tests. Raise it
 when coverage rises; do not lower it to get a pull request through.
 
+### Frontend
+
+The dashboard has its own suite, and CI runs it in a separate job:
+
+```bash
+cd frontend
+npm ci                # exactly the lockfile, as CI installs it
+npm test              # vitest run
+npm run test:coverage # with the thresholds applied
+npm run typecheck
+```
+
+Two coverage floors apply rather than one, and the split is deliberate. `src/lib`
+— the formatters, the WebSocket frame validator, the feed merge — holds the
+frontend's real logic and must stay above 75%. The components and hooks are
+covered where a silent failure would blank a panel rather than where the line
+count is, so the global floor is a low ratchet that can only rise.
+
+A warning worth heeding: the wire contract in `src/types.ts` and
+`src/lib/stream.ts` is validated by tests on **both** sides. A new event type
+needs adding to `KNOWN_TYPES` or the validator drops the frame before the
+dashboard's `switch` ever sees it — silently, with no error, leaving whatever it
+was meant to update quietly stale. `stream.test.ts` asserts every type, so a
+failure there means exactly that.
+
 ## Documentation is part of the change
 
 **A pull request that changes behaviour updates the page that documents it, in the

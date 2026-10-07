@@ -317,5 +317,40 @@ Two things to know before the first run: `config/settings.py` calls
 `LocMemCache` per module, so a running Redis is not strictly required for the cache-backed
 tests, only for the database.
 
+## Frontend tests
+
+The dashboard has a Vitest suite that runs as its own CI job, because a failure
+there has nothing to do with the Python tier and should not be reported as one.
+
+```bash
+cd frontend && npm test
+```
+
+What it covers, and why those parts:
+
+| Module | Why it is tested |
+| --- | --- |
+| `lib/format.ts` | Every money value crosses the wire as a decimal *string*, so parsing is the frontend's most load-bearing code. The contract is that unparseable input renders `—`, never `NaN` — asserted for seven hostile inputs across three formatters |
+| `lib/stream.ts` | The only thing between an arbitrary WebSocket frame and dashboard state. A frame that gets through with a missing field writes `undefined` into state and blanks a panel |
+| `lib/feed.ts` | De-duplication between the live socket and the REST log. A row arriving over both must collapse to one, or the feed reads as the agent deciding twice |
+| `components/MetricsGrid.tsx` | The one component whose failure is silent: a missing metric used to render `NaN` across the cards and look like a crash |
+
+Coverage is enforced at **two** levels. `src/lib` must stay above 75%; the whole
+`src/` tree is held to a low ratchet set just below its current figure. A single
+global number would mislead in both directions — high enough for `lib` to be
+meaningless, low enough for the components to be theatre.
+
+Two defects this suite found on its first run, both silent in production:
+
+- **Budget frames were dropped.** `budget.updated` and `budget.exhausted` had been
+  added to the TypeScript union but not to the validator's `KNOWN_TYPES`, so the
+  live AI spend meter would never have updated over the socket. Nothing errored;
+  the number would simply have stayed stale until a REST resync.
+- **Halts were rendered as ordinary activity.** `deriveAction` matched `halted`
+  but not `HALT`, and the backend writes rows beginning `HALT - `. Every
+  daily-loss freeze and spend-ceiling halt therefore carried a neutral `ACTION`
+  badge instead of `BLOCKED`, understating the two most serious states in the
+  system.
+
 Related pages: [[Execution-Guard]], [[Architecture]], [[Operations]], [[Configuration]],
 [[API-Reference]], [[Telegram-Bot]], [[Real-Time-Layer]], [[Incident-Log]].

@@ -173,6 +173,41 @@ jobs:
           git commit -m "chore: update coverage badge [skip ci]"
           git push
 
+  frontend:
+    name: Frontend tests
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "26"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # `npm ci`, not `npm install`: it installs exactly the lockfile and fails
+      # if package.json and the lock disagree, so a dependency added locally but
+      # not committed cannot pass here.
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: frontend
+        run: npm run typecheck
+
+      # `npm run build` is `tsc --noEmit && vite build`: it proves the bundle
+      # this project actually ships still compiles, which a test run alone does
+      # not.
+      - name: Production build
+        working-directory: frontend
+        run: npm run build
+
+      - name: Unit and component tests
+        working-directory: frontend
+        run: npm run test:coverage
+
   docker:
     name: Docker image builds
     runs-on: ubuntu-latest
