@@ -60,6 +60,39 @@ The bundled Compose stack serves plain HTTP on `:8000`, so every HTTPS-related f
 `connect_timeout` is fixed at 10 seconds in `DATABASES["default"]["OPTIONS"]`; it is not
 environment-driven. The engine is always `django.db.backends.postgresql` — there is no SQLite path.
 
+## Host port
+
+| Variable | Default | Required | Purpose |
+| --- | --- | --- | --- |
+| `ALPHA_WEB_PORT` | `8080` | No | Host port the dashboard is published on |
+
+The default is **8080, not 8000**, because this stack is rarely the only thing
+running on a machine and a port collision is silent until a container fails to
+bind. The port *inside* the container is always 8000, so the image, the
+healthcheck and `DJANGO_ALLOWED_HOSTS` are unaffected either way.
+
+```bash
+ALPHA_WEB_PORT=9000 docker compose up -d
+```
+
+## Automatic start
+
+**No service sets a restart policy.** They would otherwise default to coming back
+whenever the Docker daemon starts, which means a server reboot silently restarts
+the demo — consuming resources, and on an autonomous portfolio resuming trading
+without anyone asking for it. `restart: always` and `restart: unless-stopped` both
+have that effect; `"no"` is set explicitly in both compose files so the intent is
+visible rather than implied by an absent key.
+
+For a long-running deployment, override it locally rather than editing the file:
+
+```yaml
+# docker-compose.override.yml
+services:
+  web:
+    restart: unless-stopped
+```
+
 ## Redis and Celery
 
 | Variable | Default | Required? | Purpose |

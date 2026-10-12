@@ -96,7 +96,7 @@ a webhook are mutually exclusive — then loops with `offset = update_id + 1`, s
    the bot:
 
    ```bash
-   curl -sS -X POST http://127.0.0.1:8000/api/telegram/link/ \
+   curl -sS -X POST http://127.0.0.1:8080/api/telegram/link/ \
      -H "Authorization: Token ${ALPHAAGENT_API_TOKEN}"
    # -> {"link_code": "<16-hex-code>", "expires_at": "...", "instructions": "..."}
    ```

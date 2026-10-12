@@ -2,7 +2,7 @@
 
 In production you would normally put nginx or a CDN in front of the static
 assets. Bundling a minimal, path-traversal-safe server here means a fresh
-``docker compose up`` yields a working UI at ``http://localhost:8000/`` with no
+``docker compose up`` yields a working UI at ``http://localhost:8080/`` with no
 extra moving parts.
 
 If ``frontend/dist`` does not exist (the SPA was never built) the routes are not

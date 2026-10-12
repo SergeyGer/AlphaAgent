@@ -18,7 +18,16 @@ name: alphaagent-demo
 x-app: &app
   image: ghcr.io/sergeyger/alphaagent:latest
   pull_policy: always
-  restart: unless-stopped
+  # Deliberately NOT `always` or `unless-stopped`.
+  #
+  # Those policies bring the stack back automatically when the Docker daemon
+  # starts, which means a server reboot silently restarts this demo - consuming
+  # resources and, if it is autonomous, resuming trading without anyone asking.
+  # A demo should start when someone starts it.
+  #
+  # Override with `restart: unless-stopped` in a local override file if you want
+  # a long-running deployment instead.
+  restart: "no"
   environment: &app-env
     DJANGO_DEBUG: "false"
     DJANGO_SECRET_KEY: demo-only-secret-key-not-for-production-use
@@ -82,7 +91,11 @@ services:
       db: { condition: service_healthy }
       redis: { condition: service_healthy }
     ports:
-      - "8000:8000"
+      # Host port is configurable because this stack is not always the only
+      # thing on the machine - 8000 is a common default and collisions are
+      # silent until a bind fails. The CONTAINER port stays 8000, so the
+      # image, the healthcheck and DJANGO_ALLOWED_HOSTS are unaffected.
+      - "${ALPHA_WEB_PORT:-8080}:8000"
     command:
       - sh
       - -c

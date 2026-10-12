@@ -6,7 +6,10 @@
 !.env.example
 
 # Never commit a credential handed over for a one-off authenticated push.
-.git-token
+# Credential files. The glob covers a trailing space, which is a common paste
+# artefact - it made `.git-token ` invisible to the plain pattern and it was
+# staged by `git add -A` before anyone noticed.
+.git-token*
 *.token
 *.pat
 

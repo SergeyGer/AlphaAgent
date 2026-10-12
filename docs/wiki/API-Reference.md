@@ -18,7 +18,7 @@ are unversioned, payloads are JSON, and the browsable HTML renderer exists only 
 (`Token.objects.get_or_create`) — there is no rotation on re-login.
 
 ```bash
-API=http://127.0.0.1:8000
+API=http://127.0.0.1:8080
 TOKEN=$(curl -sS -X POST "$API/api/auth/token/" -H 'Content-Type: application/json' \
   -d '{"username":"demo","password":"<your-password>"}' | jq -r .token)
 curl -sS "$API/api/portfolio/" -H "Authorization: Token $TOKEN"

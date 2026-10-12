@@ -211,7 +211,16 @@ to GHCR:
 docker compose -f docker-compose.ghcr.yml up
 ```
 
-Open **<http://127.0.0.1:8000/>** and sign in as `demo` / `demo-pass-123`. The
+The port defaults to **8080**, not 8000, because this stack is rarely the only
+thing on a machine and a collision is silent until a bind fails. Override it
+with `ALPHA_WEB_PORT`: `ALPHA_WEB_PORT=9000 docker compose up -d`.
+
+Nothing in the stack restarts itself. No service uses `restart: always` or
+`unless-stopped`, so a server reboot does not silently bring the demo back -
+and does not resume autonomous trading without anyone asking. Start it when
+you want it.
+
+Open **<http://127.0.0.1:8080/>** and sign in as `demo` / `demo-pass-123`. The
 demo credentials are committed on purpose so the stack starts with no
 configuration at all; they are demo values, not secrets.
 

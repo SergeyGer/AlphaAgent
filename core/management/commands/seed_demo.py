@@ -8,6 +8,7 @@ Usage::
 
 from __future__ import annotations
 
+import os
 from decimal import Decimal
 
 from django.contrib.auth.models import User
@@ -80,8 +81,13 @@ class Command(BaseCommand):
         self.stdout.write(f"  API token       : {token.key}")
         self.stdout.write("")
         self.stdout.write("Try:")
+        # The host port is configurable and defaults to 8080. Read from the
+        # environment rather than hardcoded so the printed hint matches whatever
+        # the reader actually mapped - a wrong port in an example is a detour for
+        # anyone following it.
+        port = os.environ.get("ALPHA_WEB_PORT", "8080")
         self.stdout.write(
-            f'  curl -H "Authorization: Token {token.key}" http://127.0.0.1:8000/api/portfolio/'
+            f'  curl -H "Authorization: Token {token.key}" http://127.0.0.1:{port}/api/portfolio/'
         )
 
     def _seed_position(self, portfolio: Portfolio) -> None:
