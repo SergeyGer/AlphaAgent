@@ -338,6 +338,69 @@ dashboard read. All eight are fixed and pinned by 35 tests in
 `core/tests/test_regressions.py`; [[API-Reference]] and [[Operations]] document the
 corrected behaviour.
 
+## INC-009 — Redis ran with no authentication, on a published port
+
+**Severity:** high (unauthenticated infrastructure) · **Detected by:** a security
+review of the compose configuration · **Fixed in:** the Redis authentication
+commit
+
+### What happened
+
+`docker-compose.yml` started Redis with no `--requirepass` and published
+`6379:6379` to the host. Everything sharing that instance — the Celery broker, the
+task result backend, the Django cache and the WebSocket channel layer — was
+therefore reachable, readable and writable by anything that could route to the
+port. Redis is a well-known target for exactly this reason.
+
+### Root cause
+
+The stack was built for a local demo and the default was never revisited. Redis
+ships with authentication disabled, so "no password" is not a misconfiguration
+anyone has to make — it is what you get by not deciding. The published port was
+added so host-run tooling (`make test`, the seed command) could reach it, which is
+a real requirement; not securing it was not.
+
+### Fix
+
+- `redis-server --requirepass` in both compose files, and in the demo file too —
+  a demo password is still a password.
+- `config/settings.py` builds all four connection URLs from `REDIS_HOST`,
+  `REDIS_PORT` and `REDIS_PASSWORD`, percent-encoding the password.
+- The healthcheck authenticates via `REDISCLI_AUTH`, not `redis-cli -a`, which
+  would expose the secret in the process list.
+- The port stays published, because the documented host workflow needs it. With a
+  password it is a protected port rather than an open one.
+
+### What the fix exposed
+
+Two failures that configuration review alone would not have caught:
+
+1. **A stale URL survived the password change.** `.env` still held
+   `CELERY_BROKER_URL=redis://127.0.0.1:6379/0`, which overrode the builder. The
+   cache and channel layer picked up credentials while the broker kept the open
+   URL — so the change looked complete and was not. This is why the wiki says to
+   leave those two variables empty.
+2. **The channel layer authenticated late.** After the settings change the
+   dashboard showed RECONNECTING: the running container was still the image built
+   before the change, so `address` was still `redis://redis:6379/3`. A rebuild
+   fixed it. Worth remembering that settings live in the image, and a compose
+   restart alone does not pick up a code change.
+
+### Verification
+
+Anonymous access is refused (`NOAUTH Authentication required.`), authenticated
+access answers (`PONG`), the dashboard reports **LIVE** with all seven metric
+cards populated, a Celery task round-trips through the authenticated broker, and
+428 backend plus 82 frontend tests pass.
+
+### Lesson
+
+An unauthenticated dependency is invisible until someone looks for it, because
+nothing fails. `RedisAuthTests` now asserts the URL construction and the compose
+configuration, since CI cannot exercise the authenticated path — GitHub service
+containers accept docker flags but not a command, so `--requirepass` cannot be
+passed there.
+
 ## Related pages
 
 - [[Engineering-Decisions]] — the decisions these incidents shaped, particularly ADR-006

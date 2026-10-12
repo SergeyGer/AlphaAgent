@@ -92,6 +92,14 @@ jobs:
         image: redis:7-alpine
         ports:
           - 6379:6379
+        # Unauthenticated ON PURPOSE, and the one place that is acceptable. GitHub
+        # service containers accept docker flags but not a command, so
+        # `redis-server --requirepass` cannot be passed here; the container is
+        # also ephemeral and reachable only inside the job's own network.
+        #
+        # That leaves a real gap - CI cannot prove the authenticated path works -
+        # so the URL construction is covered by unit tests instead
+        # (`RedisAuthTests`), and the compose stacks are verified by running them.
         options: >-
           --health-cmd "redis-cli ping"
           --health-interval 5s

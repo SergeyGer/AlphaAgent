@@ -24,8 +24,9 @@ x-app: &app
     POSTGRES_PORT: "5432"
     REDIS_HOST: redis
     REDIS_PORT: "6379"
-    CELERY_BROKER_URL: redis://redis:6379/0
-    CELERY_RESULT_BACKEND: redis://redis:6379/1
+    REDIS_PASSWORD: ${REDIS_PASSWORD:-dev-only-redis-password-change-me}
+    CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-dev-only-redis-password-change-me}@redis:6379/0
+    CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-dev-only-redis-password-change-me}@redis:6379/1
     DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,0.0.0.0,web
     # Points the crew at the MCP service. Only used when AI_TOOLS_VIA_MCP=true.
     AI_MCP_SERVER_URL: http://mcp:8100/mcp
@@ -68,12 +69,35 @@ services:
     image: redis:7-alpine
     container_name: alpha_redis
     restart: always
+    # Authentication. Redis ships with none, and this stack ran that way, so
+    # anything that could reach 6379 had full control of the Celery broker, the
+    # cache and the WebSocket channel layer.
+    #
+    # The port stays published because the documented host workflow needs it - the
+    # Makefile runs `manage.py test` and the seed command from the host against
+    # 127.0.0.1. With a password in place that is a protected port rather than an
+    # open one. To close it entirely, drop the `ports:` block and run everything
+    # through `docker compose exec`.
+    command:
+      - redis-server
+      - --requirepass
+      - ${REDIS_PASSWORD:-dev-only-redis-password-change-me}
+      - --appendonly
+      - "yes"
+    environment:
+      # Read by the healthcheck rather than passed on the command line:
+      # `redis-cli -a` puts the password in the process list, where any user on
+      # the box can read it with `ps`. REDISCLI_AUTH keeps it out of argv.
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-dev-only-redis-password-change-me}
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      # `redis-cli ping` returns NOAUTH once requirepass is set, so an
+      # unauthenticated healthcheck would report the container unhealthy forever
+      # and every service waiting on `service_healthy` would never start.
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$$REDIS_PASSWORD redis-cli ping | grep -q PONG"]
       interval: 5s
       timeout: 3s
       retries: 12

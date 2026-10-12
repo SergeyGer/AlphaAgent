@@ -30,8 +30,9 @@ x-app: &app
     POSTGRES_PORT: "5432"
     REDIS_HOST: redis
     REDIS_PORT: "6379"
-    CELERY_BROKER_URL: redis://redis:6379/0
-    CELERY_RESULT_BACKEND: redis://redis:6379/1
+    REDIS_PASSWORD: ${REDIS_PASSWORD:-dev-only-redis-password-change-me}
+    CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-dev-only-redis-password-change-me}@redis:6379/0
+    CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-dev-only-redis-password-change-me}@redis:6379/1
     AI_MCP_SERVER_URL: http://mcp:8100/mcp
 
 services:
@@ -51,11 +52,24 @@ services:
 
   redis:
     image: redis:7-alpine
-    command: ["redis-server", "--appendonly", "yes"]
+    # Authenticated, like the development stack. The password is a committed demo
+    # value because this file exists so the stack starts with no configuration at
+    # all - but Redis without a password is the misconfiguration this avoids, so
+    # even the demo sets one.
+    command:
+      - redis-server
+      - --requirepass
+      - demo-only-redis-password
+      - --appendonly
+      - "yes"
+    environment:
+      REDIS_PASSWORD: demo-only-redis-password
     volumes:
       - demo-redis:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      # Authenticated: `redis-cli ping` returns NOAUTH otherwise, the container is
+      # never healthy, and every service waiting on it never starts.
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$$REDIS_PASSWORD redis-cli ping | grep -q PONG"]
       interval: 5s
       timeout: 3s
       retries: 12

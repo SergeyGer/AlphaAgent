@@ -12,6 +12,7 @@ import sys
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from urllib.parse import quote
 
 from celery.schedules import crontab
 from django.core.exceptions import ImproperlyConfigured
@@ -192,12 +193,35 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # ---------------------------------------------------------------------------
 REDIS_HOST = os.environ.get("REDIS_HOST", "127.0.0.1")
 REDIS_PORT = os.environ.get("REDIS_PORT", "6379")
-REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}"
+
+# Redis authentication.
+#
+# Redis has no authentication by default, and this project ran it that way: any
+# process that could reach port 6379 had full control of the broker, the cache
+# and the WebSocket channel layer. On a host with a public interface that is
+# whoever can route to it, and Redis is a well-known target precisely because an
+# open instance is a common misconfiguration.
+#
+# Composed rather than stored as a full URL so the credentials live in one place.
+# The password is URL-quoted: a generated secret routinely contains characters
+# (`@`, `:`, `/`, `#`) that would otherwise silently truncate the host or split
+# the URL, producing a connection error that reads like a wrong password.
+REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD", "").strip()
+
+
+def _redis_url(db: int) -> str:
+    """Build a Redis URL for one database index, with credentials when set."""
+    if REDIS_PASSWORD:
+        return f"redis://:{quote(REDIS_PASSWORD, safe='')}@{REDIS_HOST}:{REDIS_PORT}/{db}"
+    return f"redis://{REDIS_HOST}:{REDIS_PORT}/{db}"
+
+
+REDIS_URL = _redis_url(0)
 
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.redis.RedisCache",
-        "LOCATION": f"{REDIS_URL}/2",
+        "LOCATION": _redis_url(2),
         "KEY_PREFIX": "alphaagent",
         "TIMEOUT": 300,
     }
@@ -215,7 +239,7 @@ CHANNEL_LAYERS = {
         "CONFIG": {
             "hosts": [
                 {
-                    "address": f"{REDIS_URL}/3",
+                    "address": _redis_url(3),
                     # The consumer blocks on BZPOPMIN for `brpop_timeout` (5s by
                     # default). Without an explicit read deadline a slow round
                     # trip raises `redis.exceptions.TimeoutError`, which tears
@@ -239,8 +263,8 @@ CHANNEL_LAYERS = {
 # ---------------------------------------------------------------------------
 # Celery - Redis broker, Celery Beat cron scheduler
 # ---------------------------------------------------------------------------
-CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", f"{REDIS_URL}/0")
-CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", f"{REDIS_URL}/1")
+CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "") or _redis_url(0)
+CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", "") or _redis_url(1)
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"

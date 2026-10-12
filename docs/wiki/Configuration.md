@@ -66,8 +66,52 @@ environment-driven. The engine is always `django.db.backends.postgresql` — the
 | --- | --- | --- | --- |
 | `REDIS_HOST` | `127.0.0.1` | No | Redis host used by cache, broker, result backend and channel layer |
 | `REDIS_PORT` | `6379` | No | Redis port |
-| `CELERY_BROKER_URL` | `redis://<REDIS_HOST>:<REDIS_PORT>/0` | No | Task broker |
-| `CELERY_RESULT_BACKEND` | `redis://<REDIS_HOST>:<REDIS_PORT>/1` | No | Task result store (`CELERY_RESULT_EXPIRES` is 24h) |
+| `REDIS_PASSWORD` | *(none)* | **Yes in practice** | Redis password. Redis ships with no authentication, so leaving this empty means anything that can reach 6379 controls the broker, the cache and the WebSocket layer |
+| `CELERY_BROKER_URL` | *(built)* | No | Task broker. Leave **empty** to have settings build it from `REDIS_*`, which percent-encodes the password for you |
+| `CELERY_RESULT_BACKEND` | *(built)* | No | Task result store (`CELERY_RESULT_EXPIRES` is 24h). Same rule |
+
+### Redis authentication
+
+Redis has no authentication by default and this stack originally ran that way.
+Anything able to reach port 6379 had full control of the Celery broker, the
+cache and the WebSocket channel layer — and Redis is a well-known target
+precisely because an open instance is a common misconfiguration.
+
+The compose stacks now start it with `--requirepass`, and every connection
+carries credentials:
+
+| Consumer | Database | Built by |
+| --- | --- | --- |
+| Celery broker | `/0` | `_redis_url(0)` |
+| Celery result backend | `/1` | `_redis_url(1)` |
+| Django cache | `/2` | `_redis_url(2)` |
+| WebSocket channel layer | `/3` | `_redis_url(3)` |
+
+`config/settings.py` composes these from `REDIS_HOST`, `REDIS_PORT` and
+`REDIS_PASSWORD` rather than storing four full URLs, so the credentials live in
+one place. The password is percent-encoded with `urllib.parse.quote`: a generated
+secret routinely contains `@`, `:` or `/`, and unencoded those silently split the
+URL — producing a connection error that reads like a wrong password rather than a
+malformed string.
+
+> **Leave `CELERY_BROKER_URL` and `CELERY_RESULT_BACKEND` empty.** Setting them
+> overrides the builder with a literal string, and a stale value there is how an
+> unauthenticated URL survives a password change. This happened during the
+> migration: the cache and channel layer picked up the password while the broker
+> kept the old URL, and the failure looked like a broker outage.
+
+> **Passwords must be URL-safe** (letters, digits, `-`, `_`) when set through the
+> compose files. `settings.py` encodes correctly, but compose interpolates
+> `${REDIS_PASSWORD}` verbatim into the URL and cannot. A password with reserved
+> characters must be supplied by setting the two `CELERY_*` variables explicitly
+> with your own encoding.
+
+The healthcheck authenticates through `REDISCLI_AUTH` rather than
+`redis-cli -a`, because `-a` puts the secret in the process list where any user on
+the box can read it with `ps`. It has to authenticate at all: `redis-cli ping`
+returns `NOAUTH` once `requirepass` is set, so an unauthenticated healthcheck
+reports the container unhealthy forever and every service waiting on
+`service_healthy` never starts.
 | `CELERY_TASK_TIME_LIMIT` | `600` | No | Hard per-task limit in seconds |
 | `CELERY_TASK_SOFT_TIME_LIMIT` | `540` | No | Soft limit; raises `SoftTimeLimitExceeded` inside the task |
 | `CELERY_TASK_ALWAYS_EAGER` | `false` | No | Run tasks in-process — used by tests and CI to avoid a live worker |

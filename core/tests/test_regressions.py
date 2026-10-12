@@ -1232,6 +1232,99 @@ class NewLogSinkSafetyTests(TestCase):
         self.assertNotIn("\n", log_safe(forged))
 
 
+class RedisAuthTests(TestCase):
+    """Redis ran with no authentication, on a published port.
+
+    Anything that could reach 6379 controlled the Celery broker, the cache and the
+    WebSocket channel layer. The compose stacks now set `--requirepass`, and the
+    URLs are built with credentials.
+
+    CI cannot cover the authenticated path - GitHub service containers accept
+    docker flags but not a command, so `redis-server --requirepass` cannot be
+    passed there - which makes these the only automated check on the construction.
+
+    Patches the module globals rather than reloading `config.settings`: a reload
+    re-evaluates every `env_required(...)` call at import and disturbs the live
+    Django connection, which is not something a test should do to its own runner.
+    """
+
+    def setUp(self):
+        from config import settings as st
+
+        self.st = st
+
+    def _url(self, db: int, password: str = "", host: str = "redis", port: str = "6379") -> str:
+        with (
+            mock.patch.object(self.st, "REDIS_PASSWORD", password),
+            mock.patch.object(self.st, "REDIS_HOST", host),
+            mock.patch.object(self.st, "REDIS_PORT", port),
+        ):
+            return self.st._redis_url(db)
+
+    def test_a_password_produces_a_credentialed_url(self):
+        self.assertEqual(self._url(0, "hunter2"), "redis://:hunter2@redis:6379/0")
+
+    def test_no_password_leaves_the_url_unauthenticated(self):
+        self.assertEqual(self._url(0, ""), "redis://redis:6379/0")
+
+    def test_reserved_characters_are_percent_encoded(self):
+        """A generated secret routinely contains characters that would otherwise
+        split the URL, producing a connection error that reads like a wrong
+        password rather than a malformed string."""
+        url = self._url(0, "p@ss:w/rd#1")
+
+        self.assertNotIn("p@ss:", url)
+        self.assertIn("%40", url)  # @
+        self.assertIn("%3A", url)  # :
+        self.assertIn("%2F", url)  # /
+        self.assertIn("%23", url)  # #
+        # Exactly one `@`, the separator before the host.
+        self.assertEqual(url.count("@"), 1)
+
+    def test_each_consumer_gets_its_own_database(self):
+        self.assertTrue(self._url(0, "pw").endswith("/0"))  # broker
+        self.assertTrue(self._url(1, "pw").endswith("/1"))  # result backend
+        self.assertTrue(self._url(2, "pw").endswith("/2"))  # cache
+        self.assertTrue(self._url(3, "pw").endswith("/3"))  # channel layer
+
+    def test_the_configured_urls_are_authenticated(self):
+        """The built URLs must actually carry the password, not merely be able to."""
+        from django.conf import settings as live
+
+        if not live.REDIS_PASSWORD:
+            self.skipTest("no REDIS_PASSWORD configured in this environment")
+
+        self.assertIn(f":{live.REDIS_PASSWORD}@", live.CELERY_BROKER_URL)
+        self.assertIn(f":{live.REDIS_PASSWORD}@", live.CELERY_RESULT_BACKEND)
+        self.assertIn(f":{live.REDIS_PASSWORD}@", live.CACHES["default"]["LOCATION"])
+        self.assertIn(
+            f":{live.REDIS_PASSWORD}@",
+            live.CHANNEL_LAYERS["default"]["CONFIG"]["hosts"][0]["address"],
+        )
+
+    def test_the_compose_stacks_require_a_password(self):
+        import yaml
+
+        for name in ("docker-compose.yml", "docker-compose.ghcr.yml"):
+            with self.subTest(compose=name):
+                compose = yaml.safe_load(pathlib.Path(name).read_text())
+                redis = compose["services"]["redis"]
+                command = " ".join(str(part) for part in redis.get("command", []))
+                self.assertIn("--requirepass", command)
+                # The healthcheck has to authenticate, or the container is never
+                # healthy and nothing waiting on it starts.
+                health = " ".join(redis["healthcheck"]["test"])
+                self.assertIn("REDISCLI_AUTH", health)
+
+    def test_the_password_is_not_put_on_the_redis_command_line(self):
+        """`redis-cli -a` exposes the secret in the process list to any user."""
+        import yaml
+
+        compose = yaml.safe_load(pathlib.Path("docker-compose.yml").read_text())
+        health = " ".join(compose["services"]["redis"]["healthcheck"]["test"])
+        self.assertNotIn(" -a ", health)
+
+
 class LogSafetyTests(TestCase):
     """``py/log-injection``: a value with newlines must not forge a log entry."""
 
