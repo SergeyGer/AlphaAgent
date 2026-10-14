@@ -631,3 +631,39 @@ class DecisionScorecardView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+class PositionThesisView(generics.ListAPIView):
+    """``GET /api/portfolio/thesis/`` - why we hold what we hold.
+
+    Open theses by default, since that is what the agents receive and what a
+    reader wants to check against the current positions. ``?include=closed``
+    returns the superseded ones too, which is the history of what was believed
+    and when - the thing that makes a reversal auditable as a change of mind
+    rather than looking like noise.
+    """
+
+    permission_classes = [IsAuthenticated]
+    # Imported here rather than at module scope: the serializers module imports
+    # models, and the view module is imported during URL loading.
+    serializer_class = None
+
+    def get_serializer_class(self):
+        from core.serializers import PositionThesisSerializer
+
+        return PositionThesisSerializer
+
+    def get_queryset(self):
+        from core.models import PositionThesis, ThesisStatus
+
+        portfolio = get_portfolio(self.request.user)
+        queryset = PositionThesis.objects.filter(portfolio=portfolio).order_by("-opened_at")
+
+        if self.request.query_params.get("include") != "closed":
+            queryset = queryset.filter(status=ThesisStatus.OPEN)
+
+        ticker = (self.request.query_params.get("ticker") or "").strip().upper()
+        if ticker:
+            queryset = queryset.filter(ticker=ticker)
+
+        return queryset

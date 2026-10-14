@@ -1,41 +1,82 @@
 import { describe, expect, it } from 'vitest';
-import { currentThesisFromLogs } from './thesis';
-import type { DecisionLog } from '../types';
+import { thesisFor, thesisFromRow } from './thesis';
+import type { ThesisRow } from '../types';
 
 /**
- * The current thesis is not exposed by any endpoint yet.
+ * The thesis view model.
  *
- * These tests pin the placeholder's contract: it must return `null` rather than
- * promote the newest decision log to "the thesis", because that would put an
- * invented claim on the dashboard — the log says what the agent did once, not
- * what it currently believes or which positions that belief covers.
+ * The state that matters most here is **absent**: a position with no recorded
+ * thesis must render as "nothing on record" rather than as an empty thesis. It
+ * is a real state — the position was opened before theses existed, or by an
+ * operator-approved trade — and the agent is told the same thing, so the UI must
+ * not manufacture a claim the backend never made.
  */
-describe('currentThesisFromLogs', () => {
-  const log: DecisionLog = {
-    id: 42,
-    action_taken: 'BUY',
-    market_sentiment: 'BULLISH',
-    ticker: 'AAPL',
-    transaction_id: null,
-    tokens_used: 1200,
-    input_tokens: 900,
-    output_tokens: 300,
-    cached_input_tokens: 0,
-    cache_write_tokens: 0,
-    api_cost_usd: '0.01',
-    reasoning: 'The setup is asymmetric.',
-    bull_case: 'Demand is accelerating.',
-    bear_case: 'Valuation is stretched.',
-    created_at: '2026-10-14T13:00:00Z',
-  };
 
-  it('does not pass a decision log off as the current thesis', () => {
-    expect(currentThesisFromLogs([log])).toBeNull();
+const row = (over: Partial<ThesisRow> = {}): ThesisRow => ({
+  id: 1,
+  ticker: 'AAPL',
+  thesis: 'Services margin expanding.',
+  invalidation: 'Gross margin below 40%.',
+  status: 'OPEN',
+  opened_at: '2026-10-14T13:00:00Z',
+  updated_at: '2026-10-14T13:00:00Z',
+  closed_at: null,
+  close_reason: '',
+  opened_by_decision: 1490,
+  ...over,
+});
+
+describe('thesisFromRow', () => {
+  it('maps the wire row onto the view model', () => {
+    const thesis = thesisFromRow(row());
+
+    expect(thesis.ticker).toBe('AAPL');
+    expect(thesis.rationale).toBe('Services margin expanding.');
+    expect(thesis.invalidation).toBe('Gross margin below 40%.');
+    expect(thesis.decisionId).toBe(1490);
+    expect(thesis.statedAt).toBe('2026-10-14T13:00:00Z');
   });
 
-  it('returns null for an empty or missing log list', () => {
-    expect(currentThesisFromLogs([])).toBeNull();
-    expect(currentThesisFromLogs(null)).toBeNull();
-    expect(currentThesisFromLogs(undefined)).toBeNull();
+  it('treats a whitespace-only invalidation as none recorded', () => {
+    // The UI tests `invalidation` for truthiness to decide whether to explain
+    // that the agent named no falsifier, so "   " must not read as one.
+    expect(thesisFromRow(row({ invalidation: '   ' })).invalidation).toBe('');
+    expect(thesisFromRow(row({ invalidation: '' })).invalidation).toBe('');
+  });
+
+  it('survives a pruned decision reference', () => {
+    expect(thesisFromRow(row({ opened_by_decision: null })).decisionId).toBeNull();
+  });
+});
+
+describe('thesisFor', () => {
+  it('finds the thesis for an instrument, case-insensitively', () => {
+    const rows = [row({ ticker: 'AAPL' }), row({ id: 2, ticker: 'TSLA', thesis: 'other' })];
+
+    expect(thesisFor(rows, 'aapl')?.rationale).toBe('Services margin expanding.');
+    expect(thesisFor(rows, 'TSLA')?.rationale).toBe('other');
+  });
+
+  it('returns null when the instrument has no thesis on record', () => {
+    // Not an empty thesis: a position can legitimately have none.
+    expect(thesisFor([row({ ticker: 'AAPL' })], 'NVDA')).toBeNull();
+  });
+
+  it('returns null for an empty, missing or absent payload', () => {
+    expect(thesisFor([], 'AAPL')).toBeNull();
+    expect(thesisFor(null, 'AAPL')).toBeNull();
+    expect(thesisFor(undefined, 'AAPL')).toBeNull();
+  });
+
+  it('returns null rather than matching everything when no ticker is given', () => {
+    expect(thesisFor([row()], null)).toBeNull();
+    expect(thesisFor([row()], '')).toBeNull();
+    expect(thesisFor([row()], undefined)).toBeNull();
+  });
+
+  it('does not match a ticker on a partial string', () => {
+    // "AA" must not match "AAPL"; a substring match would show the wrong thesis
+    // against the wrong position, which is worse than showing none.
+    expect(thesisFor([row({ ticker: 'AAPL' })], 'AA')).toBeNull();
   });
 });

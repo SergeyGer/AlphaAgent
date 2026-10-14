@@ -10,6 +10,7 @@ import type {
   Recommendation,
   RecommendationDecisionResponse,
   RunAgentResponse,
+  ThesisRow,
   SnapshotRange,
   ToggleAutonomyResponse,
   Transaction,
@@ -297,6 +298,19 @@ export const api = {
    */
   attribution(signal?: AbortSignal): Promise<AttributionResponse> {
     return apiRequest<AttributionResponse>('/api/portfolio/attribution/', { signal });
+  },
+
+  /**
+   * `GET /api/portfolio/thesis/` — why each open position is held, and what
+   * would prove that wrong.
+   *
+   * The same text is handed to the agents on every run, so what this returns is
+   * exactly what the CIO is arguing against when it proposes an exit. Open
+   * theses only; the superseded history is reachable via `?include=closed` and
+   * is not needed on the dashboard.
+   */
+  thesis(signal?: AbortSignal): Promise<ThesisRow[]> {
+    return apiRequest<ThesisRow[]>('/api/portfolio/thesis/', { signal });
   },
 
   /** `GET /api/market/news/?ticker=&limit=` — headlines split by sentiment. */

@@ -245,6 +245,76 @@ class ThesisWiringTests(TestCase):
 
 
 @override_settings(CACHES=TEST_CACHES)
+class ThesisEndpointTests(TestCase):
+    """``GET /api/portfolio/thesis/`` - the live view of what we believe."""
+
+    def setUp(self):
+        self.user = make_user("thesis-endpoint-user")
+        self.portfolio = make_portfolio(self.user)
+        from core.tests.helpers import auth_client
+
+        self.client = auth_client(self.user)
+
+    def _rows(self, url="/api/portfolio/thesis/"):
+        body = self.client.get(url).json()
+        return body.get("results", body)
+
+    def test_it_returns_open_theses(self):
+        record_thesis(
+            portfolio=self.portfolio,
+            ticker="AAPL",
+            thesis="why we hold",
+            invalidation="what breaks it",
+        )
+
+        rows = self._rows()
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["ticker"], "AAPL")
+        self.assertEqual(rows[0]["thesis"], "why we hold")
+        self.assertEqual(rows[0]["invalidation"], "what breaks it")
+
+    def test_closed_theses_are_hidden_by_default(self):
+        record_thesis(portfolio=self.portfolio, ticker="AAPL", thesis="first")
+        record_thesis(portfolio=self.portfolio, ticker="AAPL", thesis="second")
+
+        self.assertEqual(len(self._rows()), 1)
+        self.assertEqual(self._rows()[0]["thesis"], "second")
+
+    def test_the_superseded_history_is_available_on_request(self):
+        """The point of keeping closed rows is being able to read them."""
+        record_thesis(portfolio=self.portfolio, ticker="AAPL", thesis="first")
+        record_thesis(portfolio=self.portfolio, ticker="AAPL", thesis="second")
+
+        rows = self._rows("/api/portfolio/thesis/?include=closed")
+
+        self.assertEqual(len(rows), 2)
+
+    def test_it_can_be_filtered_to_one_instrument(self):
+        record_thesis(portfolio=self.portfolio, ticker="AAPL", thesis="a")
+        record_thesis(portfolio=self.portfolio, ticker="TSLA", thesis="b")
+
+        rows = self._rows("/api/portfolio/thesis/?ticker=tsla")
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["ticker"], "TSLA")
+
+    def test_one_portfolio_cannot_read_another_portfolios_theses(self):
+        other = make_portfolio(make_user("thesis-other"))
+        record_thesis(portfolio=other, ticker="AAPL", thesis="not yours")
+
+        self.assertEqual(self._rows(), [])
+
+    def test_it_requires_authentication(self):
+        from rest_framework.test import APIClient
+
+        self.assertEqual(APIClient().get("/api/portfolio/thesis/").status_code, 401)
+
+    def test_an_empty_result_is_an_empty_list_not_an_error(self):
+        self.assertEqual(self._rows(), [])
+
+
+@override_settings(CACHES=TEST_CACHES)
 class ThesisApiTests(TestCase):
     def setUp(self):
         self.user = make_user("thesis-api-user")

@@ -33,6 +33,7 @@ from core.views import (
     MarketNewsView,
     PortfolioDetailView,
     PortfolioSnapshotListView,
+    PositionThesisView,
     RecommendationApproveView,
     RecommendationRejectView,
     RunAgentView,
@@ -55,6 +56,11 @@ urlpatterns = [
         name="portfolio-toggle-autonomy",
     ),
     path("portfolio/logs/", AgentDecisionLogListView.as_view(), name="portfolio-logs"),
+    path(
+        "portfolio/thesis/",
+        PositionThesisView.as_view(),
+        name="portfolio-thesis",
+    ),
     path(
         "portfolio/attribution/",
         DecisionScorecardView.as_view(),

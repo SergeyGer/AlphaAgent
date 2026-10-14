@@ -269,6 +269,28 @@ export interface RecommendationDecisionResponse {
  *   price was available for any scored decision. An unknown comparison is not a
  *   loss.
  */
+/**
+ * One row of `GET /api/portfolio/thesis/` — why a position is held, and what
+ * would prove that wrong.
+ *
+ * `opened_by_decision` is nullable because the decision that opened the position
+ * may since have been pruned from the audit trail. `invalidation` is a string
+ * that may be empty: an agent that cannot name a falsifier has said something
+ * useful, and the UI states it rather than printing a blank.
+ */
+export interface ThesisRow {
+  id: number;
+  ticker: string;
+  thesis: string;
+  invalidation: string;
+  status: 'OPEN' | 'CLOSED' | 'INVALIDATED';
+  opened_at: string;
+  updated_at: string;
+  closed_at: string | null;
+  close_reason: string;
+  opened_by_decision: number | null;
+}
+
 export interface AttributionScorecard {
   horizon_days: number;
   /** Decisions whose horizon has elapsed and which now have an outcome row. */

@@ -144,6 +144,25 @@ def _price_at(ticker: str, when) -> Decimal | None:
     return _close_on_or_after(ticker, when, horizon_days=0)
 
 
+def _start_price(decision) -> Decimal | None:
+    """The price the decision would actually have traded at.
+
+    For an executed decision that is the transaction's own price, not the day's
+    close. The distinction is not pedantic: the guard prices a trade against the
+    live quote, so measuring its outcome from the close scores a trade at a price
+    it never got. On a real BTC decision the two differed by $166 - small as a
+    percentage, but systematic, and biased in a direction that flatters a BUY
+    whenever the close sits below the entry.
+
+    Falls back to the close when there is no transaction, which is the only
+    option for a HOLD - it traded nothing, so the close is the honest proxy.
+    """
+    transaction = getattr(decision, "transaction", None)
+    if transaction is not None and transaction.price:
+        return transaction.price
+    return _price_at(decision.ticker, decision.created_at)
+
+
 def _return_pct(start: Decimal, end: Decimal) -> Decimal:
     if start == ZERO:
         return ZERO
@@ -170,6 +189,7 @@ def evaluate_pending(*, now=None, limit: int = 500) -> dict[str, int]:
     candidates = (
         AgentDecisionLog.objects.filter(created_at__lte=reference, ticker__gt="")
         .filter(created_at__gte=oldest_needed - timedelta(days=max(horizons) * 2))
+        .select_related("transaction")
         .exclude(outcomes__isnull=False)
         .order_by("-created_at")[:limit]
     )
@@ -179,7 +199,7 @@ def evaluate_pending(*, now=None, limit: int = 500) -> dict[str, int]:
     for decision in candidates:
         age_days = (reference - decision.created_at).days
         action = action_of(decision.action_taken)
-        start_price = _price_at(decision.ticker, decision.created_at)
+        start_price = _start_price(decision)
         if start_price is None:
             # No price for the decision day means no denominator, so no return.
             # Better to score nothing than to score against a guess.

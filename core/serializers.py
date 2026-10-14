@@ -12,6 +12,7 @@ from core.models import (
     DecisionOutcome,
     Portfolio,
     PortfolioSnapshot,
+    PositionThesis,
     TelegramLink,
     TradeRecommendation,
     Transaction,
@@ -22,6 +23,7 @@ __all__ = [
     "AssetSerializer",
     "DecisionOutcomeSerializer",
     "PortfolioSerializer",
+    "PositionThesisSerializer",
     "ToggleAutonomySerializer",
     "TransactionSerializer",
 ]
@@ -259,6 +261,29 @@ class TransactionSerializer(serializers.ModelSerializer):
             "timestamp",
         ]
         read_only_fields = fields
+
+
+class PositionThesisSerializer(serializers.ModelSerializer):
+    """The live thesis for an open position: why we hold it, and what would falsify it."""
+
+    opened_by_decision = serializers.IntegerField(
+        source="opened_by_id", read_only=True, default=None
+    )
+
+    class Meta:
+        model = PositionThesis
+        fields = [
+            "id",
+            "ticker",
+            "thesis",
+            "invalidation",
+            "status",
+            "opened_at",
+            "updated_at",
+            "closed_at",
+            "close_reason",
+            "opened_by_decision",
+        ]
 
 
 class DecisionOutcomeSerializer(serializers.ModelSerializer):

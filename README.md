@@ -43,11 +43,19 @@
 agent debate expanding, news sentiment and the trade ledger.*
 
 <details>
-<summary><b>More screenshots</b> — dashboard, debate view, mobile</summary>
+<summary><b>More screenshots</b> — dashboard, decision quality, risk ceilings, debate, mobile</summary>
 
 **The dashboard.** Equity curve, asset allocation, the stream of agent reasoning, pending approvals, trades, and news scored positive/negative.
 
 ![Dashboard](docs/screenshots/dashboard.png)
+
+**Decision quality.** Every decision scored against what the market did next — hit rate, average return and alpha against SPY at 1, 7 and 30 days, with the individual outcomes behind the aggregate. The numbers are unflattering and shown as measured.
+
+![Decision quality](docs/screenshots/decision-quality.png)
+
+**Risk ceilings.** Invested capital against the portfolio exposure limit, and the largest position against the single-instrument concentration limit — the check that caught a real over-concentration in this demo portfolio.
+
+![Risk ceilings](docs/screenshots/portfolio-limits.png)
 
 **The debate view.** Expand any decision to read the bull case, the bear case and the adjudicator's verdict side by side.
 

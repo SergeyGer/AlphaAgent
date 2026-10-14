@@ -1,43 +1,63 @@
-import type { DecisionLog, MarketSentiment } from '../types';
+import type { ThesisRow } from '../types';
 
 /**
- * The portfolio's current investment thesis.
+ * The live investment thesis for a position.
  *
- * TODO(current-thesis): **not wired to anything, because no endpoint exposes a
- * thesis.** `GET /api/portfolio/logs/` returns one row per agent invocation
- * (action, sentiment, ticker, reasoning) — that is an audit trail of decisions,
- * not a standing thesis, and reading the newest row as "the thesis" would
- * invent a claim the backend never made. In particular a log row says nothing
- * about which positions the thesis still covers, or whether it has been
- * superseded.
+ * Backed by `GET /api/portfolio/thesis/`, which returns one row per open
+ * position — the reason it is held and the condition that would falsify it. The
+ * agents receive the same text on every run, so what the dashboard shows here is
+ * exactly what the CIO is arguing against when it proposes an exit.
  *
- * When the backend exposes one (e.g. `GET /api/portfolio/thesis/`), parse it
- * into this shape and render it; until then `currentThesisFromLogs` returns
- * `null` so callers must treat the thesis as unavailable rather than render a
- * placeholder that looks like data.
+ * This started as a typed seam returning `null`, because at the time no endpoint
+ * exposed a thesis and reading the newest decision log as "the thesis" would have
+ * invented a claim the backend never made. The endpoint now exists, so the seam
+ * is filled in rather than deleted — `thesisFromRow` is the single place that
+ * knows the wire shape.
  */
 export interface CurrentThesis {
-  /** Instrument the thesis is about, or `null` for a whole-portfolio view. */
-  ticker: string | null;
-  /** Proposed or taken action, e.g. `"BUY"` / `"HOLD"`. */
-  action: string;
-  sentiment: MarketSentiment | null;
-  /** Why — the CIO's reasoning, verbatim. */
-  rationale: string | null;
-  /** Decision log the thesis was derived from, once the backend keys it. */
+  /** Instrument the thesis is about. One thesis is always about one instrument. */
+  ticker: string;
+  /** Why the position is worth holding, in the agent's words. */
+  rationale: string;
+  /**
+   * The observable condition that would make the thesis wrong.
+   *
+   * Deliberately nullable in effect (`""` means the agent named none): a thesis
+   * without a falsifier is a weaker claim, and the UI should be able to say so
+   * rather than print an empty line that looks like a rendering bug.
+   */
+  invalidation: string;
+  /** Decision log that opened the position this thesis describes. */
   decisionId: number | null;
-  /** When the thesis was last asserted, ISO-8601. */
+  /** When the thesis was recorded, ISO-8601. */
   statedAt: string;
 }
 
+/** Map one row of the thesis endpoint onto the view model. */
+export function thesisFromRow(row: ThesisRow): CurrentThesis {
+  return {
+    ticker: row.ticker,
+    rationale: row.thesis,
+    invalidation: (row.invalidation ?? '').trim(),
+    decisionId: row.opened_by_decision ?? null,
+    statedAt: row.opened_at,
+  };
+}
+
 /**
- * Derive the current thesis from decision logs.
+ * The thesis for one instrument, or `null` when none is recorded.
  *
- * Deliberately returns `null`: the logs carry per-decision reasoning, and
- * presenting the latest row as a *current thesis* would fabricate a payload the
- * API does not serve. Kept as a typed seam so the panel can be added in one
- * place once the endpoint exists.
+ * Returns null rather than a placeholder for an instrument with no thesis.
+ * "No thesis recorded" is a real and useful state — it means the position was
+ * opened before theses existed, or by an operator-approved trade, and the agent
+ * is told the same thing — so it must not be rendered as an empty thesis.
  */
-export function currentThesisFromLogs(_logs: DecisionLog[] | null | undefined): CurrentThesis | null {
-  return null;
+export function thesisFor(
+  rows: ThesisRow[] | null | undefined,
+  ticker: string | null | undefined,
+): CurrentThesis | null {
+  if (!rows?.length || !ticker) return null;
+  const wanted = ticker.trim().toUpperCase();
+  const row = rows.find((candidate) => (candidate.ticker ?? '').toUpperCase() === wanted);
+  return row ? thesisFromRow(row) : null;
 }

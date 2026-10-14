@@ -140,6 +140,33 @@ Beat entry point, `tasks.autonomous_market_monitoring_task`.
 
 ## Agent
 
+### `GET /api/portfolio/thesis/`
+
+Why each open position is held, and what would prove that wrong. The same text is
+handed to the agents on every run, so this is exactly what the CIO argues against
+when it proposes an exit.
+
+| Parameter | Default | Notes |
+| --- | --- | --- |
+| `include` | open only | `include=closed` also returns superseded theses — the history of what was believed |
+| `ticker` | all | Filter to one instrument, case-insensitive |
+
+```json
+[
+  {"id": 1, "ticker": "AAPL",
+   "thesis": "Services margin expanding and the upgrade cycle is intact.",
+   "invalidation": "Gross margin below 40% for two consecutive quarters.",
+   "status": "OPEN", "opened_at": "2026-10-14T13:00:00Z",
+   "closed_at": null, "close_reason": "", "opened_by_decision": 1490}
+]
+```
+
+An empty list is a valid answer: a position can legitimately have no thesis on
+record, because it was opened before theses existed or by an operator-approved
+trade. The UI states that rather than rendering a blank thesis.
+
+See [[Position-Thesis]] for the lifecycle.
+
 ### `GET /api/portfolio/attribution/`
 
 Was the agent right? Scores every decision against what the market did next.
