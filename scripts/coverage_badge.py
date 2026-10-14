@@ -80,14 +80,42 @@ def colour_for(pct: int) -> str:
     return next(colour for floor, colour in THRESHOLDS if pct >= floor)
 
 
+def safe_output_path(raw: str) -> Path:
+    """Resolve ``raw`` to a path inside the repository, or refuse.
+
+    The output path comes from the command line, and CodeQL treats argv as an
+    untrusted source: an unconstrained ``Path(argv).write_text(...)`` is a
+    path-injection finding, because the same code shape would happily overwrite
+    ``~/.ssh/authorized_keys`` if something else ever supplied the argument.
+
+    Confining writes to the repository is not a loss of function - the badge is
+    committed to the repository, so writing it anywhere else was never useful -
+    and it makes the constraint checkable rather than implied.
+    """
+    root = Path(__file__).resolve().parent.parent
+    candidate = (root / raw).resolve() if not Path(raw).is_absolute() else Path(raw).resolve()
+
+    if not candidate.is_relative_to(root):
+        sys.exit(f"refusing to write outside the repository: {raw}")
+    if candidate.suffix.lower() != ".svg":
+        sys.exit(f"refusing to write a non-SVG file: {raw}")
+    return candidate
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("-o", "--output", default="coverage.svg", help="SVG path to write")
+    parser.add_argument(
+        "-o",
+        "--output",
+        default="coverage.svg",
+        help="SVG path to write, relative to the repository root",
+    )
     args = parser.parse_args()
 
+    destination = safe_output_path(args.output)
     pct = total_percent()
-    Path(args.output).write_text(TEMPLATE.format(pct=pct, color=colour_for(pct)), encoding="utf-8")
-    print(f"{args.output}: coverage {pct}% ({colour_for(pct)})")
+    destination.write_text(TEMPLATE.format(pct=pct, color=colour_for(pct)), encoding="utf-8")
+    print(f"{destination.relative_to(Path(__file__).resolve().parent.parent)}: coverage {pct}%")
     return 0
 
 

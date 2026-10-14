@@ -79,7 +79,7 @@ def record_thesis(
             previous.closed_by = decision
             previous.save(update_fields=["status", "closed_at", "close_reason", "closed_by"])
 
-        return PositionThesis.objects.create(
+        opened = PositionThesis.objects.create(
             portfolio=portfolio,
             ticker=symbol,
             thesis=text,
@@ -87,6 +87,14 @@ def record_thesis(
             opened_by=decision,
             status=ThesisStatus.OPEN,
         )
+
+    # Returned outside the transaction rather than from inside it. A `return`
+    # nested in a `with` leaves the function ending on the `with` rather than on a
+    # return, which reads to both a linter and a human as a path that can fall
+    # through. CodeQL reports it as py/mixed-returns. Keeping the commit point and
+    # the return separate removes the ambiguity and makes the transaction scope
+    # explicit.
+    return opened
 
 
 def close_thesis(*, portfolio, ticker: str, reason: str = "", decision=None) -> int:
