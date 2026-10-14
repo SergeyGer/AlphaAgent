@@ -143,6 +143,58 @@ interaction between them, including:
 Because there is no I/O, these are fast, deterministic tests rather than
 integration tests with mocks. See [[Quality-and-Testing]].
 
+## Portfolio-level limits
+
+The rules above are **per trade**. ADR-0001 recorded the consequence in its own
+words: *"a deliberate sequence of individually-permitted trades is unbounded."*
+Beat sweeps every fifteen minutes, so twenty 5%-of-cash buys reach fully invested
+without any single decision looking wrong.
+
+Two ceilings close that, both expressed as a percentage of **equity** (cash plus
+positions at market) rather than of cash — a percentage of cash would let a
+portfolio with a large position and little cash look empty.
+
+| Limit | Default | Caps |
+| --- | --- | --- |
+| `max_portfolio_exposure_pct` | 90 | Total invested capital |
+| `max_ticker_concentration_pct` | 30 | One instrument |
+
+They are not separate risks. A portfolio 90% invested in a single stock passes
+every exposure check and is not diversified in any sense a risk reviewer would
+accept, which is why concentration is bounded independently.
+
+**Headroom folds into the existing clamp**, it is not a separate rejection path. A
+buy that does not fit the portfolio is sized down to what fits, exactly as one
+that does not fit the per-trade budget already was — rejecting outright would
+refuse trades the portfolio can comfortably afford, just not at the size proposed.
+When a portfolio-level limit is what bound the trade the guard's note names it, so
+the audit row says *which* ceiling applied:
+
+```
+Clamped to 2.00000000 units: this would take invested capital past the
+90.00% portfolio exposure ceiling.
+```
+
+| Situation | Behaviour |
+| --- | --- |
+| Room for the full trade | Per-trade ceiling applies as before |
+| Room for only part of it | Clamped to the headroom, note names the ceiling |
+| No room at all | Rejected |
+| SELL | Never blocked by either limit — both govern *new* risk |
+
+### The exposure parameter
+
+The guard is a pure function and cannot fetch market values without breaking that,
+so they arrive as an `Exposure` value object built by
+`services.portfolio_metrics.build_exposure`.
+
+> **Omitting `exposure` skips both limits.** It cannot be a required parameter
+> without breaking existing callers and the deployed demo, so this is a real gap
+> rather than a graceful default. `ExposureWiringTests` asserts the two production
+> callers supply it — a test standing in for a type. The Streamlit demo passes no
+> exposure and therefore exercises the per-trade limits only; it says so on the
+> page.
+
 ## What this guard does *not* bound
 
 The guard limits what the system may **trade**. It says nothing about what the

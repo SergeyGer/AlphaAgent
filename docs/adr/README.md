@@ -68,6 +68,9 @@ maintainer".
 | [0011](0011-pip-tools-locked-dependencies.md) | Lock Python dependencies with pip-tools so the full tree is visible | Accepted | Committed hash-pinned lockfiles make all 180 Python packages visible to Dependabot instead of the 34 that direct pins exposed. |
 | [0012](0012-daily-ai-spend-ceiling.md) | Cap daily AI spend, separately from the trading limits | Accepted | A hard daily ceiling, defaulting to a non-zero $5.00, checked before dispatch and shown live on the dashboard. The trading guard caps what the system may trade; this caps what it may cost. |
 | [0013](0013-mcp-shared-secret-and-network-boundary.md) | Authenticate the MCP server and keep it off the host network | Accepted | The tool server was reachable on host port 8100 with no authentication. Now unpublished, plus a shared-secret header required on every request. |
+| [0014](0014-decision-outcome-attribution.md) | Score decisions against outcomes, not just record them | Accepted | The audit trail proved why every decision was made and nothing about whether any worked. Forward returns, a signed decision return and a SPY benchmark over 1/7/30 days. |
+| [0015](0015-cumulative-exposure-and-concentration-limits.md) | Cap cumulative exposure and single-instrument concentration | Accepted | Closes the gap ADR-0001 recorded: a sequence of individually-permitted trades was unbounded, and nothing constrained concentration at all. |
+| [0016](0016-persistent-position-thesis.md) | Give each open position a persistent thesis | Accepted | The crew runs stateless, so the agent could sell at 10:00 and rebuy at 10:15 without noticing. One durable thesis per open position, fed back as prior belief. |
 
 ## Adding a new ADR
 

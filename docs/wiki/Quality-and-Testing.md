@@ -317,6 +317,25 @@ Two things to know before the first run: `config/settings.py` calls
 `LocMemCache` per module, so a running Redis is not strictly required for the cache-backed
 tests, only for the database.
 
+## Test modules added with the newest features
+
+Three modules cover the changes that score decisions, cap portfolio risk and give
+positions a memory. Each is written around the mistake that would be easy to make
+rather than around the happy path.
+
+| Module | What it pins down |
+| --- | --- |
+| `test_attribution.py` | A SELL counts as right when the price **falls**; a HOLD never enters the hit rate; an empty scorecard reports no rate rather than 0%; the evaluator is idempotent, since it runs hourly on Beat |
+| `test_exposure_limits.py` | The clamp stops at exactly the ceiling; the binding limit is the one named in the note; a SELL is never blocked; and the production callers actually pass an `Exposure` |
+| `test_thesis.py` | One live thesis per instrument, enforced by the schema; a superseded thesis is closed not overwritten; an empty position closes its thesis; the absence of a thesis is stated in the prompt rather than left blank |
+
+Two of these assert **wiring** rather than behaviour, which is unusual and
+deliberate. Both the exposure limits and the thesis depend on a caller passing
+something the guard cannot fetch for itself, and a caller that forgets degrades
+silently — the limits simply do not apply, with no error. `ExposureWiringTests` and
+`ThesisWiringTests` read the task source and assert the call is on the path. That
+is a test standing in for a type the guard's purity will not allow.
+
 ## Frontend tests
 
 The dashboard has a Vitest suite that runs as its own CI job, because a failure

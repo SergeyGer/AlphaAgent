@@ -7,7 +7,9 @@
 
 **The system**
 - [[Agent-Debate]]
+- [[Position-Thesis]]
 - [[Execution-Guard]]
+- [[Decision-Attribution]]
 - [[Data-Model]]
 - [[Real-Time-Layer]]
 

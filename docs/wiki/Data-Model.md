@@ -29,6 +29,8 @@ One row per user — the configuration the execution guard reads on every propos
 | `risk_profile` | `CharField(6)` | `RiskProfile`, default `medium`, indexed; feeds AI sizing |
 | `is_autonomous` | `BooleanField` | Default `False`; true ⇒ the crew may execute without approval |
 | `max_trade_allocation_pct` / `daily_loss_limit_usd` | `Decimal(4,2)` / `Decimal(12,2)` | Defaults `5.00` / `500.00`: share of *cash* per trade, stop-loss per UTC day |
+| `max_portfolio_exposure_pct` | `Decimal(5,2)` | Default `90.00`: ceiling on total invested capital, as a share of *equity* |
+| `max_ticker_concentration_pct` | `Decimal(5,2)` | Default `30.00`: ceiling on one instrument, as a share of *equity* |
 | `created_at` | `DateTimeField` | `auto_now_add`; ordering `-created_at` |
 
 `portfolio_balance_non_negative`, `portfolio_loss_limit_non_negative` and
@@ -83,6 +85,7 @@ crashes** — plus one row per human decision.
 | --- | --- | --- |
 | `portfolio` | `FK(Portfolio)` | `related_name="decision_logs"` |
 | `transaction` | `OneToOneField(Transaction)` | `null=True`, `ON DELETE SET NULL`, `related_name="decision_log"` |
+| `ticker` | `CharField(32)` | Indexed. The instrument the decision was about, denormalised — see below |
 | `reasoning` | `TextField` | Full chain of thought from the reasoning model |
 | `bull_case`, `bear_case` | `TextField` | Debate arguments (migration `0003`), default `""` |
 | `action_taken` | `CharField(255)` | Verdict, e.g. `Purchased 3.5 AAPL @ $180.00 ($630.00)` |
@@ -298,3 +301,57 @@ admission control, locking is correctness.
 Related: [[Execution-Guard]] for the rules in detail, [[Architecture]] for how the
 pieces fit, [[API-Reference]] for the endpoints that read these tables, and
 [[Real-Time-Layer]] for how changes reach the dashboard.
+
+## DecisionOutcome
+
+What actually happened after a decision. One row per **decision × horizon**.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `decision` | `FK(AgentDecisionLog)` | `related_name="outcomes"`, `ON DELETE CASCADE` |
+| `horizon_days` | `PositiveSmallIntegerField` | 1, 7 or 30 |
+| `ticker`, `action` | `CharField` | Denormalised so a scorecard aggregates without joining the log's transaction, which a HOLD does not have |
+| `price_at_decision` / `price_at_horizon` | `Decimal(18,8)` | First trading day at or after each boundary; a horizon date itself is usually a weekend |
+| `forward_return_pct` | `Decimal(12,4)` | What the instrument did |
+| `decision_return_pct` | `Decimal(12,4)` | What that was worth **to the action taken** — the negation for a SELL. Zero for a HOLD by construction |
+| `benchmark_return_pct` | `Decimal(12,4)` | Nullable. SPY over the same window; null is *unknown*, never zero |
+| `directional_hit` | `BooleanField` | **Nullable.** Null for a HOLD, which makes no directional claim |
+
+`UniqueConstraint(decision, horizon_days)` — one score per decision per horizon.
+See [[Decision-Attribution]] for the scoring rules.
+
+## PositionThesis
+
+Why we hold an instrument, and what would prove that wrong.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `portfolio` | `FK(Portfolio)` | `related_name="theses"` |
+| `ticker` | `CharField(32)` | Indexed |
+| `thesis` | `TextField` | Why the position is worth holding, in the agent's words |
+| `invalidation` | `TextField` | The observable condition that would make it wrong; may be blank |
+| `status` | `CharField(12)` | `ThesisStatus` — `OPEN` / `CLOSED` / `INVALIDATED` |
+| `opened_by` / `closed_by` | `FK(AgentDecisionLog)` | Nullable, `ON DELETE SET NULL`. Provenance |
+| `opened_at` / `updated_at` / `closed_at` | `DateTimeField` | `closed_at` nullable |
+
+`UniqueConstraint(portfolio, ticker, condition=status == OPEN)` — **one live thesis
+per instrument**, enforced by the schema rather than by convention. Superseded
+theses are closed and kept, so the table is a history of what was believed rather
+than a single mutable field. See [[Position-Thesis]].
+
+## Why the ticker is denormalised
+
+`AgentDecisionLog.ticker` duplicates what `Transaction.ticker` already holds, which
+normally would not be worth it. The reason is that the ticker used to be reachable
+**only** through the transaction, and a decision that executed nothing — a HOLD, or
+a HALT when a limit fired — has no transaction at all. Those are precisely the rows
+most worth reviewing afterwards, and the audit trail could not answer "what was
+this about?" for any of them.
+
+It also gives decision attribution something to join on: you cannot score whether a
+decision was right without knowing what it was a decision about.
+
+Migration `0006` backfilled 62 rows from their transactions. Rows from before it
+that had no transaction stay blank permanently — their ticker was never stored
+anywhere, and inventing one would be worse than admitting the gap.
+

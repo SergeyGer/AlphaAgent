@@ -140,6 +140,42 @@ Beat entry point, `tasks.autonomous_market_monitoring_task`.
 
 ## Agent
 
+### `GET /api/portfolio/attribution/`
+
+Was the agent right? Scores every decision against what the market did next.
+
+| Parameter | Default | Notes |
+| --- | --- | --- |
+| `recent` | 25 | How many individual scored rows to return (1–200; a hostile value clamps rather than erroring) |
+
+```json
+{
+  "benchmark": "SPY",
+  "horizons": [
+    {"horizon_days": 1, "evaluated": 15, "directional_calls": 15, "hits": 4,
+     "hit_rate_pct": 26.7, "avg_decision_return_pct": "-0.2666",
+     "avg_benchmark_return_pct": "-0.0463", "avg_alpha_pct": "-0.2203",
+     "beat_benchmark": 3, "benchmarked": 15}
+  ],
+  "recent": [
+    {"id": 1, "decision_id": 1490, "horizon_days": 1, "ticker": "AAPL",
+     "action": "SELL", "price_at_decision": "332.89000000",
+     "price_at_horizon": "336.70000000", "forward_return_pct": "1.1457",
+     "decision_return_pct": "-1.1457", "benchmark_return_pct": "0.5995",
+     "directional_hit": false, "evaluated_at": "2026-10-14T13:00:00Z"}
+  ]
+}
+```
+
+Two fields are nullable, and the difference matters:
+
+- `hit_rate_pct` is `null` when nothing has been scored, **not** `0`. An empty
+  scorecard is not a scorecard of zero.
+- `directional_hit` is `null` for a HOLD. Holding makes no directional claim, so
+  it is not counted as a miss.
+
+See [[Decision-Attribution]] for the scoring rules.
+
 ### `GET /api/portfolio/logs/` — `200`, `400`, `401`
 
 AI decision audit trail (chain-of-thought, debate cases, token spend), newest first, paginated.

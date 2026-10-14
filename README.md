@@ -7,7 +7,7 @@
 [![CI](https://github.com/SergeyGer/AlphaAgent/actions/workflows/ci.yml/badge.svg)](https://github.com/SergeyGer/AlphaAgent/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/SergeyGer/AlphaAgent/actions/workflows/codeql.yml/badge.svg)](https://github.com/SergeyGer/AlphaAgent/actions/workflows/codeql.yml)
 [![Docs](https://github.com/SergeyGer/AlphaAgent/actions/workflows/docs.yml/badge.svg)](https://github.com/SergeyGer/AlphaAgent/actions/workflows/docs.yml)
-[![Tests](https://img.shields.io/badge/tests-500%20passing-brightgreen.svg)](https://github.com/SergeyGer/AlphaAgent/wiki/Quality-and-Testing)
+[![Tests](https://img.shields.io/badge/tests-519%20passing-brightgreen.svg)](https://github.com/SergeyGer/AlphaAgent/wiki/Quality-and-Testing)
 [![Coverage](coverage.svg)](https://github.com/SergeyGer/AlphaAgent/wiki/Quality-and-Testing)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -119,15 +119,17 @@ Everything below is in this repository and runs today.
 | Area | Delivered |
 | --- | --- |
 | **Multi-agent AI** | A three-agent adversarial debate on CrewAI, with a payload contract validated by a schema library and a guardrail that forces a retry on malformed output |
-| **Risk engine** | A deterministic execution guard enforcing allocation, cash, position and stop-loss limits, designed as a pure function so it can be exhaustively tested |
+| **Risk engine** | A deterministic execution guard enforcing allocation, cash, position, stop-loss, cumulative-exposure and concentration limits, designed as a pure function so it can be exhaustively tested |
 | **Autonomous scheduling** | A task queue that fans out one independent job per portfolio-and-instrument pair, on a timer, with cooldowns that stop overlapping runs compounding exposure |
 | **Decision audit trail** | Every run persisted with both sides of the argument, token usage and cost — queryable, streamable and prunable |
+| **Decision attribution** | Every decision scored against what the market did next — forward returns at 1/7/30 days, what the action was worth, and alpha against a benchmark. The audit trail proves *why*; this measures *whether it worked* |
+| **Position memory** | Each open position carries a written thesis and its own invalidation condition, fed back to the agents on every run so an exit has to argue with the reason for entry |
 | **Live analytics dashboard** | A React and TypeScript single-page app with an equity curve, allocation breakdown, real-time reasoning feed, approvals and trade history, streamed over WebSocket |
 | **Human-in-the-loop approvals** | Approve or reject any proposal from the dashboard or from Telegram, with the risk checks re-run against live prices at the moment of approval |
 | **Tool server** | Market and news data published over the Model Context Protocol, so external AI tools can consume it without touching this codebase |
 | **Telegram bot** | Inline-keyboard control: approvals, balance reports, open positions, pending queue, on-demand analysis, autopilot toggle |
 | **Operations** | Containerised multi-service stack, health checks, a pruning command for the audit trail, and documented failure modes |
-| **Quality gates** | 500 automated tests across both tiers, 77% backend coverage enforced, continuous integration on every push, static analysis, security scanning and automated dependency management |
+| **Quality gates** | 519 automated tests across both tiers, 77% backend coverage enforced, continuous integration on every push, static analysis, security scanning and automated dependency management |
 
 ## Skills demonstrated
 
@@ -251,7 +253,7 @@ configuration reference: [Configuration](https://github.com/SergeyGer/AlphaAgent
 
 | | |
 | --- | --- |
-| **500 automated tests** | 418 Python — risk guard, ledger, API, task pipeline, WebSockets, Telegram bot, tool server — plus 82 frontend (Vitest + Testing Library) covering the formatters, the WebSocket frame validator and the metric grid |
+| **519 automated tests** | 496 Python — risk guard, ledger, API, task pipeline, WebSockets, Telegram bot, tool server — plus 82 frontend (Vitest + Testing Library) covering the formatters, the WebSocket frame validator and the metric grid |
 | **77% coverage, enforced** | CI fails below a 70% floor, and the badge above is regenerated from the real run on every push to `main` |
 | **Continuous integration** | Lint, format, the full test suite against PostgreSQL 16, and a Docker image build — on every push |
 | **Security scanning** | CodeQL analysis plus a test that walks every publishable file looking for committed credentials |

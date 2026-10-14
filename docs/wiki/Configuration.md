@@ -60,6 +60,22 @@ The bundled Compose stack serves plain HTTP on `:8000`, so every HTTPS-related f
 `connect_timeout` is fixed at 10 seconds in `DATABASES["default"]["OPTIONS"]`; it is not
 environment-driven. The engine is always `django.db.backends.postgresql` — there is no SQLite path.
 
+## Per-portfolio limits
+
+These are columns on `Portfolio`, not environment variables — they are risk
+mandates belonging to an investor, not deployment settings.
+
+| Column | Default | Range | Purpose |
+| --- | --- | --- | --- |
+| `max_trade_allocation_pct` | 5.00 | 0–100 | Ceiling on a single trade, as a percentage of cash |
+| `max_portfolio_exposure_pct` | 90.00 | 0–100 | Ceiling on total invested capital, as a percentage of equity |
+| `max_ticker_concentration_pct` | 30.00 | 0–100 | Ceiling on one instrument, as a percentage of equity |
+| `daily_loss_limit_usd` | 500.00 | ≥ 0 | Kill switch once the day's realised loss breaches it |
+
+All four are enforced in the guard and duplicated as database `CHECK` constraints
+as a last line of defence. `seed_demo` sets them for the demo portfolio; see
+[[Execution-Guard]] for how the two portfolio-level ceilings behave.
+
 ## Host port
 
 | Variable | Default | Required | Purpose |
