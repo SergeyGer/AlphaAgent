@@ -109,6 +109,17 @@ export interface Portfolio {
   max_trade_allocation_pct: Decimal;
   max_trade_budget_usd: Decimal;
   daily_loss_limit_usd: Decimal;
+  /**
+   * Ceiling on total invested capital, as a percentage of equity.
+   *
+   * Optional because the deployed serializer did not always publish it: the
+   * column exists on the model, but a payload without it must render as "not
+   * published" rather than as a 0% ceiling (which would read as a total ban on
+   * holding anything).
+   */
+  max_portfolio_exposure_pct?: Decimal;
+  /** Ceiling on any one instrument, as a percentage of equity. Same caveat. */
+  max_ticker_concentration_pct?: Decimal;
   created_at: string;
   metrics: PortfolioMetrics;
   assets: Asset[];
@@ -239,6 +250,70 @@ export interface RecommendationDecisionResponse {
   executed: boolean;
   transaction_id: number | null;
   message: string;
+}
+
+/* ------------------------------------------------------------------ */
+/* Decision attribution ("was the agent right?")                       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Aggregate decision quality at one horizon, from
+ * `GET /api/portfolio/attribution/`.
+ *
+ * The nulls are load-bearing and must not be flattened to zero:
+ *
+ * * `hit_rate_pct` is `null` — not `0` — when nothing directional has been
+ *   scored yet. "Not measured" and "measured as total failure" are different
+ *   claims, and the backend deliberately distinguishes them.
+ * * `avg_benchmark_return_pct` / `avg_alpha_pct` are `null` when no benchmark
+ *   price was available for any scored decision. An unknown comparison is not a
+ *   loss.
+ */
+export interface AttributionScorecard {
+  horizon_days: number;
+  /** Decisions whose horizon has elapsed and which now have an outcome row. */
+  evaluated: number;
+  /** Of those, the ones that made a directional claim (BUY / SELL). */
+  directional_calls: number;
+  hits: number;
+  /** `null` when `directional_calls` is 0 — render as `—`, never `0%`. */
+  hit_rate_pct: number | null;
+  /** Decimal string; `"0.0000"` when nothing has been scored at this horizon. */
+  avg_decision_return_pct: Decimal | null;
+  avg_benchmark_return_pct: Decimal | null;
+  /** Average decision return minus average benchmark return; `null` without a benchmark. */
+  avg_alpha_pct: Decimal | null;
+  beat_benchmark: number;
+  benchmarked: number;
+}
+
+/** One scored decision at one horizon — a row of evidence behind the scorecard. */
+export interface DecisionOutcomeRow {
+  id: number;
+  decision_id: number;
+  horizon_days: number;
+  ticker: string;
+  action: string;
+  price_at_decision: Decimal;
+  price_at_horizon: Decimal;
+  forward_return_pct: Decimal;
+  /** What the action was worth (a SELL profits from a fall). */
+  decision_return_pct: Decimal;
+  benchmark_return_pct: Decimal | null;
+  /**
+   * `true` = right, `false` = wrong, `null` = the decision made no directional
+   * claim (a HOLD) and is therefore neither. Never render `null` as a miss.
+   */
+  directional_hit: boolean | null;
+  evaluated_at: string;
+}
+
+/** `GET /api/portfolio/attribution/` — the scorecard plus the rows behind it. */
+export interface AttributionResponse {
+  /** Benchmark symbol the alpha is measured against, e.g. `"SPY"`. */
+  benchmark: string;
+  horizons: AttributionScorecard[];
+  recent: DecisionOutcomeRow[];
 }
 
 /* ------------------------------------------------------------------ */

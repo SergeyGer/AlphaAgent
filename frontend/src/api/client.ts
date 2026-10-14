@@ -1,5 +1,6 @@
 import type {
   ApiErrorPayload,
+  AttributionResponse,
   DecisionLog,
   ListResponse,
   LoginResponse,
@@ -284,6 +285,18 @@ export const api = {
   /** `GET /api/portfolio/recommendations/` */
   recommendations(signal?: AbortSignal): Promise<ListResponse<Recommendation>> {
     return apiRequest<ListResponse<Recommendation>>('/api/portfolio/recommendations/', { signal });
+  },
+
+  /**
+   * `GET /api/portfolio/attribution/` — decision quality per horizon plus the
+   * recent outcome rows behind it.
+   *
+   * Not pushed over the WebSocket: the scorecard is only recomputed when a
+   * horizon elapses, so it is fetched on mount and on the refresh button rather
+   * than subscribed to.
+   */
+  attribution(signal?: AbortSignal): Promise<AttributionResponse> {
+    return apiRequest<AttributionResponse>('/api/portfolio/attribution/', { signal });
   },
 
   /** `GET /api/market/news/?ticker=&limit=` — headlines split by sentiment. */

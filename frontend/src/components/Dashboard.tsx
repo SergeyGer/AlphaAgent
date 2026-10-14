@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState, type ReactElement } from 'react';
 import { ApiError, api, errorMessage } from '../api/client';
+import { useAttribution } from '../hooks/useAttribution';
 import { useAuth } from '../hooks/useAuth';
 import { useDecisionLogs } from '../hooks/useDecisionLogs';
 import { usePortfolio } from '../hooks/usePortfolio';
@@ -12,6 +13,7 @@ import { feedItemFromLog, feedItemFromThinking, mergeFeed } from '../lib/feed';
 import { formatCurrency, formatQuantity } from '../lib/format';
 import type { FeedItem, PortfolioSnapshotEvent, SnapshotRange, StreamMessage } from '../types';
 import { AllocationChart } from './AllocationChart';
+import { DecisionQualityPanel } from './DecisionQualityPanel';
 import { ErrorState } from './Feedback';
 import { EquityChart } from './EquityChart';
 import { Header } from './Header';
@@ -37,6 +39,7 @@ export function Dashboard(): ReactElement {
   const transactions = useTransactions(token, TRANSACTION_LIMIT);
   const logs = useDecisionLogs(token);
   const recommendations = useRecommendations(token);
+  const attribution = useAttribution(token);
 
   const [liveFeed, setLiveFeed] = useState<FeedItem[]>([]);
   const [autonomyBusy, setAutonomyBusy] = useState(false);
@@ -53,6 +56,7 @@ export function Dashboard(): ReactElement {
     recommendations;
   const { refresh: refreshSnapshots } = snapshots;
   const { refresh: refreshLogs } = logs;
+  const { refresh: refreshAttribution } = attribution;
 
   const refreshAll = useCallback(() => {
     refreshPortfolio();
@@ -60,7 +64,15 @@ export function Dashboard(): ReactElement {
     refreshTransactions();
     refreshLogs();
     refreshRecommendations();
-  }, [refreshPortfolio, refreshSnapshots, refreshTransactions, refreshLogs, refreshRecommendations]);
+    refreshAttribution();
+  }, [
+    refreshPortfolio,
+    refreshSnapshots,
+    refreshTransactions,
+    refreshLogs,
+    refreshRecommendations,
+    refreshAttribution,
+  ]);
 
   // Latest refresh callback, reachable from the socket's `onOpen` handler.
   const refreshAllRef = useRef(refreshAll);
@@ -234,7 +246,12 @@ export function Dashboard(): ReactElement {
   const feed = useMemo(() => mergeFeed(baseFeed, liveFeed, FEED_CAP), [baseFeed, liveFeed]);
 
   const refreshing =
-    portfolioLoading || snapshots.loading || transactions.loading || logs.loading || recommendations.loading;
+    portfolioLoading ||
+    snapshots.loading ||
+    transactions.loading ||
+    logs.loading ||
+    recommendations.loading ||
+    attribution.loading;
 
   return (
     <div className="min-h-screen bg-slate-950">
@@ -324,6 +341,16 @@ export function Dashboard(): ReactElement {
 
           <div className="flex min-w-0 lg:col-span-3">
             <NewsSentimentPanel className="h-full w-full" />
+          </div>
+
+          <div className="flex min-w-0 lg:col-span-3">
+            <DecisionQualityPanel
+              className="h-full w-full"
+              scorecard={attribution.data}
+              loading={attribution.loading}
+              error={attribution.error}
+              onRetry={refreshAttribution}
+            />
           </div>
 
           <div className="flex min-w-0 lg:col-span-3">

@@ -237,6 +237,46 @@ class BuildExposureTests(TestCase):
 
 
 @override_settings(CACHES=TEST_CACHES)
+class LimitsAreExposedByTheApiTests(TestCase):
+    """The limits must reach the client, not only the database.
+
+    They were added to the model and to a migration and then forgotten in the
+    serializer, so the database enforced two ceilings that the API never
+    mentioned. A dashboard cannot display a limit it is not told about, and the
+    omission was invisible: nothing errored, the fields were simply absent.
+    """
+
+    def setUp(self):
+        self.user = make_user("expose-user")
+        self.portfolio = make_portfolio(self.user)
+        from core.tests.helpers import auth_client
+
+        self.client = auth_client(self.user)
+
+    def test_every_limit_on_the_model_appears_in_the_payload(self):
+        from core.models import Portfolio
+
+        payload = self.client.get("/api/portfolio/").json()
+
+        limit_fields = [
+            f.name
+            for f in Portfolio._meta.get_fields()
+            if f.name.endswith(("_pct", "_usd")) and getattr(f, "concrete", False)
+        ]
+        self.assertTrue(limit_fields, "expected the model to declare limit fields")
+
+        for name in limit_fields:
+            with self.subTest(field=name):
+                self.assertIn(name, payload, f"{name} is enforced but not exposed")
+
+    def test_the_exposure_ceilings_arrive_with_their_values(self):
+        payload = self.client.get("/api/portfolio/").json()
+
+        self.assertEqual(payload["max_portfolio_exposure_pct"], "90.00")
+        self.assertEqual(payload["max_ticker_concentration_pct"], "30.00")
+
+
+@override_settings(CACHES=TEST_CACHES)
 class LimitDefaultsTests(TestCase):
     def test_both_limits_default_to_something_that_actually_binds(self):
         """A default of 0 would be indistinguishable from disabled."""

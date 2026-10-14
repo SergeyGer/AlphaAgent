@@ -28,6 +28,8 @@ const basePortfolio = (overrides: Partial<Portfolio> = {}): Portfolio =>
     max_trade_allocation_pct: '5.00',
     max_trade_budget_usd: '1090.07',
     daily_loss_limit_usd: '500.00',
+    max_portfolio_exposure_pct: '90.00',
+    max_ticker_concentration_pct: '30.00',
     created_at: '2026-09-30T00:00:00Z',
     assets: [],
     metrics: {
@@ -72,6 +74,19 @@ describe('MetricsGrid', () => {
     expect(screen.getByText('AI Spend Today')).toBeInTheDocument();
     expect(screen.getByText('$3.25')).toBeInTheDocument();
     expect(screen.getByText('$1.75 of $5.00 · enforced')).toBeInTheDocument();
+  });
+
+  it('shows the portfolio ceilings below the headline cards', () => {
+    render(<MetricsGrid portfolio={basePortfolio()} loading={false} />);
+
+    expect(screen.getByText('Exposure ceiling')).toBeInTheDocument();
+    expect(screen.getByText('Concentration ceiling')).toBeInTheDocument();
+    expect(screen.getByText('17.9%')).toBeInTheDocument();
+    expect(
+      screen.getByText('$4,740.62 of $23,887.90 ceiling (90.00% of equity) · $19,147.28 headroom'),
+    ).toBeInTheDocument();
+    // No assets in this fixture: the meter says so rather than inventing 0%.
+    expect(screen.getByText('No open positions')).toBeInTheDocument();
   });
 
   it('says when the ceiling is not enforced rather than implying protection', () => {

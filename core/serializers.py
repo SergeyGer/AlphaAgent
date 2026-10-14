@@ -157,6 +157,11 @@ class PortfolioSerializer(serializers.ModelSerializer):
             "max_trade_allocation_pct",
             "max_trade_budget_usd",
             "daily_loss_limit_usd",
+            # The portfolio-level ceilings. Omitted when they were first added,
+            # which meant the database enforced them while the API never mentioned
+            # them - a dashboard cannot show a limit it is not told about.
+            "max_portfolio_exposure_pct",
+            "max_ticker_concentration_pct",
             "ai_budget",
             "created_at",
             "metrics",

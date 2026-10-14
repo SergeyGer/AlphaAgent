@@ -10,6 +10,7 @@ import {
 } from '../lib/format';
 import type { Portfolio } from '../types';
 import { MetricCard, type MetricCardProps } from './MetricCard';
+import { PortfolioLimits } from './PortfolioLimits';
 
 interface LiveMetricProps extends Omit<MetricCardProps, 'flash' | 'loading'> {
   numeric: number | null;
@@ -183,6 +184,10 @@ export function MetricsGrid({ portfolio, loading }: MetricsGridProps): ReactElem
           progress={{ value: aiSpent, max: aiLimit }}
         />
       </div>
+
+      {/* Secondary to the headline cards: how close the book is to the two
+          portfolio-level ceilings, not what it is worth. */}
+      <PortfolioLimits portfolio={portfolio} loading={loading} />
 
       <dl className="flex flex-wrap items-center gap-x-5 gap-y-1.5 rounded-lg border border-slate-800/70 bg-slate-900/30 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-slate-500">
         <MetaItem label="Risk profile" value={portfolio?.risk_profile_display ?? portfolio?.risk_profile ?? '—'} />

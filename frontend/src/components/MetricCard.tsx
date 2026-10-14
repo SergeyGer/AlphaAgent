@@ -30,6 +30,31 @@ const BAR_TONE: Record<NonNullable<MetricProgress['tone']>, string> = {
   sky: 'bg-sky-400',
 };
 
+/**
+ * The card's usage bar, exported so the compact limit meters in
+ * `PortfolioLimits` render the identical element rather than a look-alike.
+ */
+export function ProgressBar({ label, progress }: { label: string; progress: MetricProgress }): ReactElement {
+  const usedPct = clamp((progress.value / (progress.max || 1)) * 100, 0, 100);
+  const tone = progress.tone ?? (usedPct >= 90 ? 'rose' : usedPct >= 60 ? 'amber' : 'emerald');
+
+  return (
+    <div
+      className="h-1.5 w-full overflow-hidden rounded-full bg-slate-800"
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(usedPct)}
+      aria-label={label}
+    >
+      <div
+        className={cn('h-full rounded-full transition-all duration-700 ease-terminal', BAR_TONE[tone])}
+        style={{ width: `${usedPct}%` }}
+      />
+    </div>
+  );
+}
+
 function flashAnimation(flash: FlashDirection | null | undefined): string {
   if (flash === 'up') return 'animate-flash-up';
   if (flash === 'down') return 'animate-flash-down';
@@ -46,9 +71,6 @@ export function MetricCard({
   loading = false,
   footer,
 }: MetricCardProps): ReactElement {
-  const usedPct = progress ? clamp((progress.value / (progress.max || 1)) * 100, 0, 100) : 0;
-  const tone = progress?.tone ?? (usedPct >= 90 ? 'rose' : usedPct >= 60 ? 'amber' : 'emerald');
-
   return (
     <div className="flex min-w-0 flex-col gap-1.5 rounded-xl border border-slate-800/80 bg-slate-900/50 px-3.5 py-3 shadow-panel transition-colors duration-300 hover:border-slate-700">
       <p className="truncate font-mono text-[10px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
@@ -70,19 +92,7 @@ export function MetricCard({
 
       {progress && !loading ? (
         <div className="space-y-1">
-          <div
-            className="h-1.5 w-full overflow-hidden rounded-full bg-slate-800"
-            role="progressbar"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={Math.round(usedPct)}
-            aria-label={`${label} consumption`}
-          >
-            <div
-              className={cn('h-full rounded-full transition-all duration-700 ease-terminal', BAR_TONE[tone])}
-              style={{ width: `${usedPct}%` }}
-            />
-          </div>
+          <ProgressBar label={`${label} consumption`} progress={progress} />
         </div>
       ) : null}
 
