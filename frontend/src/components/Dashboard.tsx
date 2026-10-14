@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState, type ReactElement } from 'react';
 import { ApiError, api, errorMessage } from '../api/client';
 import { useAttribution } from '../hooks/useAttribution';
+import { useTheses } from '../hooks/useTheses';
 import { useAuth } from '../hooks/useAuth';
 import { useDecisionLogs } from '../hooks/useDecisionLogs';
 import { usePortfolio } from '../hooks/usePortfolio';
@@ -14,6 +15,7 @@ import { formatCurrency, formatQuantity } from '../lib/format';
 import type { FeedItem, PortfolioSnapshotEvent, SnapshotRange, StreamMessage } from '../types';
 import { AllocationChart } from './AllocationChart';
 import { DecisionQualityPanel } from './DecisionQualityPanel';
+import { PositionTheses } from './PositionTheses';
 import { ErrorState } from './Feedback';
 import { EquityChart } from './EquityChart';
 import { Header } from './Header';
@@ -40,6 +42,7 @@ export function Dashboard(): ReactElement {
   const logs = useDecisionLogs(token);
   const recommendations = useRecommendations(token);
   const attribution = useAttribution(token);
+  const theses = useTheses(token);
 
   const [liveFeed, setLiveFeed] = useState<FeedItem[]>([]);
   const [autonomyBusy, setAutonomyBusy] = useState(false);
@@ -57,6 +60,7 @@ export function Dashboard(): ReactElement {
   const { refresh: refreshSnapshots } = snapshots;
   const { refresh: refreshLogs } = logs;
   const { refresh: refreshAttribution } = attribution;
+  const { refresh: refreshTheses } = theses;
 
   const refreshAll = useCallback(() => {
     refreshPortfolio();
@@ -65,6 +69,7 @@ export function Dashboard(): ReactElement {
     refreshLogs();
     refreshRecommendations();
     refreshAttribution();
+    refreshTheses();
   }, [
     refreshPortfolio,
     refreshSnapshots,
@@ -72,6 +77,7 @@ export function Dashboard(): ReactElement {
     refreshLogs,
     refreshRecommendations,
     refreshAttribution,
+    refreshTheses,
   ]);
 
   // Latest refresh callback, reachable from the socket's `onOpen` handler.
@@ -351,6 +357,10 @@ export function Dashboard(): ReactElement {
               error={attribution.error}
               onRetry={refreshAttribution}
             />
+          </div>
+
+          <div className="min-w-0 lg:col-span-6">
+            <PositionTheses theses={theses.data} loading={theses.loading} />
           </div>
 
           <div className="flex min-w-0 lg:col-span-3">

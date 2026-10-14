@@ -7,7 +7,7 @@
 [![CI](https://github.com/SergeyGer/AlphaAgent/actions/workflows/ci.yml/badge.svg)](https://github.com/SergeyGer/AlphaAgent/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/SergeyGer/AlphaAgent/actions/workflows/codeql.yml/badge.svg)](https://github.com/SergeyGer/AlphaAgent/actions/workflows/codeql.yml)
 [![Docs](https://github.com/SergeyGer/AlphaAgent/actions/workflows/docs.yml/badge.svg)](https://github.com/SergeyGer/AlphaAgent/actions/workflows/docs.yml)
-[![Tests](https://img.shields.io/badge/tests-519%20passing-brightgreen.svg)](https://github.com/SergeyGer/AlphaAgent/wiki/Quality-and-Testing)
+[![Tests](https://img.shields.io/badge/tests-620%20passing-brightgreen.svg)](https://github.com/SergeyGer/AlphaAgent/wiki/Quality-and-Testing)
 [![Coverage](coverage.svg)](https://github.com/SergeyGer/AlphaAgent/wiki/Quality-and-Testing)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -56,6 +56,10 @@ agent debate expanding, news sentiment and the trade ledger.*
 **Risk ceilings.** Invested capital against the portfolio exposure limit, and the largest position against the single-instrument concentration limit — the check that caught a real over-concentration in this demo portfolio.
 
 ![Risk ceilings](docs/screenshots/portfolio-limits.png)
+
+**Position theses.** The standing reason for holding each position and the condition that would prove it wrong — the same text the agents receive on every run, so an exit has to argue with the reason for entry.
+
+![Position theses](docs/screenshots/position-theses.png)
 
 **The debate view.** Expand any decision to read the bull case, the bear case and the adjudicator's verdict side by side.
 
@@ -137,7 +141,7 @@ Everything below is in this repository and runs today.
 | **Tool server** | Market and news data published over the Model Context Protocol, so external AI tools can consume it without touching this codebase |
 | **Telegram bot** | Inline-keyboard control: approvals, balance reports, open positions, pending queue, on-demand analysis, autopilot toggle |
 | **Operations** | Containerised multi-service stack, health checks, a pruning command for the audit trail, and documented failure modes |
-| **Quality gates** | 519 automated tests across both tiers, 77% backend coverage enforced, continuous integration on every push, static analysis, security scanning and automated dependency management |
+| **Quality gates** | 620 automated tests across both tiers, 77% backend coverage enforced, continuous integration on every push, static analysis, security scanning and automated dependency management |
 
 ## Skills demonstrated
 
@@ -261,7 +265,7 @@ configuration reference: [Configuration](https://github.com/SergeyGer/AlphaAgent
 
 | | |
 | --- | --- |
-| **519 automated tests** | 496 Python — risk guard, ledger, API, task pipeline, WebSockets, Telegram bot, tool server — plus 82 frontend (Vitest + Testing Library) covering the formatters, the WebSocket frame validator and the metric grid |
+| **620 automated tests** | 505 Python — risk guard, ledger, API, task pipeline, WebSockets, Telegram bot, tool server — plus 115 frontend (Vitest + Testing Library) covering the formatters, the WebSocket frame validator and the metric grid |
 | **77% coverage, enforced** | CI fails below a 70% floor, and the badge above is regenerated from the real run on every push to `main` |
 | **Continuous integration** | Lint, format, the full test suite against PostgreSQL 16, and a Docker image build — on every push |
 | **Security scanning** | CodeQL analysis plus a test that walks every publishable file looking for committed credentials |

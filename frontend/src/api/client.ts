@@ -308,9 +308,21 @@ export const api = {
    * exactly what the CIO is arguing against when it proposes an exit. Open
    * theses only; the superseded history is reachable via `?include=closed` and
    * is not needed on the dashboard.
+   *
+   * Unwraps DRF's paginated envelope. This endpoint is a `ListAPIView` under the
+   * project's default `PageNumberPagination`, so it returns
+   * `{count, next, previous, results}` — unlike the attribution endpoint, which
+   * returns a plain object. Reading it as a bare array gives `undefined` for
+   * `.length`, and the panel then renders nothing at all: no error, no console
+   * warning, just an absent section. Tolerant of both shapes so a future change
+   * to pagination cannot silently empty the panel again.
    */
-  thesis(signal?: AbortSignal): Promise<ThesisRow[]> {
-    return apiRequest<ThesisRow[]>('/api/portfolio/thesis/', { signal });
+  async thesis(signal?: AbortSignal): Promise<ThesisRow[]> {
+    const body = await apiRequest<ThesisRow[] | ListResponse<ThesisRow>>(
+      '/api/portfolio/thesis/',
+      { signal },
+    );
+    return Array.isArray(body) ? body : (body.results ?? []);
   },
 
   /** `GET /api/market/news/?ticker=&limit=` — headlines split by sentiment. */
