@@ -104,6 +104,25 @@ class TradeProposal(BaseModel):
         min_length=1,
         description="Chain-of-thought explaining the decision.",
     )
+    #: Why the position is worth holding, and what would prove that wrong.
+    #:
+    #: Optional with a default so a model that omits them still validates - the
+    #: guardrail must not reject an otherwise sound decision over two advisory
+    #: fields. Recorded on a BUY and fed back to the next run as prior belief.
+    thesis: str = Field(
+        default="",
+        description=(
+            "On a BUY: why this position is worth holding, in one or two sentences. "
+            "Leave empty for HOLD and SELL."
+        ),
+    )
+    invalidation: str = Field(
+        default="",
+        description=(
+            "On a BUY: the observable condition that would make the thesis wrong. "
+            "Leave empty if you cannot name one."
+        ),
+    )
 
     @field_validator("action", "sentiment", mode="before")
     @classmethod
@@ -209,6 +228,9 @@ class DecisionContext:
     financial_health: Any = None
     price_history: Any = None
     portfolio_id: int | None = None
+    #: The live thesis for this instrument, when one exists. Supplied so the agent
+    #: argues with its own prior reasoning in view rather than from a blank slate.
+    current_thesis: Any = None
 
     @property
     def position_value_usd(self) -> Decimal:
@@ -227,7 +249,7 @@ class DecisionContext:
         """Compact factual brief handed to the CIO agent."""
         price = f"${self.current_price}" if self.current_price is not None else "unavailable"
         change = f"{self.price_change_pct}%" if self.price_change_pct is not None else "unknown"
-        return (
+        brief = (
             f"Ticker: {self.ticker}\n"
             f"Investor risk profile: {self.risk_profile}\n"
             f"Live price: {price} (session change: {change})\n"
@@ -239,6 +261,34 @@ class DecisionContext:
             f"Daily loss limit: ${self.daily_loss_limit_usd} "
             f"(realised today: ${self.realised_pnl_today_usd})"
         )
+        return brief + self._thesis_block()
+
+    def _thesis_block(self) -> str:
+        """The prior belief about this position, or an explicit absence of one.
+
+        The negative case is stated rather than omitted. A blank section reads as
+        "no information", which a model is free to interpret as "no opinion was
+        ever formed" - and then to invent one. Saying there is none removes the
+        ambiguity.
+        """
+        thesis = self.current_thesis
+        if thesis is None:
+            return (
+                "\n\nPRIOR THESIS\n"
+                "None on record - either this is a new position or it was opened "
+                "before theses were recorded. You are not contradicting an earlier "
+                "view; there is none."
+            )
+
+        block = f"\n\nPRIOR THESIS (recorded when this position was opened)\n{thesis.thesis}"
+        if thesis.invalidation:
+            block += f"\nStated invalidation condition: {thesis.invalidation}"
+        else:
+            block += (
+                "\nNo invalidation condition was recorded. If you now propose to exit, "
+                "say what the reason for holding has stopped being true."
+            )
+        return block
 
 
 @dataclass
@@ -820,7 +870,14 @@ class AlphaAgentOrchestrator:
                 "SELL. If they are genuinely balanced, HOLD - that is a valid, "
                 "disciplined answer, not a failure.\n"
                 "- Explain in `reasoning` which argument won and why, and name the "
-                "single strongest point on the losing side.\n\n"
+                "single strongest point on the losing side.\n"
+                "- If a PRIOR THESIS is recorded above and you propose to SELL, state "
+                "in `reasoning` what has stopped being true. Exiting a position without "
+                "engaging with the reason it was opened is a change of mind by accident, "
+                "not by argument.\n"
+                "- If you propose to BUY, fill in `thesis` (why this is worth holding) "
+                "and `invalidation` (the observable condition that would prove it "
+                "wrong). A thesis that cannot be wrong is not a thesis.\n\n"
                 "Hard rules:\n"
                 f"- Never propose spending more than ${context.max_trade_budget_usd}.\n"
                 "- `amount` is a QUANTITY of the asset in units, NOT a dollar figure.\n"

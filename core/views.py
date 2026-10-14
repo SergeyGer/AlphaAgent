@@ -16,7 +16,7 @@ import logging
 import secrets
 
 from django.conf import settings
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Q
 from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
@@ -184,7 +184,14 @@ class AgentDecisionLogListView(generics.ListAPIView):
 
         ticker = self.request.query_params.get("ticker")
         if ticker:
-            queryset = queryset.filter(transaction__ticker=ticker.strip().upper())
+            # The stored column, not `transaction__ticker`: a HOLD or a HALT has no
+            # transaction, so filtering through one silently excluded exactly the
+            # rows a reader is most likely to be looking for. Falls back to the
+            # transaction for rows written before the column existed.
+            requested = ticker.strip().upper()
+            queryset = queryset.filter(
+                Q(ticker=requested) | Q(ticker="", transaction__ticker=requested)
+            )
 
         executed = self.request.query_params.get("executed")
         if executed is not None:
@@ -579,3 +586,48 @@ class MarketNewsView(APIView):
         payload["neutral"] = [a.as_dict() for a in report.neutral_articles]
 
         return Response(MarketNewsSerializer(payload).data, status=status.HTTP_200_OK)
+
+
+class DecisionScorecardView(APIView):
+    """``GET /api/portfolio/attribution/`` - was the agent right?
+
+    The audit trail answers *why* each decision was made. This answers *whether it
+    worked*, which the system previously had no way to say. Three horizons, because
+    a call can look wrong at one day and right at thirty, and a recent list so the
+    aggregate can be checked against the individual rows behind it.
+
+    Read-only and computed on request rather than materialised: the outcome rows
+    are small and indexed, and a stored scorecard would be one more thing to keep
+    in step with the data it summarises.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from core.models import DecisionOutcome
+        from core.serializers import DecisionOutcomeSerializer
+        from services.attribution import BENCHMARK_TICKER, build_scorecard
+
+        portfolio = get_portfolio(request.user)
+
+        horizons = [
+            build_scorecard(h, portfolio=portfolio).as_dict() for h in DecisionOutcome.HORIZONS
+        ]
+
+        try:
+            recent_limit = max(1, min(int(request.query_params.get("recent", 25)), 200))
+        except (TypeError, ValueError):
+            recent_limit = 25
+
+        recent = DecisionOutcome.objects.filter(decision__portfolio=portfolio).order_by(
+            "-decision__created_at", "horizon_days"
+        )[:recent_limit]
+
+        return Response(
+            {
+                "benchmark": BENCHMARK_TICKER,
+                "horizons": horizons,
+                "recent": DecisionOutcomeSerializer(recent, many=True).data,
+            },
+            status=status.HTTP_200_OK,
+        )

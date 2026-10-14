@@ -19,7 +19,12 @@ from services.market_data import PriceQuote, get_latest_quote
 if TYPE_CHECKING:  # pragma: no cover
     from core.models import Portfolio
 
-__all__ = ["PortfolioMetrics", "build_price_map", "compute_metrics"]
+__all__ = [
+    "PortfolioMetrics",
+    "build_exposure",
+    "build_price_map",
+    "compute_metrics",
+]
 
 CENT = Decimal("0.01")
 ZERO = Decimal("0.00")
@@ -151,3 +156,45 @@ def compute_metrics(
         metrics.block_reason = metrics.block_reason or "Portfolio has no buying power."
 
     return metrics
+
+
+def build_exposure(portfolio, ticker: str, price_map: dict | None = None):
+    """Market values the execution guard needs for the portfolio-level limits.
+
+    Lives here rather than in ``services/execution.py`` because it performs I/O -
+    prices come from the network - and the guard is deliberately a pure function
+    so the safety-critical logic can be tested without a database or a market.
+    This is the adapter that feeds it.
+
+    ``ticker`` is the instrument being traded, whose existing holding is the
+    numerator for the concentration limit. Its value is taken at market when a
+    price is known and at cost otherwise, matching how the dashboard values
+    positions it cannot price: marking at cost is wrong, but it is wrong in the
+    conservative direction for a ceiling.
+    """
+    from services.execution import Exposure
+
+    assets = list(portfolio.assets.all())
+    if price_map is None:
+        fallbacks = {a.ticker.upper(): a.avg_purchase_price for a in assets}
+        price_map = build_price_map({a.ticker for a in assets}, fallbacks=fallbacks)
+
+    positions_value = ZERO
+    ticker_value = ZERO
+    wanted = (ticker or "").upper()
+
+    for asset in assets:
+        quote = price_map.get(asset.ticker.upper())
+        price = getattr(quote, "price", None) or asset.avg_purchase_price
+        value = (asset.amount * price).quantize(CENT)
+        positions_value += value
+        if asset.ticker.upper() == wanted:
+            ticker_value = value
+
+    equity = (portfolio.balance_usd + positions_value).quantize(CENT)
+
+    return Exposure(
+        positions_value_usd=positions_value.quantize(CENT),
+        ticker_value_usd=ticker_value.quantize(CENT),
+        equity_usd=equity,
+    )

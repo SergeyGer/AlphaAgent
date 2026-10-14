@@ -75,6 +75,27 @@ class Portfolio(models.Model):
         default=False,
         help_text="When True the AI agents may execute trades without human approval.",
     )
+    #: Ceiling on total invested capital, as a percentage of equity.
+    #:
+    #: The per-trade limit alone is unbounded across a sequence: Beat sweeps every
+    #: fifteen minutes, so twenty individually-permitted 5% buys reach fully
+    #: invested without any single decision looking wrong. This is the cumulative
+    #: control ADR-0001 lists as missing.
+    max_portfolio_exposure_pct = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal("90.00"),
+        help_text="Maximum percentage of equity that may be held in positions.",
+    )
+    #: Ceiling on one instrument, as a percentage of equity. Concentration is a
+    #: different risk from exposure: a portfolio 90% invested in one name passes
+    #: every per-trade check and is not diversified at all.
+    max_ticker_concentration_pct = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal("30.00"),
+        help_text="Maximum percentage of equity that may be held in one instrument.",
+    )
     max_trade_allocation_pct = models.DecimalField(
         max_digits=4,
         decimal_places=2,
@@ -106,6 +127,19 @@ class Portfolio(models.Model):
             models.CheckConstraint(
                 condition=Q(daily_loss_limit_usd__gte=0),
                 name="portfolio_loss_limit_non_negative",
+            ),
+            # A ceiling is a percentage of equity, so 0-100 is the only range
+            # that means anything. The database enforces it as a last line of
+            # defence behind the guard, the same way the other limits are.
+            models.CheckConstraint(
+                condition=Q(max_portfolio_exposure_pct__gte=0)
+                & Q(max_portfolio_exposure_pct__lte=100),
+                name="portfolio_exposure_pct_range",
+            ),
+            models.CheckConstraint(
+                condition=Q(max_ticker_concentration_pct__gte=0)
+                & Q(max_ticker_concentration_pct__lte=100),
+                name="portfolio_concentration_pct_range",
             ),
         ]
 
@@ -223,6 +257,17 @@ class AgentDecisionLog(models.Model):
         on_delete=models.CASCADE,
         related_name="decision_logs",
     )
+    #: The instrument this decision was about.
+    #:
+    #: Denormalised on purpose. The ticker used to be reachable only through
+    #: ``transaction``, which meant a decision that executed nothing - a HOLD, or
+    #: a HALT when a limit fired - had no ticker at all. That is precisely the
+    #: set of decisions most worth reviewing afterwards, so the audit trail could
+    #: not answer "what was this about?" for the rows that matter most.
+    #:
+    #: It also gives decision attribution something to join on: you cannot score
+    #: whether a decision was right without knowing what it was a decision about.
+    ticker = models.CharField(max_length=32, blank=True, default="", db_index=True)
     transaction = models.OneToOneField(
         Transaction,
         on_delete=models.SET_NULL,
@@ -279,6 +324,183 @@ class AgentDecisionLog(models.Model):
 
     def __str__(self) -> str:
         return f"[{self.created_at:%Y-%m-%d %H:%M}] {self.action_taken}"
+
+
+class ThesisStatus(models.TextChoices):
+    OPEN = "OPEN", "Open"
+    CLOSED = "CLOSED", "Closed"
+    INVALIDATED = "INVALIDATED", "Invalidated"
+
+
+class PositionThesis(models.Model):
+    """Why we hold this instrument, and what would prove us wrong.
+
+    Added because the agent had no memory across runs. Each sweep built a fresh
+    crew with no knowledge of what it decided last time or why, so the system
+    could sell a position at 10:00 and buy it back at 10:15 without noticing -
+    not because it changed its mind, but because it had no record of having one.
+
+    ``memory=False`` on the crew is deliberate (see ADR-0007): a conversational
+    memory would grow without bound and make decisions irreproducible. This is the
+    narrow version of the same idea - one durable paragraph per open position,
+    carried into every run as context, and written by the agent that opened it.
+
+    A thesis is a claim, not a summary. ``invalidation`` exists so the bear has
+    something specific to attack: "the bull case is wrong" is not a criticism,
+    "gross margin below 40% invalidates this" is.
+    """
+
+    portfolio = models.ForeignKey(
+        Portfolio,
+        on_delete=models.CASCADE,
+        related_name="theses",
+    )
+    ticker = models.CharField(max_length=32, db_index=True)
+
+    #: Why the position was opened, in the words of the agent that opened it.
+    thesis = models.TextField()
+    #: The observable condition that would make the thesis wrong. May be blank -
+    #: an agent that cannot name one has told you something useful.
+    invalidation = models.TextField(blank=True, default="")
+
+    status = models.CharField(
+        max_length=12, choices=ThesisStatus.choices, default=ThesisStatus.OPEN, db_index=True
+    )
+
+    #: Provenance. Which decision opened this, and which one closed it.
+    opened_by = models.ForeignKey(
+        AgentDecisionLog,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="theses_opened",
+    )
+    closed_by = models.ForeignKey(
+        AgentDecisionLog,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="theses_closed",
+    )
+
+    opened_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    closed_at = models.DateTimeField(null=True, blank=True)
+    close_reason = models.TextField(blank=True, default="")
+
+    class Meta:
+        verbose_name = "Position thesis"
+        verbose_name_plural = "Position theses"
+        ordering = ["-opened_at"]
+        constraints = [
+            # One live thesis per instrument. Superseded theses stay as history
+            # rather than being overwritten, so the record shows what we believed
+            # at each point rather than only what we believe now.
+            models.UniqueConstraint(
+                fields=["portfolio", "ticker"],
+                condition=Q(status=ThesisStatus.OPEN),
+                name="one_open_thesis_per_portfolio_ticker",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["portfolio", "status"], name="thesis_portfolio_status_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.ticker} [{self.status}] {self.thesis[:48]}"
+
+    @classmethod
+    def open_for(cls, portfolio, ticker: str):
+        """The live thesis for this instrument, or ``None``."""
+        return cls.objects.filter(
+            portfolio=portfolio, ticker=(ticker or "").upper(), status=ThesisStatus.OPEN
+        ).first()
+
+
+class DecisionOutcome(models.Model):
+    """What actually happened after a decision, measured at a fixed horizon.
+
+    The audit trail records *why* every decision was made, and does so well. It
+    recorded nothing about whether any of them were any good: a SELL that avoided
+    a drawdown and a SELL that missed a rally both read as well-argued decisions,
+    months later, in the same table.
+
+    This is the other half. For each decision and each horizon, it stores what the
+    instrument did next, what that meant for the action taken, and what a broad
+    benchmark did over the same window - so the system can be scored rather than
+    believed.
+
+    One row per (decision, horizon) rather than per decision, because a decision
+    can look wrong at one day and right at thirty. Collapsing them would hide
+    exactly the disagreement worth seeing.
+    """
+
+    #: Horizons in calendar days. Short and long deliberately: one day measures
+    #: whether the timing was lucky, thirty measures whether the thesis held.
+    HORIZONS = (1, 7, 30)
+
+    decision = models.ForeignKey(
+        AgentDecisionLog,
+        on_delete=models.CASCADE,
+        related_name="outcomes",
+    )
+    horizon_days = models.PositiveSmallIntegerField()
+
+    #: Denormalised so a scorecard can be aggregated without joining the log's
+    #: transaction, which a HOLD does not have.
+    ticker = models.CharField(max_length=32, db_index=True)
+    #: BUY / SELL / HOLD / OTHER, normalised from the log's free-text action.
+    action = models.CharField(max_length=16)
+
+    price_at_decision = models.DecimalField(max_digits=18, decimal_places=8)
+    price_at_horizon = models.DecimalField(max_digits=18, decimal_places=8)
+
+    #: What the instrument did over the window. Sign is the market's, not ours.
+    forward_return_pct = models.DecimalField(max_digits=12, decimal_places=4)
+    #: What that return was worth *to this action*: positive for a BUY when the
+    #: price rose, and positive for a SELL when it fell. This is the column that
+    #: answers "was the call right?", and it is zero for a HOLD by construction.
+    decision_return_pct = models.DecimalField(max_digits=12, decimal_places=4, default=Decimal("0"))
+
+    #: Broad-market return over the same window, for context. Null when the
+    #: benchmark could not be priced - a missing benchmark is not a zero one.
+    benchmark_return_pct = models.DecimalField(
+        max_digits=12, decimal_places=4, null=True, blank=True
+    )
+
+    #: True when the direction was right, False when wrong, NULL when the action
+    #: made no directional claim. A HOLD is not a call that can be scored this
+    #: way, and counting it as a miss would be dishonest.
+    directional_hit = models.BooleanField(null=True, blank=True)
+
+    evaluated_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        verbose_name = "Decision outcome"
+        verbose_name_plural = "Decision outcomes"
+        ordering = ["-evaluated_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["decision", "horizon_days"], name="outcome_unique_per_horizon"
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["ticker", "horizon_days"], name="outcome_ticker_horizon_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.ticker} {self.action} +{self.horizon_days}d = {self.decision_return_pct}%"
+
+    @property
+    def beat_benchmark(self) -> bool | None:
+        """Whether the action produced more than the market did over the window.
+
+        ``None`` when there is no benchmark, rather than ``False``: an unknown
+        comparison is not a loss.
+        """
+        if self.benchmark_return_pct is None:
+            return None
+        return self.decision_return_pct > self.benchmark_return_pct
 
 
 # ---------------------------------------------------------------------------

@@ -29,6 +29,7 @@ from rest_framework.authtoken.views import obtain_auth_token
 from core.views import (
     AdvisorySweepView,
     AgentDecisionLogListView,
+    DecisionScorecardView,
     MarketNewsView,
     PortfolioDetailView,
     PortfolioSnapshotListView,
@@ -54,6 +55,11 @@ urlpatterns = [
         name="portfolio-toggle-autonomy",
     ),
     path("portfolio/logs/", AgentDecisionLogListView.as_view(), name="portfolio-logs"),
+    path(
+        "portfolio/attribution/",
+        DecisionScorecardView.as_view(),
+        name="portfolio-attribution",
+    ),
     path(
         "portfolio/transactions/",
         TransactionListView.as_view(),

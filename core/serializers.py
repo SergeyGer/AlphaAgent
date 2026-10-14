@@ -9,6 +9,7 @@ from rest_framework import serializers
 from core.models import (
     AgentDecisionLog,
     Asset,
+    DecisionOutcome,
     Portfolio,
     PortfolioSnapshot,
     TelegramLink,
@@ -19,6 +20,7 @@ from core.models import (
 __all__ = [
     "AgentDecisionLogSerializer",
     "AssetSerializer",
+    "DecisionOutcomeSerializer",
     "PortfolioSerializer",
     "ToggleAutonomySerializer",
     "TransactionSerializer",
@@ -254,6 +256,27 @@ class TransactionSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class DecisionOutcomeSerializer(serializers.ModelSerializer):
+    """One scored decision at one horizon - what happened, and what it was worth."""
+
+    class Meta:
+        model = DecisionOutcome
+        fields = [
+            "id",
+            "decision_id",
+            "horizon_days",
+            "ticker",
+            "action",
+            "price_at_decision",
+            "price_at_horizon",
+            "forward_return_pct",
+            "decision_return_pct",
+            "benchmark_return_pct",
+            "directional_hit",
+            "evaluated_at",
+        ]
+
+
 class AgentDecisionLogSerializer(serializers.ModelSerializer):
     """Audit-trail row for one AI agent invocation."""
 
@@ -282,6 +305,15 @@ class AgentDecisionLogSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_ticker(self, obj: AgentDecisionLog) -> str | None:
+        """The instrument, preferring the stored column.
+
+        The column is authoritative and covers every row written since it was
+        added - including HOLDs and HALTs, which have no transaction to derive
+        from. The transaction lookup stays as a fallback for rows written before
+        the column existed and not reached by the backfill.
+        """
+        if obj.ticker:
+            return obj.ticker
         if obj.transaction_id and obj.transaction:
             return obj.transaction.ticker
         return None

@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import logging
 from datetime import timedelta
+from decimal import Decimal
 from typing import Any
 
 from celery import group, shared_task
@@ -67,11 +68,13 @@ from services.execution import (
 from services.fundamentals import get_financial_health, get_price_history
 from services.ledger import PositionState, realised_pnl_today, replay_positions
 from services.market_data import get_latest_quote
+from services.portfolio_metrics import build_exposure
 from services.recommendations import (
     create_recommendation,
     expire_stale_recommendations,
 )
 from services.snapshots import capture_all_snapshots, capture_snapshot
+from services.thesis import current_thesis, sync_after_trade
 from services.throttle import claim_sweep_slot, claim_ticker_slot
 
 logger = logging.getLogger("alphaagent.tasks")
@@ -153,11 +156,9 @@ def run_alpha_agent_task(
         )
         # Recorded as a decision row so the halt is auditable in the same place as
         # every other decision, rather than only in the worker log.
-        # The ticker goes in the reasoning, not a column: AgentDecisionLog has no
-        # ticker field - the API derives it from the related transaction, which a
-        # halt by definition does not have.
         AgentDecisionLog.objects.create(
             portfolio=portfolio,
+            ticker=ticker,
             action_taken="HALT - AI spend ceiling reached",
             market_sentiment=MarketSentiment.NEUTRAL,
             reasoning=(
@@ -234,6 +235,9 @@ def run_alpha_agent_task(
         financial_health=financial_health,
         price_history=price_history,
         portfolio_id=portfolio.id,
+        # The agent's own prior reasoning, so it argues with what it believed
+        # rather than from a blank slate. None when no position is open.
+        current_thesis=current_thesis(portfolio, ticker),
     )
 
     # ---- 2. AI decision --------------------------------------------------
@@ -251,6 +255,7 @@ def run_alpha_agent_task(
         logger.exception("Agent pipeline crashed for %s/%s: %s", portfolio_id, ticker, exc)
         failure_log = AgentDecisionLog.objects.create(
             portfolio=portfolio,
+            ticker=ticker,
             reasoning=f"Agent pipeline failure: {type(exc).__name__}: {exc}",
             action_taken="ERROR - agent pipeline failed",
             market_sentiment=MarketSentiment.NEUTRAL,
@@ -272,7 +277,12 @@ def run_alpha_agent_task(
     proposal = run_result.proposal
 
     # ---- 3. Execution guard ---------------------------------------------
-    decision = evaluate_proposal(portfolio, proposal, price, position, realised_today)
+    # The portfolio-level limits need market values, which the guard cannot fetch
+    # without breaking its purity. Built here and passed in.
+    exposure = build_exposure(portfolio, ticker)
+    decision = evaluate_proposal(
+        portfolio, proposal, price, position, realised_today, exposure=exposure
+    )
 
     transaction_row: Transaction | None = None
     recommendation = None
@@ -319,6 +329,7 @@ def run_alpha_agent_task(
     try:
         decision_log = AgentDecisionLog.objects.create(
             portfolio=portfolio,
+            ticker=ticker,
             transaction=transaction_row,
             reasoning=audit_reasoning[:20000],
             bull_case=run_result.bull_case[:20000],
@@ -343,6 +354,29 @@ def run_alpha_agent_task(
         # Link the audit row so the dashboard can show proposal -> approval.
         TradeRecommendation.objects.filter(pk=recommendation.pk).update(decision_log=decision_log)
         notify_recommendation.delay(recommendation.id)
+
+    # ---- 5. Position thesis ---------------------------------------------
+    # Only after an executed trade, and only once the audit row exists so the
+    # thesis can point at the decision that wrote it. Advisory trades do not move
+    # the position, so they must not move the thesis either - the recommendation
+    # may yet be rejected, and a thesis recorded for a trade that never happened
+    # would be fed back to the next run as though it had.
+    if transaction_row is not None and decision_log is not None:
+        try:
+            # Re-read rather than deriving from the proposal: apply_trade may have
+            # clamped, and the stored position is the authority on whether this
+            # instrument is still held.
+            held = Asset.objects.filter(portfolio=portfolio, ticker=ticker).first()
+            sync_after_trade(
+                portfolio=portfolio,
+                ticker=ticker,
+                position_amount=held.amount if held is not None else Decimal("0"),
+                decision=decision_log,
+                thesis=proposal.thesis,
+                invalidation=proposal.invalidation,
+            )
+        except Exception as exc:  # pragma: no cover - must never break a run
+            logger.exception("Thesis sync failed for %s/%s: %s", portfolio_id, ticker, exc)
 
     if transaction_row is not None:
         status = "executed"
@@ -485,6 +519,10 @@ def daily_loss_limit_sweep_task(self) -> dict[str, Any]:
             try:
                 AgentDecisionLog.objects.create(
                     portfolio=portfolio,
+                    # No ticker: this is a portfolio-wide halt, not a decision
+                    # about one instrument. The column stays blank rather than
+                    # naming an arbitrary position, and the reasoning below says
+                    # why - a fabricated ticker would be worse than an empty one.
                     reasoning=(
                         f"Portfolio stop-loss engaged. Realised P&L for the UTC day is "
                         f"${realised}, which breaches the configured daily loss limit of "
@@ -657,3 +695,31 @@ def notify_recommendation(self, recommendation_id: int) -> dict[str, Any]:
     except Exception as exc:
         logger.warning("Telegram notification failed for %s: %s", recommendation_id, exc)
         return {"status": "error", "error": str(exc)}
+
+
+@shared_task(bind=True, name="tasks.evaluate_decision_outcomes_task")
+def evaluate_decision_outcomes_task(self) -> dict[str, Any]:
+    """Score matured decisions against what the market actually did next.
+
+    The audit trail records why every decision was made. This is the half that
+    records whether any of them were right, so the system can be measured rather
+    than believed.
+
+    Runs hourly rather than on the 15-minute sweep: a new outcome only becomes
+    available when a decision crosses a horizon boundary, which happens on a
+    day-scale, and the scoring itself fetches price history for every pending
+    decision. Hourly keeps the yfinance load trivial while ensuring a decision
+    scored within an hour of maturing.
+
+    Idempotent, so a retry or an overlapping run costs only time.
+    """
+    from services.attribution import evaluate_pending
+
+    try:
+        counts = evaluate_pending()
+    except Exception as exc:  # pragma: no cover - defensive, like the other sweeps
+        logger.exception("Decision attribution failed: %s", exc)
+        return {"status": "error", "error": str(exc)}
+
+    logger.info("evaluate_decision_outcomes_task done: %s", counts)
+    return {"status": "ok", **counts}

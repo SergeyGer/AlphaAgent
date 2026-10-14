@@ -176,8 +176,15 @@ def approve_recommendation(recommendation_id: int, via: str = DecidedVia.WEB) ->
         sentiment=recommendation.sentiment,
         reasoning=recommendation.reasoning or "Approved by operator.",
     )
+    from services.portfolio_metrics import build_exposure
+
     decision: GuardDecision = evaluate_proposal(
-        portfolio, proposal, price, position, realised_today
+        portfolio,
+        proposal,
+        price,
+        position,
+        realised_today,
+        exposure=build_exposure(portfolio, recommendation.ticker),
     )
 
     recommendation.decided_at = timezone.now()

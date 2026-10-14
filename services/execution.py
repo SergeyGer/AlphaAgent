@@ -28,6 +28,7 @@ __all__ = [
     "CENT",
     "SATOSHI",
     "ZERO",
+    "Exposure",
     "GuardDecision",
     "GuardError",
     "apply_trade",
@@ -35,6 +36,7 @@ __all__ = [
 ]
 
 ZERO = Decimal("0")
+HUNDRED = Decimal("100")
 CENT = Decimal("0.01")
 SATOSHI = Decimal("0.00000001")
 
@@ -53,6 +55,34 @@ class GuardError(Exception):
 # ---------------------------------------------------------------------------
 # Execution guard
 # ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class Exposure:
+    """Market values the guard needs to judge portfolio-level limits.
+
+    The per-trade ceiling answers "is this trade too big on its own?". It cannot
+    answer "is the portfolio already full?", because a sequence of individually
+    permitted trades is unbounded - ADR-0001 says so in its own consequences.
+    Twenty buys each inside a 5% ceiling reach 100% invested, and no single one of
+    them looked wrong.
+
+    Passed in rather than fetched, so ``evaluate_proposal`` stays free of I/O -
+    which is what makes the safety-critical code testable without a database.
+
+    ``equity_usd`` is the denominator for both ratios. When it is zero or absent
+    the portfolio-level checks are skipped rather than guessed at: a percentage of
+    an unknown total is not a limit, it is a number.
+    """
+
+    positions_value_usd: Decimal = ZERO
+    #: This ticker's holding, at market, before the proposed trade.
+    ticker_value_usd: Decimal = ZERO
+    equity_usd: Decimal = ZERO
+
+    @property
+    def usable(self) -> bool:
+        return self.equity_usd > ZERO
+
+
 @dataclass
 class GuardDecision:
     """Outcome of validating an AI proposal against the portfolio guardrails."""
@@ -67,12 +97,69 @@ class GuardDecision:
     notes: list[str] = field(default_factory=list)
 
 
+def _portfolio_headroom(
+    portfolio: Portfolio, exposure: Exposure | None, price: Decimal
+) -> tuple[Decimal, str | None]:
+    """How much more this portfolio may buy, in dollars.
+
+    Returns the binding dollar ceiling across both portfolio-level limits, plus a
+    note template naming the constraint that produced it - ``None`` when neither
+    limit applies, so the caller falls back to reporting the per-trade ceiling.
+
+    Both limits are expressed as percentages of equity, so the headroom is
+    ``limit_value - current_value``. When two limits bind, the smaller wins and
+    the note names that one; a clamp that does not say which rule it obeyed is
+    harder to audit than no note at all.
+    """
+    if exposure is None or not exposure.usable:
+        # No exposure means the portfolio-level limits cannot be evaluated. The
+        # per-trade ceiling still applies in full, so this degrades to the
+        # behaviour that existed before these limits - not to no limits at all.
+        return Decimal("Infinity"), None
+
+    equity = exposure.equity_usd
+    ceilings: list[tuple[Decimal, str]] = []
+
+    exposure_limit = portfolio.max_portfolio_exposure_pct
+    if exposure_limit > 0:
+        allowed_positions = (equity * exposure_limit / HUNDRED).quantize(CENT)
+        ceilings.append(
+            (
+                max(allowed_positions - exposure.positions_value_usd, ZERO),
+                "Clamped to {clamped} units: this would take invested capital past "
+                f"the {exposure_limit}% portfolio exposure ceiling.",
+            )
+        )
+
+    concentration_limit = portfolio.max_ticker_concentration_pct
+    if concentration_limit > 0:
+        allowed_ticker = (equity * concentration_limit / HUNDRED).quantize(CENT)
+        ceilings.append(
+            (
+                max(allowed_ticker - exposure.ticker_value_usd, ZERO),
+                "Clamped to {clamped} units: this would take the position past the "
+                f"{concentration_limit}% single-instrument concentration ceiling.",
+            )
+        )
+
+    if not ceilings:
+        return Decimal("Infinity"), None
+
+    headroom, note = min(ceilings, key=lambda pair: pair[0])
+    # `price` is unused here but kept in the signature: callers pass it, and a
+    # future limit expressed in units rather than dollars will need it.
+    _ = price
+    return headroom, note
+
+
 def evaluate_proposal(
     portfolio: Portfolio,
     proposal: TradeProposal,
     price: Decimal | None,
     position: PositionState,
     realised_pnl_today: Decimal,
+    *,
+    exposure: Exposure | None = None,
 ) -> GuardDecision:
     """Apply every pre-trade guardrail. Pure function - performs no I/O.
 
@@ -85,6 +172,15 @@ def evaluate_proposal(
     4. BUY cannot exceed available cash; SELL cannot exceed the held position.
     5. Once ``daily_loss_limit_usd`` is breached, new risk (BUY) is blocked while
        de-risking (SELL) stays available.
+    6. BUY cannot push total invested capital past ``max_portfolio_exposure_pct``
+       of equity.
+    7. BUY cannot push one instrument past ``max_ticker_concentration_pct`` of
+       equity.
+
+    Rules 6 and 7 need ``exposure`` and are skipped without it. That is a real
+    gap rather than a graceful default, so the production caller is asserted to
+    supply it by ``ExposureWiringTests`` - a new caller that forgets would
+    silently lose the cumulative limits while every per-trade check still passed.
     """
     action = proposal.action
     decision = GuardDecision(approved=False, reason="", action=action, price=price)
@@ -126,7 +222,15 @@ def evaluate_proposal(
             )
             return decision
 
-        max_affordable = min(budget, portfolio.balance_usd)
+        # --- Rules 6 and 7: portfolio-level headroom ---------------------
+        # Folded into the same ceiling as the per-trade limit rather than added as
+        # a separate rejection path. A buy that does not fit the portfolio should
+        # be sized down to what fits, exactly as one that does not fit the
+        # per-trade budget is - rejecting outright would refuse trades the
+        # portfolio can comfortably afford, just not at the size proposed.
+        exposure_ceiling, exposure_note = _portfolio_headroom(portfolio, exposure, price)
+
+        max_affordable = min(budget, portfolio.balance_usd, exposure_ceiling)
         notional = (amount * price).quantize(CENT)
         if notional > max_affordable:
             clamped_amount = (max_affordable / price).quantize(SATOSHI, rounding=ROUND_DOWN)
@@ -137,11 +241,16 @@ def evaluate_proposal(
                 )
                 return decision
             decision.clamped = True
-            decision.notes.append(
-                f"Clamped {amount} -> {clamped_amount} units to respect the "
-                f"${max_affordable} ceiling "
-                f"(max_trade_allocation_pct={portfolio.max_trade_allocation_pct}%)."
-            )
+            if exposure_note and max_affordable == exposure_ceiling:
+                # Name the binding constraint. "Clamped to respect the ceiling"
+                # without saying which ceiling sends the reader to the wrong one.
+                decision.notes.append(exposure_note.format(clamped=clamped_amount))
+            else:
+                decision.notes.append(
+                    f"Clamped {amount} -> {clamped_amount} units to respect the "
+                    f"${max_affordable} ceiling "
+                    f"(max_trade_allocation_pct={portfolio.max_trade_allocation_pct}%)."
+                )
             amount = clamped_amount
             notional = (amount * price).quantize(CENT)
 

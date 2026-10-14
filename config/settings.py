@@ -309,6 +309,15 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": crontab(minute="*/30"),
         "options": {"expires": 1800},
     },
+    # Score decisions against what the market did next. Hourly, because an
+    # outcome only matures when a decision crosses a 1/7/30-day boundary and the
+    # task fetches price history per pending decision - running it on the
+    # 15-minute sweep would multiply the yfinance load for no extra freshness.
+    "evaluate-decision-outcomes": {
+        "task": "tasks.evaluate_decision_outcomes_task",
+        "schedule": crontab(minute=25),
+        "options": {"expires": 3000},
+    },
     # Housekeeping: drop expired DRF auth tokens.
     "purge-expired-auth-tokens": {
         "task": "tasks.purge_expired_auth_tokens_task",
