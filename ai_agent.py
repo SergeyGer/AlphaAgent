@@ -589,6 +589,27 @@ class LLMProviderError(RuntimeError):
 # ---------------------------------------------------------------------------
 # Orchestrator
 # ---------------------------------------------------------------------------
+
+#: Models that reject `temperature` / `top_p` / `top_k` with a 400.
+#:
+#: Matched by prefix so a dated variant resolves against its family. Claude Haiku
+#: 5.5 and later dropped caller-controlled sampling entirely: only the default is
+#: accepted, and any other value is an `invalid_request_error` rather than a
+#: clamp. Add a family here when its release notes say sampling was removed -
+#: the failure is a hard 400 on every call, so it is not something to discover in
+#: production.
+_NO_SAMPLING_PARAM_MODELS = (
+    "claude-haiku-5-5",
+    "claude-haiku-5",
+)
+
+
+def _accepts_sampling_params(model: str) -> bool:
+    """Whether this model still accepts caller-supplied sampling parameters."""
+    name = (model or "").split("/")[-1]
+    return not any(name.startswith(prefix) for prefix in _NO_SAMPLING_PARAM_MODELS)
+
+
 class AlphaAgentOrchestrator:
     """Builds and runs the three-agent adversarial debate crew."""
 
@@ -629,10 +650,30 @@ class AlphaAgentOrchestrator:
         kwargs: dict[str, Any] = {
             "model": model,
             "api_key": self.api_key,
-            "temperature": self.config.get("TEMPERATURE", 0.2),
             "max_tokens": self.config.get("MAX_TOKENS", 2048),
             "timeout": self.config.get("REQUEST_TIMEOUT", 90),
         }
+
+        # Sampling parameters are sent only to models that accept them.
+        #
+        # Claude Haiku 5.5 rejects `temperature` outright -
+        # `400 invalid_request_error: temperature is deprecated for this model` -
+        # and accepts only the default. Sending it anyway is not a degraded
+        # request, it is a failed one, so every agent run would 400 and the
+        # pipeline would halt on a model swap that looked like a one-line config
+        # change. Verified against the live API, not inferred from release notes.
+        #
+        # Temperature controls sampling diversity. Dropping it hands that to the
+        # model's own default, which for a decision-making agent is a reasonable
+        # trade - but it is a behaviour change, not a no-op, so it is logged.
+        if _accepts_sampling_params(model):
+            kwargs["temperature"] = self.config.get("TEMPERATURE", 0.2)
+        else:
+            logger.info(
+                "Model %s rejects sampling parameters; omitting temperature. "
+                "Response diversity now comes from the model default.",
+                model,
+            )
         base_url = str(self.config.get("BASE_URL") or "").strip()
         if base_url:
             kwargs["base_url"] = base_url

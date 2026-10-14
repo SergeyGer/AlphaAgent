@@ -119,6 +119,36 @@ services:
 | `CELERY_BROKER_URL` | *(built)* | No | Task broker. Leave **empty** to have settings build it from `REDIS_*`, which percent-encodes the password for you |
 | `CELERY_RESULT_BACKEND` | *(built)* | No | Task result store (`CELERY_RESULT_EXPIRES` is 24h). Same rule |
 
+### Model compatibility
+
+A model swap is not always a one-line config change. **Claude Haiku 5.5 rejects
+`temperature`** with `400 invalid_request_error: temperature is deprecated for
+this model` — only the default is accepted, and any other value fails the request
+rather than being clamped. Sending it anyway means every agent run 400s, which
+reads like a provider outage rather than a misconfiguration.
+
+`ai_agent.py` therefore omits sampling parameters for models listed in
+`_NO_SAMPLING_PARAM_MODELS`, matched by prefix so a dated variant resolves against
+its family. The consequence is worth knowing: **temperature 0.2 no longer applies
+to those models**, so response diversity comes from the model's own default. That
+is a behaviour change, not a no-op, and it is logged on every initialisation.
+
+| Model | Sampling parameters | Input / output per MTok |
+| --- | --- | --- |
+| `claude-haiku-5-5` | **rejected** | $0.10 / $0.50 up to 100K tokens |
+| `claude-haiku-4-5-20251001` | accepted | $1.00 / $5.00 |
+| `deepseek-reasoner` | accepted | $0.55 / $2.19 |
+
+Haiku 5.5 prices in two tiers — $0.10/$0.50 up to 100K tokens, then $0.50/$2.50
+above. The pricing table holds the cheap tier, which is where this project
+operates: a debate run measures in tens of thousands of tokens. A prompt crossing
+100K would be under-costed, and `estimate_cost` has no per-request token count at
+the point it prices, so the boundary is a recorded limitation rather than an
+approximation applied silently.
+
+Measured on a real run: **$0.161 on Haiku 4.5 → $0.0145 on Haiku 5.5**, a 91%
+reduction.
+
 ### Redis authentication
 
 Redis has no authentication by default and this stack originally ran that way.

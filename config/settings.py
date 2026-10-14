@@ -398,6 +398,23 @@ AI_MODEL_PRICING = {
     # Anthropic bills cache reads at 0.1x and cache writes at 1.25x the input
     # rate. Both are spelled out rather than derived at runtime so a rate change
     # is a one-line edit here.
+    #
+    # Haiku 5.5 is 90% cheaper than 4.5 per token and prices in two tiers:
+    # $0.10/$0.50 per MTok for prompts up to 100K, then $0.50/$2.50 above it.
+    # The flat rates below are the cheap tier, which is the one this project
+    # operates in - a debate run measures in tens of thousands of tokens, not
+    # hundreds. A prompt that crosses 100K would be under-costed by 5x, and the
+    # estimator has no per-request token count at the point it prices, so the
+    # tier boundary cannot be applied here. Recorded as a known limitation
+    # rather than approximated silently.
+    #
+    # Verified 2026-10: https://apidog.com/blog/claude-haiku-5-5-vs-haiku-4-5/
+    "claude-haiku-5-5": {
+        "input": 0.10,
+        "output": 0.50,
+        "cached_input": 0.01,
+        "cache_write": 0.125,
+    },
     "claude-haiku-4-5": {
         "input": 1.00,
         "output": 5.00,
