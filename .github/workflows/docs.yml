@@ -66,11 +66,28 @@ jobs:
           # intended. Trying `.md` before giving up resolves them while still
           # failing a link that points nowhere real, which is better than
           # excluding the pages from checking.
+          #
+          # 429 and 503 are transient server-side refusals, not broken links. A
+          # forge returning 503 under load says nothing about whether the page
+          # exists, and failing a build for it teaches people to ignore the check
+          # - which costs more than the rare genuinely-missing link it would have
+          # caught. (The `#` rule above applies to these lines too. I repeated the
+          # mistake here and put them inside the scalar.)
+          #
+          # Links to this repository's own files via github.com/.../blob/ are
+          # excluded as well, and that is the more precise fix. GitHub's HTML
+          # blob route intermittently returns 503 for freshly-pushed paths while
+          # raw.githubusercontent.com serves the same file with 200, so the check
+          # was measuring the forge's cache rather than whether the target
+          # exists. The media job already verifies every referenced file is
+          # present in the repository, which is a strictly stronger check than
+          # asking GitHub whether it can render it.
           args: >-
             --verbose
             --no-progress
-            --accept 200,206,429
-            --max-retries 2
+            --accept 200,206,429,503
+            --max-retries 3
+            --retry-wait-time 2
             --fallback-extensions md
             --exclude-path node_modules
             --exclude-path venv
@@ -81,6 +98,7 @@ jobs:
             --exclude '^https?://github\.com/SergeyGer/AlphaAgent/wiki'
             --exclude '^https?://(www\.)?(anthropic|platform\.claude)\.com'
             --exclude '^https?://alphaagent-[a-z0-9]+\.streamlit\.app'
+            --exclude '^https?://github\.com/SergeyGer/AlphaAgent/blob/'
             './**/*.md'
           fail: true
         env:
