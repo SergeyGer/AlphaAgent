@@ -198,13 +198,11 @@ class EvaluatePendingTests(TestCase):
         # how these tests first failed.
         today = timezone.now().date()
 
-        def series(start: int, step: int, base: str, drift: str):
-            return [
-                ((today - timezone.timedelta(days=start - i * step)).isoformat(), price)
-                for i, price in enumerate((base, drift))
-            ]
-
         # 30 days of coverage at weekly intervals, enough for 1/7/30-day horizons.
+        # A `series()` helper was written here first and then not used, because
+        # the two series need different lengths and spellings. CodeQL reported the
+        # leftover as py/unused-local-variable - see the note in
+        # Quality-and-Testing about how that was found.
         self.history = {
             "AAPL": [
                 ((today - timezone.timedelta(days=30 - i * 5)).isoformat(), price)
