@@ -7,7 +7,7 @@
 [![CI](https://github.com/SergeyGer/AlphaAgent/actions/workflows/ci.yml/badge.svg)](https://github.com/SergeyGer/AlphaAgent/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/SergeyGer/AlphaAgent/actions/workflows/codeql.yml/badge.svg)](https://github.com/SergeyGer/AlphaAgent/actions/workflows/codeql.yml)
 [![Docs](https://github.com/SergeyGer/AlphaAgent/actions/workflows/docs.yml/badge.svg)](https://github.com/SergeyGer/AlphaAgent/actions/workflows/docs.yml)
-[![Tests](https://img.shields.io/badge/tests-631%20passing-brightgreen.svg)](https://github.com/SergeyGer/AlphaAgent/wiki/Quality-and-Testing)
+[![Tests](https://img.shields.io/badge/tests-634%20passing-brightgreen.svg)](https://github.com/SergeyGer/AlphaAgent/wiki/Quality-and-Testing)
 [![Coverage](coverage.svg)](https://github.com/SergeyGer/AlphaAgent/wiki/Quality-and-Testing)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -265,7 +265,7 @@ configuration reference: [Configuration](https://github.com/SergeyGer/AlphaAgent
 
 | | |
 | --- | --- |
-| **631 automated tests** | 516 Python — risk guard, ledger, API, task pipeline, WebSockets, Telegram bot, tool server — plus 115 frontend (Vitest + Testing Library) covering the formatters, the WebSocket frame validator and the metric grid |
+| **634 automated tests** | 519 Python — risk guard, ledger, API, task pipeline, WebSockets, Telegram bot, tool server — plus 115 frontend (Vitest + Testing Library) covering the formatters, the WebSocket frame validator and the metric grid |
 | **79% coverage, enforced** | CI fails below a 70% floor, and the badge above is regenerated from the real run on every push to `main` |
 | **Continuous integration** | Lint, format, the full test suite against PostgreSQL 16, and a Docker image build — on every push |
 | **Security scanning** | CodeQL analysis plus a test that walks every publishable file looking for committed credentials |

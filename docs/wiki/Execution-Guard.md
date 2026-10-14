@@ -188,12 +188,36 @@ The guard is a pure function and cannot fetch market values without breaking tha
 so they arrive as an `Exposure` value object built by
 `services.portfolio_metrics.build_exposure`.
 
-> **Omitting `exposure` skips both limits.** It cannot be a required parameter
-> without breaking existing callers and the deployed demo, so this is a real gap
-> rather than a graceful default. `ExposureWiringTests` asserts the two production
-> callers supply it — a test standing in for a type. The Streamlit demo passes no
-> exposure and therefore exercises the per-trade limits only; it says so on the
-> page.
+> **Omitting `exposure` skips both limits.** It is not a required parameter,
+> because the guard is called from paths that do not have market values to hand,
+> so this is a real gap rather than a graceful default. `ExposureWiringTests`
+> asserts the two production callers supply it — a test standing in for a type.
+> The Streamlit demo also builds and passes one, so the public playground drives
+> the whole guard rather than half of it.
+
+### A refusal names the limit that refused it
+
+The clamping note has always named the ceiling that bound a trade. The *refusal*
+path did not: it said "per-trade ceiling" unconditionally, so a portfolio with a
+$500 per-trade budget refused for sitting at its 30% concentration ceiling was
+told the per-trade ceiling refused it. That is the wrong limit, reported in the
+one place a reader is most likely to be reading carefully, and it lands in the
+audit trail next to the decision.
+
+Both paths now name the binding limit:
+
+```
+Rejected: requested $300.00 cannot be sized down: this would take the position
+past the 30.00% single-instrument concentration ceiling.
+
+Rejected: requested $300.00 cannot be sized down: this would take invested capital
+past the 90.00% portfolio exposure ceiling.
+```
+
+The per-trade wording survives for the case it was written for, though reaching it
+takes a deliberately extreme price: a positive per-trade budget always affords
+*some* fractional unit, so on ordinary inputs the portfolio ceilings are the only
+ones that can leave exactly zero headroom.
 
 ## What this guard does *not* bound
 

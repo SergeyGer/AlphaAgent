@@ -235,10 +235,26 @@ def evaluate_proposal(
         if notional > max_affordable:
             clamped_amount = (max_affordable / price).quantize(SATOSHI, rounding=ROUND_DOWN)
             if clamped_amount <= 0:
-                decision.reason = (
-                    f"Rejected: requested ${notional} exceeds the ${max_affordable} "
-                    "per-trade ceiling and cannot be sized down."
-                )
+                # Name the limit that actually left no room. This message used to
+                # say "per-trade ceiling" unconditionally, so a portfolio with a
+                # $500 per-trade budget that was refused for being at its
+                # concentration ceiling was told the per-trade ceiling refused it -
+                # sending the reader to the wrong limit entirely, in the one place
+                # they are most likely to be reading carefully.
+                if exposure_note and max_affordable == exposure_ceiling:
+                    # Reuse the clamping note's wording, minus its "Clamped to N
+                    # units" prefix, so a refusal and a clamp describe the same
+                    # ceiling in the same words. Joined with a colon rather than a
+                    # full stop because the note's clause begins mid-sentence.
+                    detail = exposure_note.format(clamped=0).split(": ", 1)[-1]
+                    decision.reason = (
+                        f"Rejected: requested ${notional} cannot be sized down: {detail}"
+                    )
+                else:
+                    decision.reason = (
+                        f"Rejected: requested ${notional} exceeds the ${max_affordable} "
+                        "per-trade ceiling and cannot be sized down."
+                    )
                 return decision
             decision.clamped = True
             if exposure_note and max_affordable == exposure_ceiling:

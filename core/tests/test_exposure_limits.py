@@ -159,6 +159,63 @@ class ExposureOmittedTests(TestCase):
 
 
 @override_settings(CACHES=TEST_CACHES)
+class RefusalNamesTheBindingLimitTests(TestCase):
+    """A refusal must name the limit that actually refused it.
+
+    The message said "per-trade ceiling" unconditionally, so a portfolio with a
+    $500 per-trade budget refused for sitting at its concentration ceiling was
+    told the per-trade ceiling refused it. In the audit trail that sends a reader
+    to the wrong limit, in the one place they are most likely to be reading
+    carefully.
+    """
+
+    def _refusal(self, exposure):
+        decision = evaluate_proposal(
+            portfolio_at("10000"),
+            FakeProposal("BUY", "300"),
+            D("100"),
+            PositionState(ticker="AAPL"),
+            D("0"),
+            exposure=exposure,
+        )
+        self.assertFalse(decision.approved)
+        return decision.reason
+
+    def test_a_concentration_refusal_names_concentration(self):
+        reason = self._refusal(Exposure(D("1000"), D("3000"), D("10000")))
+
+        self.assertIn("concentration", reason)
+        self.assertNotIn("per-trade", reason)
+
+    def test_an_exposure_refusal_names_exposure(self):
+        reason = self._refusal(Exposure(D("9000"), D("0"), D("10000")))
+
+        self.assertIn("exposure", reason)
+        self.assertNotIn("per-trade", reason)
+
+    def test_the_per_trade_wording_still_applies_when_it_is_the_binding_limit(self):
+        """The original message must survive for the case it was written for.
+
+        Reaching it needs a price large enough that the headroom affords less than
+        one satoshi of the asset: a positive per-trade budget always buys *some*
+        fractional unit, so on ordinary prices this branch is effectively
+        unreachable. Contrived, but it is the only path that produces the
+        per-trade wording and the branch should not silently rot.
+        """
+        decision = evaluate_proposal(
+            portfolio_at("10000", allocation="5.00"),
+            FakeProposal("BUY", "1"),
+            D("1000000000000"),  # $1e12 per unit
+            PositionState(ticker="AAPL"),
+            D("0"),
+            exposure=Exposure(D("0"), D("0"), D("10000")),
+        )
+
+        self.assertFalse(decision.approved)
+        self.assertIn("per-trade", decision.reason)
+
+
+@override_settings(CACHES=TEST_CACHES)
 class ExposureWiringTests(TestCase):
     """The guard skips these checks when it has no exposure.
 

@@ -8,16 +8,30 @@ ledger. Nothing about the guardrails is reimplemented for the demo.
 
 ## What it shows
 
-1. **Guard playground** - set cash, `max_trade_allocation_pct`, `daily_loss_limit_usd`,
-   realised P&L today, asset price, side and size; see the guard's verdict
-   (`ALLOWED` / `REJECTED`), its verbatim reason string and the raw `GuardDecision`
-   it returns. Five one-click presets cover a normal trade, a clamp at the
-   allocation ceiling, a ceiling that leaves no budget, a breached daily loss
-   limit (including the fact that SELL still works while new risk is frozen) and
-   an oversized SELL clamped to the held position.
+1. **Guard playground** - set cash, `max_trade_allocation_pct`,
+   `daily_loss_limit_usd`, `max_portfolio_exposure_pct`,
+   `max_ticker_concentration_pct`, realised P&L today, what else the portfolio
+   holds, asset price, side and size; see the guard's verdict (`ALLOWED` /
+   `REJECTED`), its verbatim reason string and the raw `GuardDecision` it returns.
+   Nine one-click presets:
+   - a normal trade, a clamp at the per-trade allocation ceiling, a ceiling that
+     leaves no budget, a breached daily loss limit (including the fact that SELL
+     still works while new risk is frozen) and an oversized SELL clamped to the
+     held position;
+   - a buy **clamped by the portfolio exposure ceiling**, a buy **clamped by the
+     single-instrument concentration ceiling**, a portfolio where **both ceilings
+     bind and the smaller headroom wins**, and a buy **refused because
+     concentration is already at its ceiling**.
 2. **The three-agent debate** the guard is guarding - bull researcher, bear
    short-seller, CIO adjudicator - and the one-way pipeline from proposal to ledger.
-3. A link to the repository.
+3. **Explained, deliberately not executed** (the reasons are on the page):
+   **outcome attribution** - decisions scored against forward returns at 1/7/30
+   days, scored by what the *action* was worth (a SELL is right when the price
+   falls), HOLD excluded from the hit rate rather than counted as a miss, SPY as
+   the benchmark - and **position theses** - one written thesis plus an
+   invalidation condition per open position, fed back to the agents on every run
+   so an exit has to argue with the reason for entry.
+4. A link to the repository.
 
 ## Run locally
 
@@ -54,8 +68,40 @@ core; `DATABASES = {}`) and calls the guard with **unsaved** `Portfolio` /
 database would add nothing - and `DATABASES = {}` makes an accidental query fail
 loudly instead of silently.
 
+## How the portfolio-level limits are driven
+
+Every input the guard takes is supplied, **including `Exposure`**. That is the
+point of the object: `evaluate_proposal` skips rules 6 and 7 - total exposure and
+single-instrument concentration - when it is handed no exposure, so a page that
+omitted it would drive only the per-trade half of the guard while looking
+complete. The demo builds the three market values from the widgets, the same way
+`services.portfolio_metrics.build_exposure()` derives them from the ledger - but
+without fetching anything:
+
+```
+ticker_value_usd    = units held x price          this instrument, at market
+positions_value_usd = that + other holdings       every holding, at market
+equity_usd          = cash + positions_value_usd  the denominator for both ceilings
+```
+
+Both ceilings are percentages of that **equity** - not of cash, which is what
+`max_trade_allocation_pct` uses - and a buy that does not fit is **sized down**,
+with the note naming the ceiling that bound it. Only a buy with no headroom at
+all is refused. Equity comes from `Exposure`, never from a database, so the page
+keeps its no-database, no-network property.
+
+**No new dependencies**: the exposure limits need nothing beyond the two pins
+already in `demo/requirements.txt`.
+
 ## Known limitations
 
+- **Attribution and theses are described, not executed.** `services/attribution.py`
+  and `services/thesis.py` are deliberately **not imported**: both work through
+  models that need a database (`DecisionOutcome`, `PositionThesis`) and attribution
+  also reads price history from yfinance. Sections 3 and 4 of the app describe the
+  real implementations and say on the page that they are not run. See the wiki:
+  [Decision Attribution](https://github.com/SergeyGer/AlphaAgent/wiki/Decision-Attribution)
+  and [Position Thesis](https://github.com/SergeyGer/AlphaAgent/wiki/Position-Thesis).
 - The AI proposal is modelled by a two-field stand-in (`action`, `amount`) that
   mirrors `ai_agent.TradeProposal`. Importing the real Pydantic model would pull
   in CrewAI, requests and defusedxml for no behavioural difference - the guard
@@ -66,5 +112,15 @@ loudly instead of silently.
   exercised: it needs PostgreSQL and a ledger. The demo covers the decision, not
   persistence.
 - The LLM agents are explained but not run - that would require API keys.
+- The guard's **refusal** message, when a portfolio ceiling leaves no headroom, is
+  its shared `Rejected: requested $X exceeds the $0.00 per-trade ceiling and
+  cannot be sized down.` wording; only the *clamp* note names which ceiling bound
+  the trade. The demo shows the guard's strings verbatim rather than paraphrasing
+  them, so preset 9 reads that way.
+- Not reachable from the widgets: rule 1 (the side selector offers BUY and SELL
+  only, so a HOLD never becomes a proposal here), rule 2 (the price minimum is
+  $0.01) and the BUY-versus-cash half of rule 4 (the per-trade ceiling is at most
+  25% of cash). The app's "Which guard rules this page exercises" expander lists
+  exactly what is and is not covered.
 
 MIT licensed, like the rest of the project.
