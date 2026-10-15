@@ -42,6 +42,29 @@ celery -A config beat   -l info
 Conventional Commits are appreciated (`feat:`, `fix:`, `docs:`, `test:`,
 `refactor:`, `chore:`).
 
+## Starting and stopping the stack
+
+One command each way. Pick whichever suits the machine — VS Code tasks work on
+Windows and Linux alike, `make` needs a POSIX shell (Linux, macOS, WSL or Git
+Bash), and the raw compose command works everywhere:
+
+| | Start | Stop (keep assembled) | Stop and release ports |
+| --- | --- | --- | --- |
+| VS Code | Run Task → *AlphaAgent: Start* | *AlphaAgent: Stop* | *AlphaAgent: Shut down* |
+| Terminal | `make start` | `make stop` | `make down` |
+| Any | `docker compose up -d --build` | `docker compose stop` | `docker compose down` |
+
+Use **down**, not stop, when switching to another project for a while: stopped
+containers still hold their published ports in some Docker Desktop configurations,
+and two projects fighting over 8080 is the problem these commands exist to avoid.
+Neither command removes volumes, so your database survives both.
+
+Nothing starts by itself — no service sets a restart policy, so rebooting the
+machine does not bring the stack back. Starting it is always deliberate.
+
+Opening the folder in a Dev Container drives the same compose file; see
+[`.devcontainer/README.md`](.devcontainer/README.md).
+
 ## Quality gates
 
 CI runs on every push and pull request:

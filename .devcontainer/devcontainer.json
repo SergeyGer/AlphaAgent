@@ -1,0 +1,100 @@
+{
+  // Dev Containers configuration for AlphaAgent.
+  //
+  // Open the folder in VS Code and choose "Reopen in Container" (or run
+  // Dev Containers: Open Folder in Container from the command palette). VS Code
+  // attaches to the `web` service of the normal compose stack, so the editor, the
+  // Django server, the worker, PostgreSQL and Redis all share one network and one
+  // `.env` - the same arrangement as `docker compose up`, not a parallel setup
+  // that drifts from it.
+  //
+  // Two deliberate choices worth knowing:
+  //
+  // `shutdownAction: stopCompose` means closing the VS Code window STOPS the
+  // containers. That is the behaviour this project wants: services from two
+  // projects fighting over a port is the problem being solved, and a devcontainer
+  // that keeps running after you close the window would recreate it.
+  //
+  // No service sets a restart policy (see docker-compose.yml), so the stack does
+  // NOT come back when the machine reboots. Starting it is always a deliberate act.
+  "name": "AlphaAgent (Django + Celery + React)",
+  "dockerComposeFile": ["../docker-compose.yml", "docker-compose.extend.yml"],
+  "service": "web",
+  "workspaceFolder": "/app",
+
+  // Stop the containers when the VS Code window closes. Without this the stack
+  // keeps running in the background and quietly holds its ports.
+  "shutdownAction": "stopCompose",
+
+  // Ports surfaced to the host. The three data services are included because
+  // being able to point a SQL or Redis client at them from the host is most of
+  // the reason to use a devcontainer rather than a terminal.
+  "forwardPorts": [8000, 8080, 5432, 6379, 8100],
+  "portsAttributes": {
+    "8000": { "label": "Django (daphne / runserver)" },
+    "8080": { "label": "Dashboard", "onAutoForward": "notify" },
+    "5432": { "label": "PostgreSQL 16" },
+    "6379": { "label": "Redis 7" },
+    "8100": { "label": "MCP tool server" }
+  },
+
+  // The image ships the runtime dependencies only, and deliberately has no git
+  // and no Node: a production image should not carry a VCS or a JS toolchain.
+  // Both are added here instead, as Dev Container Features, so they exist for the
+  // developer and never reach the deployed artefact.
+  //
+  //   git   - VS Code's source control, pre-commit, and this project's own
+  //           `make wiki-push` all need it. Verified missing from the base image
+  //           by running `command -v git` inside the container.
+  //   node  - the frontend tier is built by its own Dockerfile stage, but working
+  //           on React inside the devcontainer needs a local Node and npm.
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/node:1": { "version": "lts" }
+  },
+
+  // Tooling - ruff, pre-commit, coverage, pip-tools - lives in
+  // requirements-dev.txt, which is a superset of the runtime file. Installed here
+  // rather than baked into the image so a production build stays small.
+  "postCreateCommand": "pip install --require-hashes -r requirements-dev.txt && python manage.py migrate --noinput",
+
+  // Applied when the container is created and whenever it is rebuilt, so a
+  // teammate cloning this repository gets the same editor configuration without
+  // reading a setup guide.
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff",
+        "dbaeumer.vscode-eslint",
+        "bradlc.vscode-tailwindcss",
+        "ms-azuretools.vscode-docker",
+        "yzhang.markdown-all-in-one"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.testing.pytestEnabled": false,
+        "python.testing.unittestEnabled": true,
+        "python.testing.unittestArgs": ["-v", "-s", ".", "-p", "test_*.py"],
+        "editor.formatOnSave": true,
+        "[python]": { "editor.defaultFormatter": "charliermarsh.ruff" },
+        "[typescript]": { "editor.defaultFormatter": "dbaeumer.vscode-eslint" },
+        "[typescriptreact]": { "editor.defaultFormatter": "dbaeumer.vscode-eslint" },
+        "files.eol": "\n",
+        // The frontend node_modules is installed inside the container, so the
+        // editor should not try to index the host's copy if one exists.
+        "files.watcherExclude": {
+          "**/frontend/node_modules/**": true,
+          "**/.runtime/**": true,
+          "**/htmlcov/**": true
+        }
+      }
+    }
+  },
+
+  // Run as the image's default user. The compose file publishes no privileged
+  // ports and the workspace is a bind mount, so there is nothing root is needed
+  // for that the mounted volume does not already grant.
+  "remoteUser": "root"
+}

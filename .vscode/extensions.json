@@ -1,0 +1,27 @@
+{
+  // Extensions VS Code should offer to install when this project is opened.
+  //
+  // Tracked in git on purpose: this repository is worked on from several
+  // machines, and a recommendation that only exists on the machine it was
+  // written on is not a recommendation.
+  "recommendations": [
+    // The whole point of the .devcontainer directory.
+    "ms-vscode-remote.remote-containers",
+    // Python: analysis, debugging and the test runner for the Django tier.
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    // Ruff is this project's linter and formatter (see CONTRIBUTING.md); the
+    // extension uses the same binary the pre-commit hook does.
+    "charliermarsh.ruff",
+    // The dashboard is React + TypeScript + Tailwind.
+    "dbaeumer.vscode-eslint",
+    "bradlc.vscode-tailwindcss",
+    // Manage and inspect the containers without leaving the editor.
+    "ms-azuretools.vscode-docker",
+    // Postgres and Redis both run in containers; these make them inspectable.
+    "ms-ossdata.vscode-pgsql",
+    "cweijan.vscode-redis-client",
+    // Documentation is Markdown, and this project has a lot of it.
+    "yzhang.markdown-all-in-one"
+  ]
+}

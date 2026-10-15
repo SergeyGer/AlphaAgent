@@ -7,7 +7,7 @@ PYTHON ?= venv/bin/python
 PIP ?= venv/bin/pip
 PIP_COMPILE ?= venv/bin/pip-compile
 
-.PHONY: help venv lock lock-dev install install-dev env up down logs migrate makemigrations \
+.PHONY: help venv lock lock-dev install install-dev env up down start stop status logs migrate makemigrations \
         wiki-push \
         coverage coverage-badge \
         seed shell test test-guardrails lint format check docker-build docker-up \
@@ -111,14 +111,46 @@ check: lint ## Lint, format check, Django checks and the test suite
 	$(PYTHON) manage.py makemigrations --check --dry-run
 	$(PYTHON) manage.py test core.tests
 
+# ---------------------------------------------------------------------------
+# Start / stop the whole stack
+#
+# The three commands below are the ones you want day to day. They are separate on
+# purpose, because "stop working on this project" has two different meanings and
+# picking the wrong one is what makes services from two projects fight over a port.
+#
+#   make stop   containers stop, the stack stays assembled - fastest to resume,
+#               and enough to free the CPU and the network ports
+#   make down   containers are removed and the network is released - use this
+#               when switching to another project for a while
+#   make start  build if needed and start everything detached
+#
+# Volumes are never touched by any of them: your database and Redis data survive
+# both. `docker compose down -v` is the only thing that deletes data, and it is
+# deliberately not wrapped in a target.
+# ---------------------------------------------------------------------------
+start: ## Start the whole stack in the background (builds if needed)
+	docker compose up -d --build
+	@echo ""
+	@echo "  Dashboard: http://127.0.0.1:$${ALPHA_WEB_PORT:-8080}/   (demo / demo-pass-123)"
+	@echo "  Logs:      make logs"
+	@echo "  Stop:      make stop"
+
+stop: ## Stop every container, keeping the stack assembled (fast to resume)
+	docker compose stop
+	@echo ""
+	@echo "  Stopped. Ports are free. Resume with: make start"
+
+status: ## Show what is running and which ports are taken
+	@docker compose ps --format "  {{.Service}}\t{{.Status}}\t{{.Ports}}"
+
 docker-build: ## Build the application image
 	docker compose build
 
-docker-up: ## Start the whole stack
-	docker compose up -d --build
-
-docker-down: ## Stop the whole stack
+docker-up start: ## Alias for `make start`
+docker-down: ## Stop and remove every container (frees the network)
 	docker compose down
+	@echo ""
+	@echo "  Removed. Resume with: make start"
 
 dry-run: ## Exercise the AI crew against the live LLM with no database writes
 	docker compose exec web python manage.py dry_run_agent --portfolio-id 1

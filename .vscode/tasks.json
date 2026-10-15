@@ -1,0 +1,67 @@
+{
+  // Start and stop this project's containers from VS Code, on any machine.
+  //
+  // WHY tasks rather than only Makefile targets: this project is worked on from
+  // Windows laptops and a remote Linux server, and `make` is not installed on
+  // Windows by default. These tasks shell out to `docker compose` directly, so
+  // the same menu works everywhere VS Code does - Ctrl+Shift+P, "Run Task".
+  //
+  // The three that matter day to day:
+  //
+  //   Start       build if needed, run everything detached
+  //   Stop        halt the containers, keep the stack assembled (fastest resume)
+  //   Shut down   remove the containers and release the network
+  //
+  // Use Shut down - not Stop - when switching to another project for a while.
+  // Stopped containers still hold their published ports in some Docker Desktop
+  // configurations, and two projects fighting over a port is exactly what these
+  // tasks exist to prevent.
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "AlphaAgent: Start",
+      "detail": "Build if needed and start every container in the background",
+      "type": "shell",
+      "command": "docker compose up -d --build",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "AlphaAgent: Stop",
+      "detail": "Stop the containers but keep the stack assembled (fast to resume)",
+      "type": "shell",
+      "command": "docker compose stop",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "AlphaAgent: Shut down",
+      "detail": "Stop AND remove the containers, releasing the network and ports",
+      "type": "shell",
+      "command": "docker compose down",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "AlphaAgent: Status",
+      "detail": "What is running, and on which ports",
+      "type": "shell",
+      "command": "docker compose ps",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "AlphaAgent: Logs (all services)",
+      "detail": "Tail every service log. Ctrl+C stops following; it does not stop the containers",
+      "type": "shell",
+      "command": "docker compose logs -f --tail 100",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "dedicated" },
+      "problemMatcher": []
+    }
+  ]
+}

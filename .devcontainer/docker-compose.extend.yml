@@ -1,0 +1,90 @@
+# Dev Containers override for docker-compose.yml.
+#
+# This file is layered ON TOP of the project's normal compose file by
+# `.devcontainer/devcontainer.json`. It changes three things and nothing else:
+#
+#   1. The `web` container is kept alive instead of running daphne, because VS
+#      Code needs a long-lived container to attach its server to. You start the
+#      application yourself from the integrated terminal - see the README.
+#
+#   2. The repository is bind-mounted over /app, so edits on the host appear in
+#      the container immediately. Without this you would be editing a copy.
+#
+#   3. The frontend build output and the Python caches are kept out of that mount
+#      where they would otherwise be shadowed.
+#
+# Everything else - the database, Redis, the worker, the beat scheduler, the MCP
+# server, the environment, the health checks - comes from docker-compose.yml
+# unchanged. That is the point: the devcontainer runs the project's real stack,
+# so nothing can drift between "works in the container" and "works in production".
+#
+# `restart` is deliberately absent, inheriting `"no"` from the base file. Closing
+# VS Code stops the stack (shutdownAction: stopCompose) and rebooting the machine
+# does not bring it back.
+
+services:
+  web:
+    # Keep the container up so VS Code can attach. daphne is not started here;
+    # run `python manage.py runserver 0.0.0.0:8000` in the terminal for a dev loop
+    # with autoreload, or `docker compose up -d` from the host for the real server.
+    #
+    # The trap is not decoration. A bare `sleep infinity` ignores SIGTERM, so
+    # `docker compose stop` waits out the ten-second grace period and then kills
+    # the container, which reports exit code 137 - "killed" - for what was an
+    # entirely orderly stop. Waiting on the background job lets the signal through
+    # so the container exits 0 like every other service.
+    command: ["sh", "-c", "trap 'exit 0' TERM INT; sleep infinity & wait"]
+
+    volumes:
+      # The workspace.
+      #
+      # `.` and NOT `..`. Compose resolves a relative bind-mount path against the
+      # PROJECT DIRECTORY, which is the directory of the first compose file
+      # (docker-compose.yml, at the repository root) - not against the directory
+      # of the file the line appears in. `..` therefore resolves one level ABOVE
+      # the repository and mounts the parent folder into /app, which would put
+      # every sibling project inside this container and leave the workspace
+      # holding the wrong files. Verified by resolving the config rather than by
+      # reading it: `docker compose config` is what exposed it.
+      #
+      # `cached` is a no-op on Linux and a meaningful hint on Docker Desktop for
+      # Windows and macOS, where bind mounts are slow.
+      - .:/app:cached
+      # Named volumes shadow the directories below inside the container, so the
+      # container's own build artefacts and installed packages are not hidden by
+      # the host's (usually empty or differently-built) copies.
+      - frontend_node_modules:/app/frontend/node_modules
+      - container_caches:/root/.cache
+
+    environment:
+      # A devcontainer is a development environment; the Django debug toolbar
+      # behaviour and verbose error pages are the point.
+      DJANGO_DEBUG: "true"
+
+  # The worker, scheduler and tool server share the workspace so an edit is
+  # picked up when their process restarts, which is what you expect when you are
+  # working on tasks.py.
+  worker:
+    volumes:
+      - .:/app:cached
+      - container_caches:/root/.cache
+    environment:
+      DJANGO_DEBUG: "true"
+
+  beat:
+    volumes:
+      - .:/app:cached
+      - container_caches:/root/.cache
+    environment:
+      DJANGO_DEBUG: "true"
+
+  mcp:
+    volumes:
+      - .:/app:cached
+      - container_caches:/root/.cache
+    environment:
+      DJANGO_DEBUG: "true"
+
+volumes:
+  frontend_node_modules:
+  container_caches:
