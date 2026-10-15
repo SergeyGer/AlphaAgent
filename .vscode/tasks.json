@@ -55,6 +55,33 @@
       "problemMatcher": []
     },
     {
+      "label": "AlphaAgent: Run server (in this container)",
+      // Only meaningful INSIDE a dev container. The devcontainer keeps `web`
+      // alive with `sleep infinity` so VS Code has something to attach to, which
+      // means nothing is serving until you start it - that is deliberate, and it
+      // surprises people. Binding 0.0.0.0 rather than the default 127.0.0.1 is
+      // what makes the port reachable from outside the container at all.
+      //
+      // Open the dashboard at the port VS Code forwards: the PORTS tab lists it.
+      // It is container port 8000, which is NOT the 8080 the server publishes.
+      "detail": "Run the Django dev server with autoreload (use this inside a dev container)",
+      "type": "shell",
+      "command": "python manage.py runserver 0.0.0.0:8000",
+      "options": { "cwd": "${workspaceFolder}" },
+      "isBackground": true,
+      "presentation": { "reveal": "always", "panel": "dedicated" },
+      "problemMatcher": []
+    },
+    {
+      "label": "AlphaAgent: Migrate + seed demo data",
+      "detail": "Apply migrations and create the demo user, portfolio and API token (inside a dev container)",
+      "type": "shell",
+      "command": "python manage.py migrate && python manage.py seed_demo",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "problemMatcher": []
+    },
+    {
       "label": "AlphaAgent: Logs (all services)",
       "detail": "Tail every service log. Ctrl+C stops following; it does not stop the containers",
       "type": "shell",

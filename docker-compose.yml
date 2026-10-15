@@ -64,8 +64,17 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-alpha_agent_db}
       POSTGRES_USER: ${POSTGRES_USER:-alpha_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+    # Bound to LOOPBACK, not 0.0.0.0. A bare "5432:5432" publishes the database on
+    # every interface, and on a machine with a public IP that means the internet.
+    # Measured on this deployment: 188.245.2.148:5432 completed a PostgreSQL
+    # handshake from outside, with no firewall in front of it - the container had
+    # been reachable that way for two weeks.
+    #
+    # 127.0.0.1 keeps everything that legitimately needs it working: psql on the
+    # host, a GUI client tunnelled over SSH, and the devcontainer. Nothing that
+    # needs it is remote, so nothing is lost but the exposure.
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -98,8 +107,10 @@ services:
       # `redis-cli -a` puts the password in the process list, where any user on
       # the box can read it with `ps`. REDISCLI_AUTH keeps it out of argv.
       REDIS_PASSWORD: ${REDIS_PASSWORD:-dev-only-redis-password-change-me}
+    # Loopback for the same reason as the database above. Redis has a password,
+    # but a password is a second line of defence and this is the first.
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:

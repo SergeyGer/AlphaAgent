@@ -26,13 +26,31 @@
   // keeps running in the background and quietly holds its ports.
   "shutdownAction": "stopCompose",
 
-  // Ports surfaced to the host. The three data services are included because
-  // being able to point a SQL or Redis client at them from the host is most of
-  // the reason to use a devcontainer rather than a terminal.
-  "forwardPorts": [8000, 8080, 5432, 6379, 8100],
+  // Ports surfaced to the host.
+  //
+  // THESE ARE CONTAINER PORTS. Dev Containers tunnels a port *inside the
+  // container* to a port on your machine, so the numbers here must be the ones
+  // something actually listens on in here - not the ones docker-compose.yml
+  // publishes on the server.
+  //
+  // That distinction is the single most confusing thing about this setup, and an
+  // earlier version of this file got it wrong: it listed 8080 as "Dashboard",
+  // because 8080 is what the dashboard answers on when you are sitting on the
+  // server. But 8080 is the HOST side of `8080:8000`; inside the container
+  // nothing binds it, so forwarding it tunnels a dead port and the browser says
+  // the site cannot be reached.
+  //
+  //   inside the container  ->  8000   (the app; forward this one)
+  //   on the server (Docker)->  8080   (published from 8000; irrelevant here)
+  //
+  // With this file, the dashboard on your machine is http://127.0.0.1:8000/.
+  // 8080 is deliberately NOT forwarded: it would only ever forward nothing.
+  "forwardPorts": [8000, 5432, 6379, 8100],
   "portsAttributes": {
-    "8000": { "label": "Django (daphne / runserver)" },
-    "8080": { "label": "Dashboard", "onAutoForward": "notify" },
+    "8000": {
+      "label": "AlphaAgent dashboard (open this one)",
+      "onAutoForward": "openBrowser"
+    },
     "5432": { "label": "PostgreSQL 16" },
     "6379": { "label": "Redis 7" },
     "8100": { "label": "MCP tool server" }

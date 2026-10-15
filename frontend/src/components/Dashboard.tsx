@@ -359,7 +359,12 @@ export function Dashboard(): ReactElement {
             />
           </div>
 
-          <div className="min-w-0 lg:col-span-6">
+          {/* col-span-3, matching the grid above. This was written as
+              `lg:col-span-6`, carried over from a 12-column mental model, but the
+              container is `lg:grid-cols-3`: asking for six columns in a
+              three-column grid makes the browser invent implicit columns, which
+              pushes every following item out of the row and overlaps the panels. */}
+          <div className="min-w-0 lg:col-span-3">
             <PositionTheses theses={theses.data} loading={theses.loading} />
           </div>
 

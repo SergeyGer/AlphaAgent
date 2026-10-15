@@ -5,6 +5,36 @@ audit-trail purge command, and how to read the system when it misbehaves.
 
 Related pages: [[Architecture]] · [[Execution-Guard]] · [[Incident-Log]] · [[Configuration]] · [[MCP-Tool-Server]]
 
+
+## Network exposure: what may be reachable, and from where
+
+A setting that is safe on a laptop can be a published database on a server, and
+nothing in a compose file says which one the author meant. This project has been
+bitten by that once — see [INC-010](Incident-Log#inc-010--both-databases-were-reachable-from-the-public-internet)
+— so the rule is written down rather than assumed.
+
+| Service | Container port | Bound to | Reachable from |
+| --- | --- | --- | --- |
+| `db` (PostgreSQL) | 5432 | `127.0.0.1` | the host only; SSH tunnel for a GUI client |
+| `redis` | 6379 | `127.0.0.1` | the host only |
+| `web` | 8000 | `${ALPHA_WEB_PORT}` | the host, and whatever the host's firewall allows |
+| `mcp` | 8100 | not published | the compose network only |
+
+**The data services bind loopback deliberately.** `"5432:5432"` is Docker's short
+form for `0.0.0.0:5432` — every interface, which on a machine with a routable
+address means the internet. The explicit `127.0.0.1:5432:5432` form is longer and
+looks noisier, and that is the point: it is a place where somebody had to decide.
+
+`core/tests/test_service_exposure.py` enforces this by resolving the compose
+configuration rather than reading the YAML, so it tests what Docker will do rather
+than what the file appears to say. It fails if either port is republished.
+
+**`web` on a public IP is a separate decision.** The dashboard is reachable if the
+host's firewall allows the port; Django then rejects unknown `Host` headers with
+`400` unless `DJANGO_ALLOWED_HOSTS` lists them. That is a second layer, not the
+first — if the dashboard should not be on the public internet at all, bind it to
+loopback as well and reach it through VS Code's port forwarding or an SSH tunnel.
+
 ## Service topology
 
 | Service | Container | Role | Command |

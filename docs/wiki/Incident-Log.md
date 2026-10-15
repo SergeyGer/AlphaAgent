@@ -19,6 +19,8 @@ where **the design was wrong, not the code**.
 | [INC-006](#inc-006--a-tool-that-called-itself) | A tool that called itself | Code | No |
 | [INC-007](#inc-007--required-env_file-broke-every-fresh-clone) | A required `env_file` broke every fresh clone | Packaging | No |
 | [INC-008](#inc-008--sentiment-scored-backwards) | Sentiment scored backwards | Algorithm | No |
+| [INC-009](#inc-009--redis-ran-with-no-authentication-on-a-published-port) | Redis ran unauthenticated on a published port | Exposure | Partly |
+| [INC-010](#inc-010--both-databases-were-reachable-from-the-public-internet) | Both databases were reachable from the public internet | Exposure | **Yes** |
 
 ---
 
@@ -371,6 +373,15 @@ a real requirement; not securing it was not.
 - The port stays published, because the documented host workflow needs it. With a
   password it is a protected port rather than an open one.
 
+  > **This conclusion was wrong, and [INC-010](#inc-010--both-databases-were-reachable-from-the-public-internet)
+  > supersedes it.** "Protected by a password" and "not exposed" are different
+  > properties, and only the second bounds what an attacker can attempt. The port
+  > was reachable from the public internet, not merely from the host, so the
+  > password was doing work that binding to loopback should have done. Left in
+  > place because the reasoning is the useful part: it is a plausible argument that
+  > a security review accepted, and it took a second look at the host's listening
+  > sockets to overturn it.
+
 ### What the fix exposed
 
 Two failures that configuration review alone would not have caught:
@@ -407,3 +418,97 @@ passed there.
 - [[Quality-and-Testing]] — the regression tests that now guard each fix
 - [[Operations]] — runbook for the failure modes described here
 - [[Roadmap]] — the cumulative exposure limit INC-001 argues for
+
+---
+
+## INC-010 — Both databases were reachable from the public internet
+
+**Severity:** high (internet-exposed stateful services) · **Detected by:** checking
+which addresses the host was listening on, while investigating something unrelated
+· **Fixed in:** the loopback-binding commit
+
+### What happened
+
+```
+188.245.2.148:5432   PostgreSQL — answered an SSLRequest from the public internet
+188.245.2.148:6379   Redis      — accepted a connection
+```
+
+Neither was behind a firewall — `ufw` was inactive. PostgreSQL proceeded from the
+`SSLRequest` to authentication, so a scanner reaching that port was talking to a
+real database login prompt. Both had been reachable this way for **two weeks**.
+
+Both are password-protected, so this was brute-force exposure rather than an open
+door. That distinction is real but narrow: an internet-facing database is scanned
+continuously, nothing rate-limits the attempts, and the password in `.env` was the
+entire distance between a scanner and the data.
+
+### Root cause — a default that is safe on a laptop and dangerous on a server
+
+```yaml
+ports:
+  - "5432:5432"     # Docker reads this as 0.0.0.0:5432
+```
+
+A bare `"host:container"` mapping binds **every interface**. Docker's short syntax
+cannot express the difference, so the file did not say which the author meant — and
+the short form is what everyone writes, because it is tidier and works perfectly
+until the machine has a routable address.
+
+This is the same compose file, written on a laptop, deployed to a server with a
+public IP. Nothing forced that change of context to be noticed.
+
+**It is also a correction to INC-009.** That incident secured Redis with a password
+and then concluded, in writing, that "the port stays published… with a password it
+is a protected port rather than an open one." That reasoning was accepted at the
+time and is wrong: authenticated and unexposed are different properties, and only
+the second bounds what can be attempted. The password was doing work that binding
+to loopback should have been doing.
+
+### Fix
+
+```yaml
+ports:
+  - "127.0.0.1:5432:5432"
+  - "127.0.0.1:6379:6379"
+```
+
+Nothing legitimate was lost: `psql` on the host, a GUI client over an SSH tunnel,
+and the devcontainer all still reach the databases. Only the public route is gone.
+Verified after the change — both ports refuse connections from the public address,
+the dashboard still answers `200`, and the database still reads.
+
+### The design change — the part that matters more than the fix
+
+The one-line correction is the easy half. **The exposure returned because nothing
+in the project could tell the two mappings apart**, and a reviewer reading the file
+saw nothing worth flagging.
+
+`core/tests/test_service_exposure.py` now **resolves** the compose configuration
+with `docker compose config --format json` and asserts that every published
+data-service port binds loopback. It reads Compose's own interpretation rather than
+parsing the YAML, because that is the only way to test what Docker will do instead
+of what the file appears to say.
+
+**The guard is proven to fail.** Reverting the binding to `"5432:5432"` produces:
+
+```
+db: service 'db' publishes 5432 on all interfaces. That is the public internet on
+a machine with a routable IP. Bind it to 127.0.0.1 - the host, an SSH tunnel and
+the devcontainer all still work.
+```
+
+A third test pins the interpretation the other two depend on — that Compose reports
+an implicit `0.0.0.0` for a bare mapping — so a future Compose release cannot make
+the assertions pass while the exposure quietly returns.
+
+### Lesson
+
+The lesson is not "bind to loopback". It is that **the development environment and
+the deployed environment had different threat models and shared one configuration
+file**, and the safe-on-a-laptop default travelled with it.
+
+Every setting whose safety depends on network topology — published ports,
+`ALLOWED_HOSTS`, CORS, TLS verification — is now treated as needing an explicit
+decision rather than an inherited default. The explicit form is longer and looks
+noisier, which is the point: it is a place where somebody had to decide.

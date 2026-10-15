@@ -54,8 +54,16 @@ media/
 # ---------------------------------------------------------------------------
 # Celery
 # ---------------------------------------------------------------------------
-celerybeat-schedule
-celerybeat-schedule.*
+# Celery Beat's scheduler state. It is a SQLite database and it lives in the
+# working directory, so it appears the first time Beat runs.
+#
+# `celerybeat-schedule*` and NOT `celerybeat-schedule.*`: Celery 5 keeps its WAL
+# sidecars as `celerybeat-schedule-shm` and `celerybeat-schedule-wal`, with a
+# HYPHEN. The dotted pattern matched `celerybeat-schedule.db` and missed the two
+# files actually created, so `git add -A` committed 185 KB of binary scheduler
+# state under a message about database exposure. A pattern that almost matches is
+# worse than none, because it looks like the case is handled.
+celerybeat-schedule*
 celerybeat.pid
 
 # ---------------------------------------------------------------------------
