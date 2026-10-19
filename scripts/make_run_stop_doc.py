@@ -144,6 +144,19 @@ def heading(doc: Document, text: str, level: int = 1) -> None:
         run.font.color.rgb = ACCENT
 
 
+def t(*lines: str) -> str:
+    """Join wrapped prose into one table cell.
+
+    Explicit rather than implicit. Two string literals abutting inside a list are
+    indistinguishable from a missing comma - the second element silently joins the
+    first, and nothing reports it - which is what CodeQL's
+    py/implicit-string-concatenation-in-list is warning about. A call site makes
+    the intent unambiguous to a reader as well as to a linter, and costs one
+    wrapper per wrapped cell.
+    """
+    return " ".join(line.strip() for line in lines)
+
+
 def table(doc: Document, headers: list[str], rows: list[list[str]]) -> None:
     t = doc.add_table(rows=1, cols=len(headers))
     t.style = "Light Grid Accent 1"
@@ -269,8 +282,10 @@ def section_run_stop(doc: Document) -> None:
             [
                 "make down\n(«AlphaAgent: Shut down»)",
                 "Контейнеры удаляются, сеть освобождается полностью.",
-                "Переключение на другой проект надолго. Именно это освобождает "
-                "порты 8080, 5432 и 6379.",
+                t(
+                    "Переключение на другой проект надолго. Именно это освобождает ",
+                    "порты 8080, 5432 и 6379.",
+                ),
             ],
         ],
     )
@@ -485,8 +500,10 @@ def section_ssh(doc: Document) -> None:
             ],
             [
                 "IdentitiesOnly yes",
-                "Использовать только указанный ключ, а не перебирать всё из "
-                "ssh-agent. Убирает ошибку Too many authentication failures.",
+                t(
+                    "Использовать только указанный ключ, а не перебирать всё из ",
+                    "ssh-agent. Убирает ошибку Too many authentication failures.",
+                ),
             ],
             [
                 "AddKeysToAgent yes",
@@ -494,15 +511,21 @@ def section_ssh(doc: Document) -> None:
             ],
             [
                 "ServerAliveInterval 30\nServerAliveCountMax 4",
-                "Не рвать соединение при простое: сервер опрашивается не реже "
-                "раза в 30 секунд, разрыв после четырёх пропусков.",
+                t(
+                    "Не рвать соединение при простое: сервер опрашивается не реже ",
+                    "раза в 30 секунд, разрыв после четырёх пропусков.",
+                ),
             ],
             ["TCPKeepAlive yes", "Держать TCP-соединение живым на уровне сокета."],
             [
-                "PasswordAuthentication no\nKbdInteractiveAuthentication no\n"
-                "PreferredAuthentications publickey",
-                "Явно требовать ключ. Даже если на сервере пароль случайно "
-                "включат, этот ноутбук им не воспользуется.",
+                t(
+                    "PasswordAuthentication no\nKbdInteractiveAuthentication no\n",
+                    "PreferredAuthentications publickey",
+                ),
+                t(
+                    "Явно требовать ключ. Даже если на сервере пароль случайно ",
+                    "включат, этот ноутбук им не воспользуется.",
+                ),
             ],
         ],
     )
@@ -824,13 +847,17 @@ ALPHA_REDIS_PORT=6380""",
             ],
             [
                 "container name already in use",
-                "Два набора контейнеров с одинаковым префиксом. Задайте "
-                "ALPHA_CONTAINER_PREFIX и COMPOSE_PROJECT_NAME (7.4).",
+                t(
+                    "Два набора контейнеров с одинаковым префиксом. Задайте ",
+                    "ALPHA_CONTAINER_PREFIX и COMPOSE_PROJECT_NAME (7.4).",
+                ),
             ],
             [
                 "Правки не видны в контейнере",
-                "Сломалось монтирование. Проверьте, что в "
-                ".devcontainer/docker-compose.extend.yml монтируется точка, а не две точки.",
+                t(
+                    "Сломалось монтирование. Проверьте, что в ",
+                    ".devcontainer/docker-compose.extend.yml монтируется точка, а не две точки.",
+                ),
             ],
             [
                 "env file .env not found",
@@ -1360,8 +1387,10 @@ def section_troubleshooting(doc: Document) -> None:
         [
             [
                 "port is already allocated",
-                "Порт занят другим проектом. make down здесь или в другом проекте. "
-                "Либо сменить порт в .env (ALPHA_WEB_PORT и другие).",
+                t(
+                    "Порт занят другим проектом. make down здесь или в другом проекте. ",
+                    "Либо сменить порт в .env (ALPHA_WEB_PORT и другие).",
+                ),
             ],
             [
                 "env file .env not found",
@@ -1369,8 +1398,10 @@ def section_troubleshooting(doc: Document) -> None:
             ],
             [
                 "Cannot connect to the Docker daemon",
-                "Docker не запущен: systemctl start docker на сервере, либо "
-                "запустите Docker Desktop на Windows.",
+                t(
+                    "Docker не запущен: systemctl start docker на сервере, либо ",
+                    "запустите Docker Desktop на Windows.",
+                ),
             ],
             [
                 "Страница не открывается сразу после старта",
