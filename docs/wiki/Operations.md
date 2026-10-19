@@ -6,6 +6,37 @@ audit-trail purge command, and how to read the system when it misbehaves.
 Related pages: [[Architecture]] · [[Execution-Guard]] · [[Incident-Log]] · [[Configuration]] · [[MCP-Tool-Server]]
 
 
+## Two stacks on one machine
+
+Two developers sharing a server each need their own containers, network and ports,
+or the second `docker compose up` fails with `container name already in use` and
+both fight over 5432. Five variables make that possible, and every one of them
+defaults to the single-developer value, so nothing changes unless you set them.
+
+| Variable | Isolates | Default |
+| --- | --- | --- |
+| `COMPOSE_PROJECT_NAME` | the container set and the network | the directory name |
+| `ALPHA_CONTAINER_PREFIX` | container names (`alpha2_web`) | `alpha` |
+| `ALPHA_WEB_PORT` | the dashboard | 8080 |
+| `ALPHA_DB_PORT` | PostgreSQL | 5432 |
+| `ALPHA_REDIS_PORT` | Redis | 6379 |
+
+The second developer's `.env`, in full:
+
+```dotenv
+COMPOSE_PROJECT_NAME=alphaagent-dev2
+ALPHA_CONTAINER_PREFIX=alpha2
+ALPHA_WEB_PORT=8081
+ALPHA_DB_PORT=5433
+ALPHA_REDIS_PORT=6380
+```
+
+**Each developer needs their own `.env`.** A shared `.env` means shared ports,
+which is the conflict these variables exist to prevent.
+
+The data services stay bound to `127.0.0.1` whatever the port. Changing that
+binding is not a configuration choice — see INC-010.
+
 ## Network exposure: what may be reachable, and from where
 
 A setting that is safe on a laptop can be a published database on a server, and

@@ -50,13 +50,38 @@ x-app: &app
     redis:
       condition: service_healthy
 
+# Running more than one stack on one machine
+# ------------------------------------------
+# Two developers sharing a server each need their own containers, network and
+# ports, or the second `docker compose up` fails with "container name already in
+# use" and both fight over 5432. Three variables make that possible; every one of
+# them defaults to the single-developer value, so nothing changes unless you set
+# them.
+#
+#   COMPOSE_PROJECT_NAME      isolates the container set and the network
+#   ALPHA_CONTAINER_PREFIX    prefixes the container names (default: alpha)
+#   ALPHA_WEB_PORT            host port for the dashboard (default: 8080)
+#   ALPHA_DB_PORT             host port for PostgreSQL (default: 5432)
+#   ALPHA_REDIS_PORT          host port for Redis (default: 6379)
+#
+# A second developer, in their own copy of .env:
+#
+#   COMPOSE_PROJECT_NAME=alphaagent-dev2
+#   ALPHA_CONTAINER_PREFIX=alpha2
+#   ALPHA_WEB_PORT=8081
+#   ALPHA_DB_PORT=5433
+#   ALPHA_REDIS_PORT=6380
+#
+# The data services stay bound to 127.0.0.1 either way - see the note on the port
+# lines below, and INC-010 in the wiki for why that is not negotiable.
+
 services:
   # ---------------------------------------------------------------------
   # Data tier
   # ---------------------------------------------------------------------
   db:
     image: postgres:16-alpine
-    container_name: alpha_postgres
+    container_name: "${ALPHA_CONTAINER_PREFIX:-alpha}_postgres"
     restart: "no"
     environment:
       # Sourced from .env - never hard-code credentials in this file.
@@ -74,7 +99,7 @@ services:
     # host, a GUI client tunnelled over SSH, and the devcontainer. Nothing that
     # needs it is remote, so nothing is lost but the exposure.
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:${ALPHA_DB_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -85,7 +110,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: alpha_redis
+    container_name: "${ALPHA_CONTAINER_PREFIX:-alpha}_redis"
     restart: "no"
     # Authentication. Redis ships with none, and this stack ran that way, so
     # anything that could reach 6379 had full control of the Celery broker, the
@@ -110,7 +135,7 @@ services:
     # Loopback for the same reason as the database above. Redis has a password,
     # but a password is a second line of defence and this is the first.
     ports:
-      - "127.0.0.1:6379:6379"
+      - "127.0.0.1:${ALPHA_REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -127,7 +152,7 @@ services:
   # ---------------------------------------------------------------------
   web:
     <<: *app
-    container_name: alpha_web
+    container_name: "${ALPHA_CONTAINER_PREFIX:-alpha}_web"
     # NOTE: commands are YAML *lists* on purpose. A folded scalar (``>``) keeps
     # the newlines of more-indented continuation lines, which silently truncated
     # the command to `gunicorn config.wsgi:application` and made gunicorn fall
@@ -154,7 +179,7 @@ services:
   # Autonomous agent sweep: consumes the fan-out subtasks.
   worker:
     <<: *app
-    container_name: alpha_worker
+    container_name: "${ALPHA_CONTAINER_PREFIX:-alpha}_worker"
     command:
       - celery
       - -A
@@ -180,7 +205,7 @@ services:
   # portfolio state or place a trade.
   mcp:
     <<: *app
-    container_name: alpha_mcp
+    container_name: "${ALPHA_CONTAINER_PREFIX:-alpha}_mcp"
     command:
       - python
       - -m
@@ -225,7 +250,7 @@ services:
   # Celery Beat: the cron scheduler for autonomous_market_monitoring_task.
   beat:
     <<: *app
-    container_name: alpha_beat
+    container_name: "${ALPHA_CONTAINER_PREFIX:-alpha}_beat"
     command:
       - sh
       - -c
