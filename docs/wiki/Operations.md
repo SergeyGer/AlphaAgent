@@ -37,6 +37,73 @@ which is the conflict these variables exist to prevent.
 The data services stay bound to `127.0.0.1` whatever the port. Changing that
 binding is not a configuration choice — see INC-010.
 
+## Branch protection
+
+`main` is protected by a **repository ruleset** named **Protect Main**, not by the
+older branch-protection API. Rulesets are the current mechanism: they are
+versioned, they apply to several branches at once through pattern matching, and
+they keep a readable history of when a rule changed and who changed it.
+
+| Rule | Effect |
+| --- | --- |
+| `deletion` | `main` cannot be deleted |
+| `non_fast_forward` | no force-push; history cannot be rewritten |
+| `required_status_checks` | **5 checks must pass**, and the branch must be up to date first |
+| `pull_request` | changes must arrive through a PR (0 approvals required) |
+
+The required checks are the CI jobs by name — `Lint & format`,
+`Tests (PostgreSQL 16)`, `Frontend tests`, `Docker image builds`,
+`Analyze Python` — so a red build blocks the merge button, not just the CI tab.
+`strict_required_status_checks_policy` is on, which means a PR must also be
+rebased on current `main`: passing on an old base is not the same as passing on
+what will actually land.
+
+**There is one bypass, and it is deliberate.** The repository admin role can
+bypass. Without it, the coverage-badge workflow could not push its
+`chore: update coverage badge [skip ci]` commit (no checks run on a `[skip ci]`
+push, so it can never satisfy the rule) and an emergency fix would be impossible.
+A bypass that is documented and narrow is honest; one that is discovered later is
+not.
+
+Verify the enforcement from the command line — a direct push by a non-admin is
+refused with, verbatim:
+
+```
+remote: Bypassed rule violations for refs/heads/main:
+remote: - 5 of 5 required status checks are expected.
+remote: - Changes must be made through a pull request.
+```
+
+Those two lines are the proof. They appear only when a rule **would have** blocked
+the push; the push succeeded solely because the pushing identity held the bypass.
+
+## Known open advisory: MCP streamable-HTTP sessions
+
+One advisory is open against this project and **cannot be closed here**:
+`mcp` 1.28.1, *Unbounded Session Accumulation in StreamableHTTP Transport*
+(medium), patched in 1.30.0.
+
+The vulnerable code **is** in the execute path — `mcp_server/__main__.py` serves
+`mcp.streamable_http_app()` — so dismissing it would be wrong. It is left open on
+purpose. What bounds it:
+
+- the MCP service publishes no ports; it is reachable only inside the compose
+  network, not from the host and not from the internet;
+- every request must carry the shared secret checked by `SharedSecretGuard`
+  (`mcp_server/auth.py`), compared with `hmac.compare_digest`;
+- the worst case is memory growth from an authenticated client repeatedly opening
+  sessions, which in this threat model means a client already inside the network.
+
+The fix is genuinely blocked upstream: `crewai` declares `mcp~=1.28.1`, which
+means `>=1.28.1,<1.29.0`. Verified by reading the `Requires-Dist` metadata of the
+newest release (1.15.28) rather than assuming a bump would carry it. Until crewai
+widens that pin, no amount of re-locking reaches 1.30.0.
+
+Two other advisories were dismissed with reasons recorded on the alert itself:
+`twisted` (the advisory is `IMAP4.wildcardToRegexp()`, and this project contains no
+IMAP client) and `uv` (a transitive CLI tool imported by nothing at runtime). Both
+dismissals cite the check that justified them.
+
 ## Network exposure: what may be reachable, and from where
 
 A setting that is safe on a laptop can be a published database on a server, and
