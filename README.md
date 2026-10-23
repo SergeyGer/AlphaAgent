@@ -9,7 +9,7 @@
 [![CI](https://github.com/SergeyGer/AlphaAgent/actions/workflows/ci.yml/badge.svg)](https://github.com/SergeyGer/AlphaAgent/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/SergeyGer/AlphaAgent/actions/workflows/codeql.yml/badge.svg)](https://github.com/SergeyGer/AlphaAgent/actions/workflows/codeql.yml)
 [![Docs](https://github.com/SergeyGer/AlphaAgent/actions/workflows/docs.yml/badge.svg)](https://github.com/SergeyGer/AlphaAgent/actions/workflows/docs.yml)
-[![Tests](https://img.shields.io/badge/tests-637%20passing-brightgreen.svg)](https://github.com/SergeyGer/AlphaAgent/wiki/Quality-and-Testing)
+[![Tests](https://img.shields.io/badge/tests-643%20passing-brightgreen.svg)](https://github.com/SergeyGer/AlphaAgent/wiki/Quality-and-Testing)
 [![Coverage](coverage.svg)](https://github.com/SergeyGer/AlphaAgent/wiki/Quality-and-Testing)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -321,7 +321,7 @@ Recharts · GitHub Actions
 
 | | |
 | --- | --- |
-| **637 automated tests** | 522 Python — risk guard, ledger, API, task pipeline, WebSockets, Telegram bot, tool server — plus 115 frontend (Vitest + Testing Library) covering the formatters, the WebSocket frame validator and the metric grid |
+| **643 automated tests** | 528 Python — risk guard, ledger, API, task pipeline, WebSockets, Telegram bot, tool server — plus 115 frontend (Vitest + Testing Library) covering the formatters, the WebSocket frame validator and the metric grid |
 | **79% coverage, enforced** | CI fails below a 70% floor, and the badge above is regenerated from the real run on every push to `main` |
 | **Continuous integration** | Lint, format, the full test suite against PostgreSQL 16, and a Docker image build — on every push |
 | **Security scanning** | CodeQL analysis plus a test that walks every publishable file looking for committed credentials |

@@ -21,8 +21,8 @@ Two separate questions are answered here, and they are often conflated:
 
 Every tool and agent in this system is read-only. Nothing an LLM produces can
 mutate state. It produces **one** structure — a
-[`TradeProposal`](../blob/main/ai_agent.py#L87) — and a deterministic function
-([`evaluate_proposal`](../blob/main/services/execution.py#L155)) decides whether
+[`TradeProposal`](https://github.com/SergeyGer/AlphaAgent/blob/main/ai_agent.py#L87) — and a deterministic function
+([`evaluate_proposal`](https://github.com/SergeyGer/AlphaAgent/blob/main/services/execution.py#L155)) decides whether
 that becomes a trade.
 
 ```python
@@ -47,20 +47,20 @@ checked afterwards, so an invalid proposal cannot be constructed at all.
 
 | Field | Constraint | What it stops |
 | --- | --- | --- |
-| `action` | `Literal["BUY", "SELL", "HOLD"]` ([L78](../blob/main/ai_agent.py#L78)) | Invented verbs — `"ACQUIRE"`, `"MAYBE"`, `"buy"` |
-| `sentiment` | `Literal["BULLISH", "BEARISH", "NEUTRAL"]` ([L79](../blob/main/ai_agent.py#L79)) | Free-text mood labels that nothing downstream can compare |
-| `amount` | `ge=0.0` ([L97](../blob/main/ai_agent.py#L97)) | Negative quantities — a "BUY −5" that would read as a sell |
-| `reasoning` | `min_length=1` ([L103](../blob/main/ai_agent.py#L103)) | A decision with no stated reason, which cannot be audited later |
+| `action` | `Literal["BUY", "SELL", "HOLD"]` ([L78](https://github.com/SergeyGer/AlphaAgent/blob/main/ai_agent.py#L78)) | Invented verbs — `"ACQUIRE"`, `"MAYBE"`, `"buy"` |
+| `sentiment` | `Literal["BULLISH", "BEARISH", "NEUTRAL"]` ([L79](https://github.com/SergeyGer/AlphaAgent/blob/main/ai_agent.py#L79)) | Free-text mood labels that nothing downstream can compare |
+| `amount` | `ge=0.0` ([L97](https://github.com/SergeyGer/AlphaAgent/blob/main/ai_agent.py#L97)) | Negative quantities — a "BUY −5" that would read as a sell |
+| `reasoning` | `min_length=1` ([L103](https://github.com/SergeyGer/AlphaAgent/blob/main/ai_agent.py#L103)) | A decision with no stated reason, which cannot be audited later |
 | all | `extra="ignore"` | Additional keys a model invents are dropped, not propagated |
 
 Three `mode="before"` validators recover from *formatting* mistakes without
 loosening the *semantic* ones — a distinction worth being explicit about:
 
-- [`_upper`](../blob/main/ai_agent.py#L129) — `"buy"` becomes `"BUY"`. Casing is a
+- [`_upper`](https://github.com/SergeyGer/AlphaAgent/blob/main/ai_agent.py#L129) — `"buy"` becomes `"BUY"`. Casing is a
   formatting artefact, not a different decision.
-- [`_coerce_amount`](../blob/main/ai_agent.py#L132) — `"$1,234.50"` becomes
+- [`_coerce_amount`](https://github.com/SergeyGer/AlphaAgent/blob/main/ai_agent.py#L132) — `"$1,234.50"` becomes
   `1234.50`. A currency-formatted string is the same number in a different font.
-- [`_coerce_reasoning`](../blob/main/ai_agent.py#L141) — collapses whitespace.
+- [`_coerce_reasoning`](https://github.com/SergeyGer/AlphaAgent/blob/main/ai_agent.py#L141) — collapses whitespace.
 
 What those validators deliberately do **not** do is guess. They never repair an
 action, never default an unknown sentiment, and never invent a quantity. A model
@@ -72,7 +72,7 @@ would be this system's invention, recorded as the model's decision.
 ## 3. Layer 2 — Parsing, with several attempts and one honest failure
 
 Models do not always return clean JSON: they wrap it in prose, in a markdown fence,
-or in an explanatory sentence. [`parse_proposal`](../blob/main/ai_agent.py#L160)
+or in an explanatory sentence. [`parse_proposal`](https://github.com/SergeyGer/AlphaAgent/blob/main/ai_agent.py#L160)
 tries successively weaker interpretations:
 
 1. already a `TradeProposal` → return it;
@@ -94,7 +94,7 @@ with the first 300 characters of the offending output.
 
 When the model fails to produce anything usable — parsing failure, provider outage,
 missing key — the system does not stop and does not retry indefinitely. It switches
-to [`HeuristicDecisionEngine`](../blob/main/ai_agent.py#L403), a fully offline,
+to [`HeuristicDecisionEngine`](https://github.com/SergeyGer/AlphaAgent/blob/main/ai_agent.py#L403), a fully offline,
 deterministic decision engine.
 
 This is a deliberate choice about what a fallback should be. A fallback that is also
@@ -121,7 +121,7 @@ can do four things:
 
 The limits are covered in [[Execution-Guard]]: a per-trade budget, the cash
 balance, a daily loss limit, an instrument allow-list, and the two portfolio-level
-ceilings added in ADR-0015 ([`_portfolio_headroom`](../blob/main/services/execution.py#L100)).
+ceilings added in ADR-0015 ([`_portfolio_headroom`](https://github.com/SergeyGer/AlphaAgent/blob/main/services/execution.py#L100)).
 Every message names the constraint that bound, so an audit reader is not sent to
 the wrong one.
 
@@ -137,7 +137,7 @@ position or a refusal, with the model's original intent preserved in
 Asking an LLM "is this news good or bad for AAPL" yields an answer that changes
 between runs, cannot be reproduced, and cannot be audited. So sentiment is not
 asked for. It is computed, by
-[`services/sentiment.py`](../blob/main/services/sentiment.py), from a finance-tuned
+[`services/sentiment.py`](https://github.com/SergeyGer/AlphaAgent/blob/main/services/sentiment.py), from a finance-tuned
 lexicon with negation and intensifier handling, and the result is handed to the
 model **as evidence**.
 
@@ -151,7 +151,7 @@ handed to the LLM as grounding evidence rather than being replaced by it.
 """
 ```
 
-The aggregate ([`aggregate_sentiment`](../blob/main/services/sentiment.py#L297))
+The aggregate ([`aggregate_sentiment`](https://github.com/SergeyGer/AlphaAgent/blob/main/services/sentiment.py#L297))
 carries a **confidence** defined as:
 
 ```
@@ -209,16 +209,16 @@ skip.
 
 Every decision is scored, after the fact, against what the market actually did.
 The mechanism is [[Decision-Attribution]]: `DecisionOutcome` rows
-([`core/models.py`](../blob/main/core/models.py#L420)) at 1, 7 and 30-day horizons,
+([`core/models.py`](https://github.com/SergeyGer/AlphaAgent/blob/main/core/models.py#L420)) at 1, 7 and 30-day horizons,
 written by `evaluate_pending` and summarised by
-[`build_scorecard`](../blob/main/services/attribution.py#L305).
+[`build_scorecard`](https://github.com/SergeyGer/AlphaAgent/blob/main/services/attribution.py#L305).
 
 ### The scoring rules are load-bearing
 
 Three details decide whether the resulting number means anything:
 
 **A SELL is correct when the price falls.**
-[`directional_hit`](../blob/main/services/attribution.py#L90) signs the forward
+[`directional_hit`](https://github.com/SergeyGer/AlphaAgent/blob/main/services/attribution.py#L90) signs the forward
 return by the action. Scoring every action against "did the price rise" would mark
 every correct exit as a failure and make the whole exercise worthless.
 
@@ -231,7 +231,7 @@ making no claims that could be wrong. `NULL` is excluded from the denominator;
 measured forward returns from the day's closing price, while trades executed at the
 live quote — a $166 difference on a real BTC decision. The bias was not random:
 whenever the close sat below the entry it flattered a BUY.
-[`_start_price`](../blob/main/services/attribution.py#L147) now prefers the
+[`_start_price`](https://github.com/SergeyGer/AlphaAgent/blob/main/services/attribution.py#L147) now prefers the
 transaction's own price and falls back to the close only for a HOLD, which traded
 nothing.
 
