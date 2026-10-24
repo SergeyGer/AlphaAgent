@@ -12,7 +12,7 @@
 
 # --- Web / API tier -------------------------------------------------------
 Django==5.2.17                 # LTS
-djangorestframework==3.18.1    # REST API
+djangorestframework==3.18.2    # REST API
 
 # --- Real-time / ASGI -----------------------------------------------------
 # Daphne is not optional: the dashboard streams over WebSocket, which a WSGI
