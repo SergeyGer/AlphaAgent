@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import inspect
 import os
-import pathlib
 import tempfile
 from datetime import timedelta
 from decimal import Decimal
@@ -1192,7 +1191,7 @@ class McpAuthTests(TestCase):
         """The port mapping was the exposure; it must stay removed."""
         import yaml
 
-        compose = yaml.safe_load(pathlib.Path("docker-compose.yml").read_text())
+        compose = yaml.safe_load(Path("docker-compose.yml").read_text())
         mcp = compose["services"]["mcp"]
 
         self.assertNotIn("ports", mcp)
@@ -1307,7 +1306,7 @@ class RedisAuthTests(TestCase):
 
         for name in ("docker-compose.yml", "docker-compose.ghcr.yml"):
             with self.subTest(compose=name):
-                compose = yaml.safe_load(pathlib.Path(name).read_text())
+                compose = yaml.safe_load(Path(name).read_text())
                 redis = compose["services"]["redis"]
                 command = " ".join(str(part) for part in redis.get("command", []))
                 self.assertIn("--requirepass", command)
@@ -1320,7 +1319,7 @@ class RedisAuthTests(TestCase):
         """`redis-cli -a` exposes the secret in the process list to any user."""
         import yaml
 
-        compose = yaml.safe_load(pathlib.Path("docker-compose.yml").read_text())
+        compose = yaml.safe_load(Path("docker-compose.yml").read_text())
         health = " ".join(compose["services"]["redis"]["healthcheck"]["test"])
         self.assertNotIn(" -a ", health)
 
