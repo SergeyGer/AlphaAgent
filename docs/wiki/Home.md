@@ -9,6 +9,19 @@ implementation detail and the reasoning behind it.
 
 ---
 
+
+## Current version
+
+**1.1.0** (2026-10-23). See the
+[changelog](https://github.com/SergeyGer/AlphaAgent/blob/main/CHANGELOG.md) for what
+changed, and the
+[releases page](https://github.com/SergeyGer/AlphaAgent/releases) for the notes.
+
+| Version | Date | Headline |
+| --- | --- | --- |
+| **1.1.0** | 2026-10-23 | Decision attribution, portfolio ceilings, position theses, security pass |
+| 1.0.0 | 2026-09-30 | Initial release: a four-tier autonomous investment platform |
+
 ## If you are evaluating this project
 
 Three pages will tell you the most in the least time:
