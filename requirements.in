@@ -42,3 +42,17 @@ requests==2.34.2               # RSS / HTTP client
 defusedxml==0.7.1              # hardened XML parsing for untrusted RSS feeds
 beautifulsoup4==4.15.0
 lxml==6.1.3
+
+# Pinned to a RELEASE CANDIDATE deliberately, and only because it is a security fix.
+#
+# twisted 26.4.0 is vulnerable to HTTP request smuggling in twisted.web (a bare CR
+# or LF in a header value). Four of the five open advisories against twisted cover
+# subsystems this project never loads - IMAP4, IRC, conch Telnet and twisted.words -
+# but that one is reachable: daphne imports twisted.web.http and
+# twisted.web.http_headers, which is the HTTP parsing path this server runs on.
+#
+# 26.10.0rc1 is the only published release containing the fix; there is no stable
+# 26.10.0 yet. Pinned explicitly here rather than reached through daphne's
+# `twisted[tls]>=22.4` so the choice is visible and dated. Replace with a stable
+# version as soon as one is published.
+twisted==26.10.0rc1

@@ -7,7 +7,44 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-Nothing yet. See `[1.1.0]` below for what shipped.
+Nothing yet. See `[1.1.1]` below for what shipped.
+
+## [1.1.1] — 2026-10-25
+
+A security release. No new features and no behaviour changes: the execution guard,
+the attribution ledger and the API are untouched.
+
+### Security
+
+- **`twisted` 26.4.0 → 26.10.0rc1** — HTTP request smuggling in `twisted.web` via a
+  bare CR or LF in a header value. This is the one advisory against `twisted` that
+  this project actually reaches: `daphne` imports `twisted.web.http` and
+  `twisted.web.http_headers`, which is the HTTP parsing path the server runs on.
+  The other four (IMAP4, IRC, conch Telnet, `twisted.words`) cover subsystems that
+  are never loaded.
+  Pinned to a **release candidate** deliberately, because `26.10.0rc1` is the only
+  published release containing the fix and no stable `26.10.0` exists yet. The pin
+  is explicit in `requirements.in` with the reason and a note to replace it, rather
+  than reached implicitly through `daphne`'s `twisted[tls]>=22.4`.
+- **`filelock` 4.0.12 → 4.2.4** — SQLite reopen of the lock database by name.
+- **`virtualenv` 21.14.9 → 21.14.13** — unescaped `--prompt` value in the Bash
+  activator.
+- **`setuptools` 84.1.0 → 84.2.1** — Windows path escape via `namespace_packages.txt`.
+- **`undici` 8.12.x → 8.12.3** (frontend) — denial of service via an unhandled
+  error on socket close.
+
+### Known remaining
+
+- **`mcp` 1.28.1** — an unbounded session accumulation in the streamable-HTTP
+  transport, patched in 1.30.0. Still blocked: `crewai` declares `mcp~=1.28.1`
+  (`>=1.28.1,<1.29.0`), and no released `crewai` widens that range. The vulnerable
+  code is in this project's execute path, so it is left visible rather than
+  dismissed. Bounded by loopback binding and a required shared secret.
+
+### Verified
+
+528 backend tests and 115 frontend tests pass, and `daphne` serves on the release
+candidate: `Listening on TCP address 0.0.0.0:8000`, dashboard returns 200.
 
 ## [1.1.0] — 2026-10-23
 
@@ -139,6 +176,7 @@ Initial release: a four-tier autonomous investment platform.
 - **CI** — Ruff lint/format, the full test suite against PostgreSQL 16 and
   Redis 7, migration-drift detection and a Docker build smoke test.
 
-[Unreleased]: https://github.com/SergeyGer/AlphaAgent/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/SergeyGer/AlphaAgent/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/SergeyGer/AlphaAgent/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/SergeyGer/AlphaAgent/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/SergeyGer/AlphaAgent/releases/tag/v1.0.0
