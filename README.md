@@ -332,8 +332,18 @@ Recharts · GitHub Actions
 
 ## Roadmap
 
-Cumulative daily deployment limits · backtesting against historical data ·
-per-user strategy configuration · a hosted demonstration instance.
+Tracked as issues, so each can be discussed and claimed:
+[deployment ceilings](https://github.com/SergeyGer/AlphaAgent/issues/27) ·
+[backtesting](https://github.com/SergeyGer/AlphaAgent/issues/28) ·
+[decision replay](https://github.com/SergeyGer/AlphaAgent/issues/29) ·
+[per-user strategies](https://github.com/SergeyGer/AlphaAgent/issues/30) ·
+[hosted instance](https://github.com/SergeyGer/AlphaAgent/issues/31) ·
+[more asset classes](https://github.com/SergeyGer/AlphaAgent/issues/32).
+Three further proposals come from comparing the project against
+[TradingAgents](https://github.com/TauricResearch/TradingAgents):
+[point-in-time data](https://github.com/SergeyGer/AlphaAgent/issues/33),
+[a live scorecard](https://github.com/SergeyGer/AlphaAgent/issues/34) and
+[verifiable audit bundles](https://github.com/SergeyGer/AlphaAgent/issues/35).
 
 Full roadmap and rationale: [Roadmap](https://github.com/SergeyGer/AlphaAgent/wiki/Roadmap).
 

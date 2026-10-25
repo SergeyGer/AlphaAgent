@@ -3,11 +3,17 @@
 What is deliberately not built yet, and why. Several of these are ideas the
 system's own incident history argues for — those are marked.
 
+> **Each item below is tracked as a GitHub Issue** — see the
+> [issue list](https://github.com/SergeyGer/AlphaAgent/issues?q=is%3Aissue+is%3Aopen+label%3Aroadmap).
+> This page keeps the reasoning; the issue is where the work is discussed, claimed
+> and closed. When the two disagree, the issue is newer.
+
 ---
 
 ## Next
 
 ### Cumulative daily deployment ceiling
+**Tracked as [#27](https://github.com/SergeyGer/AlphaAgent/issues/27).**
 **Motivated by [INC-001](Incident-Log#inc-001--overlapping-sweeps-bought-the-same-stock-twice).**
 
 The per-ticker cooldown bounds *overlapping* runs, but nothing bounds a
@@ -24,6 +30,7 @@ total as an input), and that is a change worth making deliberately rather than
 alongside the throttling work.
 
 ### Backtesting against historical data
+**Tracked as [#28](https://github.com/SergeyGer/AlphaAgent/issues/28).**
 The agent layer produces a decision for a point in time. Replaying a historical
 period would answer the question the project cannot currently answer: *would this
 strategy have made money?*
@@ -34,6 +41,7 @@ a data source with a stated completeness guarantee before the results mean
 anything.
 
 ### Deterministic replay of a recorded decision
+**Tracked as [#29](https://github.com/SergeyGer/AlphaAgent/issues/29).**
 The audit trail stores both arguments, the verdict and the context. A replay mode
 would re-run the guard against a recorded proposal and confirm it still produces
 the same verdict — proving the risk behaviour is reproducible rather than merely
@@ -48,6 +56,7 @@ with the deployment ceiling above.
 ## Later
 
 ### Per-user strategy configuration
+**Tracked as [#30](https://github.com/SergeyGer/AlphaAgent/issues/30).**
 Risk profile, watchlist and limits are currently portfolio-level. A user model
 would let several strategies run concurrently against separate portfolios.
 
@@ -56,6 +65,7 @@ but there is no reason to rush into a user-facing configuration surface before
 there is more than one user.
 
 ### Hosted demonstration instance
+**Tracked as [#31](https://github.com/SergeyGer/AlphaAgent/issues/31).**
 A read-only public deployment would let a reviewer explore the dashboard without
 running Docker.
 
@@ -66,6 +76,7 @@ getting that wrong is worse than not having a demo. The recorded
 ground safely.
 
 ### Additional asset classes and providers
+**Tracked as [#32](https://github.com/SergeyGer/AlphaAgent/issues/32).**
 The ledger already handles fractional quantities to eight decimal places for
 crypto. Extending to other instruments is mostly a matter of additional market
 data adapters behind the existing tool interface.
