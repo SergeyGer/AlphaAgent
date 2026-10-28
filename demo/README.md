@@ -6,9 +6,13 @@ guard function, `services/execution.py::evaluate_proposal()` - the same code the
 Celery worker, REST API and Telegram bot call before any trade reaches the
 ledger. Nothing about the guardrails is reimplemented for the demo.
 
+The page is shaped like the React terminal at `/api`: dark chrome, a top bar with
+`LIVE` / `demo · MODERATE` pills, seven metric cards (the same order as the
+dashboard), the two portfolio-ceiling meters, and four tabs.
+
 ## What it shows
 
-1. **Guard playground** - set cash, `max_trade_allocation_pct`,
+1. **Guard playground** (first tab) - set cash, `max_trade_allocation_pct`,
    `daily_loss_limit_usd`, `max_portfolio_exposure_pct`,
    `max_ticker_concentration_pct`, realised P&L today, what else the portfolio
    holds, asset price, side and size; see the guard's verdict (`ALLOWED` /
@@ -22,16 +26,24 @@ ledger. Nothing about the guardrails is reimplemented for the demo.
      single-instrument concentration ceiling**, a portfolio where **both ceilings
      bind and the smaller headroom wins**, and a buy **refused because
      concentration is already at its ceiling**.
-2. **The three-agent debate** the guard is guarding - bull researcher, bear
-   short-seller, CIO adjudicator - and the one-way pipeline from proposal to ledger.
-3. **Explained, deliberately not executed** (the reasons are on the page):
-   **outcome attribution** - decisions scored against forward returns at 1/7/30
-   days, scored by what the *action* was worth (a SELL is right when the price
-   falls), HOLD excluded from the hit rate rather than counted as a miss, SPY as
-   the benchmark - and **position theses** - one written thesis plus an
-   invalidation condition per open position, fed back to the agents on every run
-   so an exit has to argue with the reason for entry.
-4. A link to the repository.
+
+   The metric row is driven by the same inputs: equity, cash, positions, the
+   P&L cards, the daily-loss budget, and the two ceiling meters all move with the
+   sliders. `cost_basis` is the one display-only input - it exists for the
+   UNREALISED P&L card and is never passed to the guard.
+2. **The three-agent debate** the guard is guarding (About tab) - bull researcher,
+   bear short-seller, CIO adjudicator - and the one-way pipeline from proposal to
+   ledger.
+3. **Decision quality** (tab) - outcome attribution, **explained but deliberately
+   not executed**: decisions scored against forward returns at 1/7/30 days, scored
+   by what the *action* was worth (a SELL is right when the price falls), HOLD
+   excluded from the hit rate rather than counted as a miss, SPY as the benchmark.
+4. **Position thesis** (tab) - **explained but deliberately not executed**: one
+   written thesis plus an invalidation condition per open position, fed back to the
+   agents on every run so an exit has to argue with the reason for entry.
+5. **About** (tab) - the crew, the pipeline, the guard rules, the offline
+   guarantees, the files actually exercised, the source proof, and the repository
+   link.
 
 ## Run locally
 
@@ -98,8 +110,9 @@ already in `demo/requirements.txt`.
 - **Attribution and theses are described, not executed.** `services/attribution.py`
   and `services/thesis.py` are deliberately **not imported**: both work through
   models that need a database (`DecisionOutcome`, `PositionThesis`) and attribution
-  also reads price history from yfinance. Sections 3 and 4 of the app describe the
-  real implementations and say on the page that they are not run. See the wiki:
+  also reads price history from yfinance. The Decision quality and Position thesis
+  tabs describe the real implementations and say on the page that they are not run.
+  See the wiki:
   [Decision Attribution](https://github.com/SergeyGer/AlphaAgent/wiki/Decision-Attribution)
   and [Position Thesis](https://github.com/SergeyGer/AlphaAgent/wiki/Position-Thesis).
 - The AI proposal is modelled by a two-field stand-in (`action`, `amount`) that
