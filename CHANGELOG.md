@@ -64,12 +64,20 @@ secret - the authentication guard still working on `mcp` 1.30.0.
 
 ### Added
 
-- **A narrated 90-second walkthrough** (`docs/demo-walkthrough.mp4`). The script was
-  written by Claude Opus 5.5 given the project's real facts, then spoken and timed
-  against the measured scene durations. Recorded from the running system.
-- **Role-based onboarding** in the README: four tracks — managing money, building
-  with LLMs, running infrastructure, reviewing the work — each an ordered list with
-  per-step reading times and a total.
+- **A narrated 77-second walkthrough** (`docs/demo-walkthrough.mp4`), rewritten for a
+  finance audience. Script by Claude Opus 5.5, spoken, and built on a real recorded
+  session: the ticker being switched, a magnified crop of the bull/bear reasoning,
+  then the guard schema. A quiet ambient bed sits under the narration.
+- **Role-based onboarding** in the README: four collapsible tracks — managing money,
+  building with LLMs, running infrastructure, reviewing the work — each an ordered
+  list with per-step reading times. Collapsed by default, so the four role names and
+  their durations are visible without scrolling and the detail is one click away.
+
+### Removed
+
+- **The "Skills demonstrated" section.** Its content is better made by the work it
+  describes; a section that praises itself costs a reader's attention and buys
+  nothing.
 
 ### Changed
 

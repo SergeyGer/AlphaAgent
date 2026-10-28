@@ -20,7 +20,7 @@ decided, why, and — after the fact — whether it was right.
 </div>
 
 <details>
-<summary><b>Contents</b> — 10 sections, ~8 min read, or jump straight to the code</summary>
+<summary><b>Contents</b> — 9 sections, ~8 min read, or jump straight to the code</summary>
 
 | | |
 | --- | --- |
@@ -30,7 +30,6 @@ decided, why, and — after the fact — whether it was right.
 | [**The problem worth solving**](#the-problem-worth-solving) | Why an unauditable model trading money is the wrong design |
 | [**How it works in one minute**](#how-it-works-in-one-minute) | The request path, end to end |
 | [**What this project demonstrates**](#what-this-project-demonstrates) | Twelve delivered areas, one line each |
-| [**Skills demonstrated**](#skills-demonstrated) | The transferable version of the same thing |
 | [**Under the hood**](#under-the-hood) | Stack, and links into the full technical wiki |
 | [**Quality signals**](#quality-signals) | Tests, coverage, CI and what each gate actually proves |
 | [**Roadmap**](#roadmap) | What is deliberately not built yet |
@@ -41,16 +40,13 @@ decided, why, and — after the fact — whether it was right.
 
 ## Choose your path
 
-The same project, read four different ways. Each track is a short ordered list, not
-a tour of everything — pick the one that matches why you opened this page.
+Four tracks. **Click yours** — the detail opens underneath, and nothing else does.
 
-<table>
-<tr><td width="50%" valign="top">
+<details>
+<summary><b>📊 I manage money</b> — risk controls, and what the system has actually scored &nbsp;·&nbsp; <code>15 min</code></summary>
 
-### 📊 If you manage money
-
-You care whether the risk controls are real and whether the thing makes money. It
-does not, yet, and that is published.
+You care whether the risk controls are real and whether it makes money. It does
+not, yet, and that is published.
 
 | Step | Read | Time |
 | --- | --- | --- |
@@ -59,13 +55,13 @@ does not, yet, and that is published.
 | 3 | [Position theses](https://github.com/SergeyGer/AlphaAgent/wiki/Position-Thesis) — why a position is held, and what would falsify it | **3 min** |
 | 4 | [INC-001](https://github.com/SergeyGer/AlphaAgent/wiki/Incident-Log#inc-001--overlapping-sweeps-bought-the-same-stock-twice) — the over-concentration a per-trade limit did not catch | **3 min** |
 
-**Total: ~15 min.** Skip everything about CrewAI, Docker and React.
+**Skip** everything about CrewAI, Docker and React.
 
-</td><td width="50%" valign="top">
+</details>
 
-### 🤖 If you build with LLMs
+<details>
+<summary><b>🤖 I build with LLMs</b> — how model output is constrained, and what happens when it is wrong &nbsp;·&nbsp; <code>16 min</code></summary>
 
-You want to know how model output is constrained, and what happens when it is wrong.
 The interesting claim is that the model never gets the final say.
 
 | Step | Read | Time |
@@ -73,51 +69,41 @@ The interesting claim is that the model never gets the final say.
 | 1 | [LLM quality and guardrails](https://github.com/SergeyGer/AlphaAgent/wiki/LLM-Quality-and-Guardrails) — the seven layers, with line-numbered code | **7 min** |
 | 2 | [The agent debate](https://github.com/SergeyGer/AlphaAgent/wiki/Agent-Debate) — bull, bear, CIO, and the output contract | **4 min** |
 | 3 | `ai_agent.py` — [`TradeProposal`](https://github.com/SergeyGer/AlphaAgent/blob/main/ai_agent.py#L87) and [`parse_proposal`](https://github.com/SergeyGer/AlphaAgent/blob/main/ai_agent.py#L160) | **3 min** |
-| 4 | [Model compatibility](https://github.com/SergeyGer/AlphaAgent/wiki/Configuration) — why Haiku 5.5 rejects `temperature`, and what broke | **2 min** |
+| 4 | [Model compatibility](https://github.com/SergeyGer/AlphaAgent/wiki/Configuration) — why Haiku 5.5 rejects `temperature` | **2 min** |
 
-**Total: ~16 min.** The single idea worth taking away: `parse_proposal` returns
-`None` rather than defaulting to `HOLD`, because a default is indistinguishable in
-the audit trail from a decision the model never made.
+**The one idea worth taking away:** `parse_proposal` returns `None` rather than
+defaulting to `HOLD`, because a default is indistinguishable in the audit trail
+from a decision the model never made.
 
-</td></tr>
-<tr><td width="50%" valign="top">
+</details>
 
-### 🔧 If you run infrastructure
-
-You want the topology, the failure modes, and how it is kept from becoming an
-incident. Start with the one that already happened.
+<details>
+<summary><b>🔧 I run infrastructure</b> — topology, failure modes, and how it is kept from becoming an incident &nbsp;·&nbsp; <code>17 min</code></summary>
 
 | Step | Read | Time |
 | --- | --- | --- |
 | 1 | [Operations](https://github.com/SergeyGer/AlphaAgent/wiki/Operations) — services, scheduled jobs, branch rules | **6 min** |
 | 2 | [INC-010](https://github.com/SergeyGer/AlphaAgent/wiki/Incident-Log#inc-010--both-databases-were-reachable-from-the-public-internet) — two databases exposed to the internet for two weeks | **4 min** |
-| 3 | [Configuration](https://github.com/SergeyGer/AlphaAgent/wiki/Configuration) — every environment variable, and the Redis auth change | **4 min** |
-| 4 | [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`.devcontainer/`](.devcontainer/README.md) — local workflow, one command either way | **3 min** |
+| 3 | [Configuration](https://github.com/SergeyGer/AlphaAgent/wiki/Configuration) — every environment variable | **4 min** |
+| 4 | [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`.devcontainer/`](.devcontainer/README.md) | **3 min** |
 
-**Total: ~17 min.** `make start` / `make down`, and nothing auto-starts on reboot.
+`make start` / `make down`, and nothing auto-starts on reboot.
 
-</td><td width="50%" valign="top">
+</details>
 
-### 🎯 If you are reviewing the work
-
-You have a few minutes and want to judge the engineering. Watch the 90-second
-walkthrough, then read the two things most projects in this space do not have.
+<details>
+<summary><b>🎯 I am reviewing the work</b> — a few minutes, judging the engineering &nbsp;·&nbsp; <code>18 min</code></summary>
 
 | Step | Read | Time |
 | --- | --- | --- |
 | 1 | [▶ Watch the walkthrough](docs/demo-walkthrough.mp4) — narrated, real dashboard, real numbers | **1.5 min** |
-| 2 | [Skills demonstrated](#skills-demonstrated) — the transferable version | **2 min** |
-| 3 | [Incident log](https://github.com/SergeyGer/AlphaAgent/wiki/Incident-Log) — ten real defects, root causes and fixes | **8 min** |
-| 4 | [ADR index](docs/adr/README.md) — sixteen decisions with the alternatives that were rejected | **6 min** |
+| 2 | [Incident log](https://github.com/SergeyGer/AlphaAgent/wiki/Incident-Log) — ten real defects, root causes and fixes | **8 min** |
+| 3 | [ADR index](docs/adr/README.md) — sixteen decisions with the alternatives that were rejected | **6 min** |
+| 4 | [Quality signals](#quality-signals) — what each gate actually proves | **2 min** |
 
-**Total: ~18 min**, or stop after step 1 and read
-[Quality signals](#quality-signals).
-
-</td></tr>
-</table>
+</details>
 
 ---
-
 ## See it running
 
 [![AlphaAgent walkthrough](docs/demo-walkthrough-poster.png)](docs/demo-walkthrough.mp4)
@@ -322,44 +308,6 @@ Everything below is in this repository and runs today.
 | **Telegram bot** | Inline-keyboard control: approvals, balance reports, open positions, pending queue, on-demand analysis, autopilot toggle |
 | **Operations** | Containerised multi-service stack, health checks, a pruning command for the audit trail, and documented failure modes |
 | **Quality gates** | 631 automated tests across both tiers, 79% backend coverage enforced, continuous integration on every push, static analysis, security scanning and automated dependency management |
-
-<p align="right"><sub><a href="#top">↑ back to top</a></sub></p>
-
-## Skills demonstrated
-
-> The short version: I designed, built, documented and operate a complete
-> distributed system with AI at its core — and I can explain the trade-offs in
-> every layer of it.
-
-<table>
-<tr><td width="50%" valign="top">
-
-**Backend & data**
-- Designing a relational schema with constraints and indexes that hold under concurrent writes
-- Transactional integrity and row-level locking to make double-spending impossible
-- A derived ledger — positions and profit recomputed from history rather than stored, so state can never drift
-- REST API design with token authentication and per-user data isolation
-
-**Distributed systems**
-- Fan-out task architecture: one independent job per work item, no head-of-line blocking
-- Scheduled background work with idempotency and throttling
-- Real-time messaging over WebSockets with graceful reconnection
-
-</td><td width="50%" valign="top">
-
-**AI engineering**
-- Multi-agent orchestration using an adversarial debate pattern rather than a single chain
-- Provider-agnostic LLM integration across three vendors, with a deterministic fallback when none is configured
-- Structured output contracts validated at the boundary, with automatic retry on malformed responses
-- Publishing internal capabilities as a Model Context Protocol server
-
-**Product & engineering judgement**
-- Separating "what the model suggests" from "what is allowed to happen" — the central safety decision in the system
-- Writing post-mortems for real defects found in production and fixing the root cause, not the symptom
-- Documenting decisions and their trade-offs so a reviewer can challenge them
-
-</td></tr>
-</table>
 
 <p align="right"><sub><a href="#top">↑ back to top</a></sub></p>
 
