@@ -7,7 +7,19 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-Nothing yet. See `[1.1.1]` below for what shipped.
+### Added
+
+- **A narrated 90-second walkthrough** (`docs/demo-walkthrough.mp4`). The script was
+  written by Claude Opus 5.5 given the project's real facts, then spoken and timed
+  against the measured scene durations. Recorded from the running system.
+- **Role-based onboarding** in the README: four tracks — managing money, building
+  with LLMs, running infrastructure, reviewing the work — each an ordered list with
+  per-step reading times and a total.
+
+### Changed
+
+- The equity curve in the demo shows 30 days rather than the default 24 hours, where
+  this portfolio has no data and the chart renders an empty state.
 
 ## [1.1.1] — 2026-10-25
 

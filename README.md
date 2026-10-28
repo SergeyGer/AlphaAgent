@@ -20,11 +20,12 @@ decided, why, and — after the fact — whether it was right.
 </div>
 
 <details>
-<summary><b>Contents</b> — 9 sections, ~8 min read, or jump straight to the code</summary>
+<summary><b>Contents</b> — 10 sections, ~8 min read, or jump straight to the code</summary>
 
 | | |
 | --- | --- |
-| [**See it running**](#see-it-running) | Live demo, screenshots, and the measured result |
+| [**Choose your path**](#choose-your-path) | Four tracks — investor, AI engineer, infrastructure, reviewer — with reading times |
+| [**See it running**](#see-it-running) | 90-second narrated walkthrough, live demo, and the measured result |
 | [**Run it yourself**](#run-it-yourself) | One command, ~5 minutes to a running stack |
 | [**The problem worth solving**](#the-problem-worth-solving) | Why an unauditable model trading money is the wrong design |
 | [**How it works in one minute**](#how-it-works-in-one-minute) | The request path, end to end |
@@ -38,7 +39,92 @@ decided, why, and — after the fact — whether it was right.
 
 ---
 
+## Choose your path
+
+The same project, read four different ways. Each track is a short ordered list, not
+a tour of everything — pick the one that matches why you opened this page.
+
+<table>
+<tr><td width="50%" valign="top">
+
+### 📊 If you manage money
+
+You care whether the risk controls are real and whether the thing makes money. It
+does not, yet, and that is published.
+
+| Step | Read | Time |
+| --- | --- | --- |
+| 1 | [The measured scorecard](https://github.com/SergeyGer/AlphaAgent/wiki/Decision-Attribution) — hit rate, alpha, and how a decision is scored | **4 min** |
+| 2 | [The execution guard](https://github.com/SergeyGer/AlphaAgent/wiki/Execution-Guard) — the six limits, clamp vs. refuse | **5 min** |
+| 3 | [Position theses](https://github.com/SergeyGer/AlphaAgent/wiki/Position-Thesis) — why a position is held, and what would falsify it | **3 min** |
+| 4 | [INC-001](https://github.com/SergeyGer/AlphaAgent/wiki/Incident-Log#inc-001--overlapping-sweeps-bought-the-same-stock-twice) — the over-concentration a per-trade limit did not catch | **3 min** |
+
+**Total: ~15 min.** Skip everything about CrewAI, Docker and React.
+
+</td><td width="50%" valign="top">
+
+### 🤖 If you build with LLMs
+
+You want to know how model output is constrained, and what happens when it is wrong.
+The interesting claim is that the model never gets the final say.
+
+| Step | Read | Time |
+| --- | --- | --- |
+| 1 | [LLM quality and guardrails](https://github.com/SergeyGer/AlphaAgent/wiki/LLM-Quality-and-Guardrails) — the seven layers, with line-numbered code | **7 min** |
+| 2 | [The agent debate](https://github.com/SergeyGer/AlphaAgent/wiki/Agent-Debate) — bull, bear, CIO, and the output contract | **4 min** |
+| 3 | `ai_agent.py` — [`TradeProposal`](https://github.com/SergeyGer/AlphaAgent/blob/main/ai_agent.py#L87) and [`parse_proposal`](https://github.com/SergeyGer/AlphaAgent/blob/main/ai_agent.py#L160) | **3 min** |
+| 4 | [Model compatibility](https://github.com/SergeyGer/AlphaAgent/wiki/Configuration) — why Haiku 5.5 rejects `temperature`, and what broke | **2 min** |
+
+**Total: ~16 min.** The single idea worth taking away: `parse_proposal` returns
+`None` rather than defaulting to `HOLD`, because a default is indistinguishable in
+the audit trail from a decision the model never made.
+
+</td></tr>
+<tr><td width="50%" valign="top">
+
+### 🔧 If you run infrastructure
+
+You want the topology, the failure modes, and how it is kept from becoming an
+incident. Start with the one that already happened.
+
+| Step | Read | Time |
+| --- | --- | --- |
+| 1 | [Operations](https://github.com/SergeyGer/AlphaAgent/wiki/Operations) — services, scheduled jobs, branch rules | **6 min** |
+| 2 | [INC-010](https://github.com/SergeyGer/AlphaAgent/wiki/Incident-Log#inc-010--both-databases-were-reachable-from-the-public-internet) — two databases exposed to the internet for two weeks | **4 min** |
+| 3 | [Configuration](https://github.com/SergeyGer/AlphaAgent/wiki/Configuration) — every environment variable, and the Redis auth change | **4 min** |
+| 4 | [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`.devcontainer/`](.devcontainer/README.md) — local workflow, one command either way | **3 min** |
+
+**Total: ~17 min.** `make start` / `make down`, and nothing auto-starts on reboot.
+
+</td><td width="50%" valign="top">
+
+### 🎯 If you are reviewing the work
+
+You have a few minutes and want to judge the engineering. Watch the 90-second
+walkthrough, then read the two things most projects in this space do not have.
+
+| Step | Read | Time |
+| --- | --- | --- |
+| 1 | [▶ Watch the walkthrough](docs/demo-walkthrough.mp4) — narrated, real dashboard, real numbers | **1.5 min** |
+| 2 | [Skills demonstrated](#skills-demonstrated) — the transferable version | **2 min** |
+| 3 | [Incident log](https://github.com/SergeyGer/AlphaAgent/wiki/Incident-Log) — ten real defects, root causes and fixes | **8 min** |
+| 4 | [ADR index](docs/adr/README.md) — sixteen decisions with the alternatives that were rejected | **6 min** |
+
+**Total: ~18 min**, or stop after step 1 and read
+[Quality signals](#quality-signals).
+
+</td></tr>
+</table>
+
+---
+
 ## See it running
+
+[![AlphaAgent walkthrough](docs/demo-walkthrough-poster.png)](docs/demo-walkthrough.mp4)
+
+**▶ [Watch the 90-second walkthrough](docs/demo-walkthrough.mp4)** — narrated, recorded
+from the running system. The dashboard, the AI debate, the risk guard, and the
+measured result.
 
 ### ▶ [Try the live demo](https://alphaagent-6stcj667tqeawiupedhygh.streamlit.app/) — the real UI in a browser, no installation and no API keys
 

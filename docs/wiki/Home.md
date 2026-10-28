@@ -10,6 +10,24 @@ implementation detail and the reasoning behind it.
 ---
 
 
+## Watch first
+
+**▶ [90-second walkthrough](https://github.com/SergeyGer/AlphaAgent/blob/main/docs/demo-walkthrough.mp4)**
+— narrated, recorded from the running system: the dashboard, the AI debate, the risk
+guard, and the measured result.
+
+## Read by role
+
+| If you are | Start with | Time |
+| --- | --- | --- |
+| **Managing money** | [[Decision-Attribution]] → [[Execution-Guard]] → [[Position-Thesis]] | **15 min** |
+| **Building with LLMs** | [[LLM-Quality-and-Guardrails]] → [[Agent-Debate]] → [[Configuration]] | **16 min** |
+| **Running infrastructure** | [[Operations]] → [[Incident-Log]] (INC-010) → [[Configuration]] | **17 min** |
+| **Reviewing the work** | The walkthrough → [[Incident-Log]] → the ADR index | **18 min** |
+
+Full annotated tracks, with a per-step breakdown:
+[README → Choose your path](https://github.com/SergeyGer/AlphaAgent#choose-your-path).
+
 ## Current version
 
 **1.1.0** (2026-10-23). See the
