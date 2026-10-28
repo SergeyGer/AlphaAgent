@@ -12,7 +12,7 @@ implementation detail and the reasoning behind it.
 
 ## Watch first
 
-**▶ [90-second walkthrough](https://github.com/SergeyGer/AlphaAgent/blob/main/docs/demo-walkthrough.mp4)**
+**▶ [81-second walkthrough](https://github.com/SergeyGer/AlphaAgent/blob/main/docs/demo-walkthrough.mp4)**
 — narrated, recorded from the running system: the dashboard, the AI debate, the risk
 guard, and the measured result.
 

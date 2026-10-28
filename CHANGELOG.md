@@ -7,20 +7,47 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [1.1.4] — 2026-10-28
+
 ### Changed
 
-- **The walkthrough is 47 seconds of the application itself.** The previous cut was
-  mostly designed cards with footage between them; the criticism was fair, and it is
-  gone. Every frame now comes from the running dashboard: the metric row, the ticker
-  being switched, the reasoning scrolled, the ceiling meters, the scorecard, the
-  theses and the ledger. There is no title card, no diagram and no end plate.
+- **The walkthrough follows the five-beat scenario, and invents nothing.** An
+  81-second video: a four-second title plate while the voice states the problem,
+  then the application for the body, then a closing call to action.
 
-  Narration is a male neural voice (`en-US-AndrewNeural`, pitched down 2 Hz) rather
-  than the synthetic default, and the quiet ambient bed is unchanged.
+  | Beat | At | On screen |
+  | --- | --- | --- |
+  | Hook | 0:00 | title plate for 4s, then the dashboard and the ticker being chosen |
+  | Core value | 0:13 | the debate cropped in close, so the arguments read as text |
+  | Trust | 0:37 | the ceiling meters, a real guard run, the scorecard |
+  | Flex | 0:59 | a real MCP handshake and tool discovery |
+  | Call to action | 1:11 | closing plate with the repository |
 
-  Beats map to real screens: dashboard, ticker switching, reasoning, ceilings plus
-  scorecard, then scorecard/theses/ledger. The 90- and 77-second figures in the
-  README were both wrong before this; it now says 47 and there is one video.
+  The voice is `en-US-AndrewNeural`, chosen by measurement rather than by ear:
+  the reference video's narration sits at **F0 110 Hz**, and of six candidate voices
+  Andrew measured 110 Hz against Christopher's 108 and Guy's 147.
+
+  **Two beats were placeholders and are now real output.** The guard panel had shown
+  a docstring, and the MCP panel had shown a tool list written by hand. Both now print
+  what the running system returns:
+
+  ```
+  BUY   3 NVDA @ $100   ALLOWED   Approved BUY of 3.00000000 NVDA.
+  BUY  45 NVDA @ $100   CLAMPED   45 -> 10.49 units, the 5.00% per-trade ceiling
+  BUY   2 NVDA @ $100   REJECTED  daily loss: -$600.00 breaches -$500.00
+
+  serverInfo  alphaagent-market-data  1.30.0
+  tools  6 registered
+  401 Unauthorized without x-alphaagent-mcp-key
+  ```
+
+  Every figure and every reason string in those frames is printed by
+  `services/execution.py` or by the MCP server. Nothing is typed by hand.
+
+  Earlier figures in the README (90, then 77, then 47 seconds) were each wrong for the
+  file they described. It is 81 seconds now, stated once, and there is one video.
 
 - **The Streamlit demo now looks like the product.** It was a documentation page —
   an emoji title, numbered headings, paragraphs, and one form at the end. It is now
@@ -315,7 +342,8 @@ Initial release: a four-tier autonomous investment platform.
 - **CI** — Ruff lint/format, the full test suite against PostgreSQL 16 and
   Redis 7, migration-drift detection and a Docker build smoke test.
 
-[Unreleased]: https://github.com/SergeyGer/AlphaAgent/compare/v1.1.3...HEAD
+[Unreleased]: https://github.com/SergeyGer/AlphaAgent/compare/v1.1.4...HEAD
+[1.1.4]: https://github.com/SergeyGer/AlphaAgent/compare/v1.1.3...v1.1.4
 [1.1.3]: https://github.com/SergeyGer/AlphaAgent/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/SergeyGer/AlphaAgent/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/SergeyGer/AlphaAgent/compare/v1.1.0...v1.1.1
