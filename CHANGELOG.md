@@ -5,6 +5,41 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] — 2026-10-28
+
+A security release, and the last open advisory closed.
+
+### Security
+
+- **`mcp` 1.28.1 → 1.30.0** — unbounded session accumulation in the streamable-HTTP
+  transport. This advisory had been left open through two releases because the fix
+  was genuinely unreachable: `crewai` declared `mcp~=1.28.1`, which caps the
+  resolver below 1.29. **`crewai` 1.15.32 now declares `mcp<2,>=1.30.0`**, verified
+  from the sdist metadata of the release rather than assumed, so the pin no longer
+  binds. Upgraded `crewai` 1.15.28 → 1.15.32 as the enabling change.
+
+### Fixed
+
+- **`pip-compile` silently reproduces existing pins.** Regenerating to
+  `requirements.txt` failed with `ResolutionImpossible` while regenerating the same
+  inputs to a fresh path succeeded and resolved `mcp` 1.30.0. The existing output
+  file is re-read as a set of constraints, so `--upgrade-package` cannot lift a pin
+  the old lockfile still asserts. Generating to a new path and moving it into place
+  is the reliable form.
+
+### Known, not fixed
+
+- **`requirements-dev.txt` pins `tomli` 2.0.2 and `tomli-w` 1.1.0**, while
+  `pip-audit` requires `tomli>=2.2.1` and `tomli-w>=1.2.0`. `pip install` reports
+  the conflict; it predates this release and does not affect the application, which
+  never imports either package. Recorded rather than silently carried.
+
+### Verified
+
+528 backend tests, ruff clean, all six containers healthy on the new versions, the
+dashboard returns 200, and the MCP tool server answers `401` without its shared
+secret - the authentication guard still working on `mcp` 1.30.0.
+
 ## [Unreleased]
 
 ### Added
@@ -188,7 +223,8 @@ Initial release: a four-tier autonomous investment platform.
 - **CI** — Ruff lint/format, the full test suite against PostgreSQL 16 and
   Redis 7, migration-drift detection and a Docker build smoke test.
 
-[Unreleased]: https://github.com/SergeyGer/AlphaAgent/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/SergeyGer/AlphaAgent/compare/v1.1.2...HEAD
+[1.1.2]: https://github.com/SergeyGer/AlphaAgent/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/SergeyGer/AlphaAgent/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/SergeyGer/AlphaAgent/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/SergeyGer/AlphaAgent/releases/tag/v1.0.0

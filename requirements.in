@@ -31,7 +31,7 @@ psycopg2-binary==2.9.13        # PostgreSQL driver
 # Extras matter: CrewAI resolves some models through *native* providers that
 # need their SDK installed (e.g. `claude-*` -> anthropic). Without the extra,
 # crew construction dies with "Anthropic native provider not available".
-crewai[anthropic]==1.15.28     # agent orchestration
+crewai[anthropic]==1.15.32     # agent orchestration
 yfinance==1.7.0                # live market prices
 openai==2.54.0                 # GPT-4o / OpenAI-compatible gateways (DeepSeek)
 pydantic==2.12.5               # guardrail payload validation
