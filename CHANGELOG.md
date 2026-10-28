@@ -9,6 +9,19 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed
 
+- **The walkthrough is 47 seconds of the application itself.** The previous cut was
+  mostly designed cards with footage between them; the criticism was fair, and it is
+  gone. Every frame now comes from the running dashboard: the metric row, the ticker
+  being switched, the reasoning scrolled, the ceiling meters, the scorecard, the
+  theses and the ledger. There is no title card, no diagram and no end plate.
+
+  Narration is a male neural voice (`en-US-AndrewNeural`, pitched down 2 Hz) rather
+  than the synthetic default, and the quiet ambient bed is unchanged.
+
+  Beats map to real screens: dashboard, ticker switching, reasoning, ceilings plus
+  scorecard, then scorecard/theses/ledger. The 90- and 77-second figures in the
+  README were both wrong before this; it now says 47 and there is one video.
+
 - **The Streamlit demo now looks like the product.** It was a documentation page —
   an emoji title, numbered headings, paragraphs, and one form at the end. It is now
   a dashboard-shaped terminal: the dark palette, seven metric cards in the same
