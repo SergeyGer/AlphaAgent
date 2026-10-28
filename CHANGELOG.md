@@ -5,60 +5,21 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.1.2] — 2026-10-28
+## [Unreleased]
 
-A security release, and the last open advisory closed.
+### Changed
 
-### Security
+- **The Streamlit demo now looks like the product.** It was a documentation page —
+  an emoji title, numbered headings, paragraphs, and one form at the end. It is now
+  a dashboard-shaped terminal: the dark palette, seven metric cards in the same
+  order as the real dashboard, the two ceiling meters with their real captions, and
+  four tabs, with the guard playground inside the first one.
 
-- **`mcp` 1.28.1 → 1.30.0** — unbounded session accumulation in the streamable-HTTP
-  transport. This advisory had been left open through two releases because the fix
-  was genuinely unreachable: `crewai` declared `mcp~=1.28.1`, which caps the
-  resolver below 1.29. **`crewai` 1.15.32 now declares `mcp<2,>=1.30.0`**, verified
-  from the sdist metadata of the release rather than assumed, so the pin no longer
-  binds. Upgraded `crewai` 1.15.28 → 1.15.32 as the enabling change.
-
-### Fixed
-
-- **`pip-compile` silently reproduces existing pins.** Regenerating to
-  `requirements.txt` failed with `ResolutionImpossible` while regenerating the same
-  inputs to a fresh path succeeded and resolved `mcp` 1.30.0. The existing output
-  file is re-read as a set of constraints, so `--upgrade-package` cannot lift a pin
-  the old lockfile still asserts. Generating to a new path and moving it into place
-  is the reliable form.
-
-### Corrected from the previous entry
-
-The 1.1.2 draft claimed `requirements-dev.txt` was at fault for a `tomli` /
-`tomli-w` conflict. **That diagnosis was wrong.** Neither package is pinned there;
-both arrive transitively through `crewai`, which requires `tomli~=2.0.2` and
-`tomli-w~=1.1.0`. The conflict only appeared because a `pip-audit` left over in the
-development virtualenv requires `tomli>=2.2.1`. Removing it makes
-`pip install -r requirements-dev.txt` report nothing.
-
-The lockfile was correct throughout.
-
-### Added
-
-- **`make audit`** — scans the pinned dependencies for known vulnerabilities from
-  an isolated environment. `pip-audit` cannot live in this project's virtualenv:
-  `tomli~=2.0.2` (crewai) and `tomli>=2.2.1` (pip-audit) do not intersect, so no
-  resolver can satisfy both. A throwaway environment sidesteps that entirely and
-  still audits the lockfile that actually ships.
-
-  Its first run found **five advisories in `chromadb` 1.5.9 that GitHub's
-  Dependabot does not report** — the two use different advisory databases. None has
-  a published fix and 1.5.9 is the newest release. `chromadb` arrives through
-  `crewai` and is imported at load time, but this project sets `memory=False`, so
-  CrewAI memory — the only consumer here — never runs. The four IDs are ignored
-  **individually** rather than excluded wholesale, so a new advisory still fails
-  the target.
-
-### Verified
-
-528 backend tests, ruff clean, all six containers healthy on the new versions, the
-dashboard returns 200, and the MCP tool server answers `401` without its shared
-secret - the authentication guard still working on `mcp` 1.30.0.
+  The guard is still the real `evaluate_proposal` — all nine presets, the clamp and
+  refuse verdicts, and the mirror SELL are its own return values, not restatements.
+  The offline property is unchanged and re-verified independently: the page serves
+  200 with health `ok` inside a network namespace where `api.anthropic.com` does not
+  resolve.
 
 ## [1.1.3] — 2026-10-28
 
@@ -118,6 +79,61 @@ secret - the authentication guard still working on `mcp` 1.30.0.
 
 - The equity curve in the demo shows 30 days rather than the default 24 hours, where
   this portfolio has no data and the chart renders an empty state.
+
+## [1.1.2] — 2026-10-28
+
+A security release, and the last open advisory closed.
+
+### Security
+
+- **`mcp` 1.28.1 → 1.30.0** — unbounded session accumulation in the streamable-HTTP
+  transport. This advisory had been left open through two releases because the fix
+  was genuinely unreachable: `crewai` declared `mcp~=1.28.1`, which caps the
+  resolver below 1.29. **`crewai` 1.15.32 now declares `mcp<2,>=1.30.0`**, verified
+  from the sdist metadata of the release rather than assumed, so the pin no longer
+  binds. Upgraded `crewai` 1.15.28 → 1.15.32 as the enabling change.
+
+### Fixed
+
+- **`pip-compile` silently reproduces existing pins.** Regenerating to
+  `requirements.txt` failed with `ResolutionImpossible` while regenerating the same
+  inputs to a fresh path succeeded and resolved `mcp` 1.30.0. The existing output
+  file is re-read as a set of constraints, so `--upgrade-package` cannot lift a pin
+  the old lockfile still asserts. Generating to a new path and moving it into place
+  is the reliable form.
+
+### Corrected from the previous entry
+
+The 1.1.2 draft claimed `requirements-dev.txt` was at fault for a `tomli` /
+`tomli-w` conflict. **That diagnosis was wrong.** Neither package is pinned there;
+both arrive transitively through `crewai`, which requires `tomli~=2.0.2` and
+`tomli-w~=1.1.0`. The conflict only appeared because a `pip-audit` left over in the
+development virtualenv requires `tomli>=2.2.1`. Removing it makes
+`pip install -r requirements-dev.txt` report nothing.
+
+The lockfile was correct throughout.
+
+### Added
+
+- **`make audit`** — scans the pinned dependencies for known vulnerabilities from
+  an isolated environment. `pip-audit` cannot live in this project's virtualenv:
+  `tomli~=2.0.2` (crewai) and `tomli>=2.2.1` (pip-audit) do not intersect, so no
+  resolver can satisfy both. A throwaway environment sidesteps that entirely and
+  still audits the lockfile that actually ships.
+
+  Its first run found **five advisories in `chromadb` 1.5.9 that GitHub's
+  Dependabot does not report** — the two use different advisory databases. None has
+  a published fix and 1.5.9 is the newest release. `chromadb` arrives through
+  `crewai` and is imported at load time, but this project sets `memory=False`, so
+  CrewAI memory — the only consumer here — never runs. The four IDs are ignored
+  **individually** rather than excluded wholesale, so a new advisory still fails
+  the target.
+
+### Verified
+
+528 backend tests, ruff clean, all six containers healthy on the new versions, the
+dashboard returns 200, and the MCP tool server answers `401` without its shared
+secret - the authentication guard still working on `mcp` 1.30.0.
 
 ## [1.1.1] — 2026-10-25
 
