@@ -15,7 +15,7 @@ where **the design was wrong, not the code**.
 | [INC-002](#inc-002--the-web-tier-silently-served-nothing) | The web tier silently served nothing | Deployment | Yes |
 | [INC-003](#inc-003--websocket-dropped-every-90-seconds) | WebSocket dropped every ~90 seconds | Infrastructure | No |
 | [INC-004](#inc-004--two-workers-on-one-queue) | Two Celery fleets on one queue | Operations | No |
-| [INC-005](#inc-005--a-future-import-broke-the-ai-guardrail) | A `__future__` import broke the AI guardrail | Dependency contract | No |
+| [INC-005](#inc-005--a-__future__-import-broke-the-ai-guardrail) | A `__future__` import broke the AI guardrail | Dependency contract | No |
 | [INC-006](#inc-006--a-tool-that-called-itself) | A tool that called itself | Code | No |
 | [INC-007](#inc-007--required-env_file-broke-every-fresh-clone) | A required `env_file` broke every fresh clone | Packaging | No |
 | [INC-008](#inc-008--sentiment-scored-backwards) | Sentiment scored backwards | Algorithm | No |
