@@ -357,7 +357,12 @@ AI_CONFIG = {
     "API_KEY": os.environ.get("AI_LLM_API_KEY", "").strip(),
     "BASE_URL": os.environ.get("AI_LLM_BASE_URL", "").strip(),
     "TEMPERATURE": env_float("AI_LLM_TEMPERATURE", 0.2),
-    "MAX_TOKENS": env_int("AI_LLM_MAX_TOKENS", 2048),
+    "MAX_TOKENS": env_int("AI_LLM_MAX_TOKENS", 8192),
+    # ^ 2048 was too small for models that think before answering: adaptive
+    #   thinking is billed from this same budget, so a run could reason until
+    #   the allowance ran out and return no text at all. Thinking is now
+    #   disabled for the 5.x families (see ai_agent.py), and the cap is large
+    #   enough that a truncation cannot masquerade as a short answer.
     "REQUEST_TIMEOUT": env_int("AI_REQUEST_TIMEOUT", 90),
     "MAX_RETRIES": env_int("AI_MAX_RETRIES", 2),
     "ALLOW_HEURISTIC_FALLBACK": env_bool("AI_ALLOW_HEURISTIC_FALLBACK", True),

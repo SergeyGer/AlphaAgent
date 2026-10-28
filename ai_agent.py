@@ -650,9 +650,18 @@ class AlphaAgentOrchestrator:
         kwargs: dict[str, Any] = {
             "model": model,
             "api_key": self.api_key,
-            "max_tokens": self.config.get("MAX_TOKENS", 2048),
+            "max_tokens": self.config.get("MAX_TOKENS", 8192),
             "timeout": self.config.get("REQUEST_TIMEOUT", 90),
         }
+
+        # NOTE: thinking is deliberately NOT disabled here.
+        #
+        # It was tried. CrewAI serialises the parameter as
+        # {"type": "disabled", "budget_tokens": None}, and Anthropic rejects that with
+        # "thinking.disabled.budget_tokens: Extra inputs are not permitted" - the two
+        # fields are mutually exclusive. CrewAI cannot express the valid form, so the
+        # only lever available is the size of the budget itself, which is why
+        # MAX_TOKENS defaults to 8192 rather than 2048.
 
         # Sampling parameters are sent only to models that accept them.
         #
@@ -1022,6 +1031,19 @@ class AlphaAgentOrchestrator:
             )
 
         usage = _extract_usage(result)
+        # A response that consumed the entire allowance was truncated. That is not a
+        # short answer, it is a missing one, and before this it was invisible: the
+        # run either crashed inside CrewAI or returned a proposal built from a
+        # partial reply. Logged loudly so the next occurrence is diagnosable from
+        # the worker log alone.
+        cap = self.config.get("MAX_TOKENS", 8192)
+        if usage.output_tokens and usage.output_tokens >= int(cap):
+            logger.error(
+                "Agent output for %s hit the %s-token cap and was truncated; "
+                "raise MAX_TOKENS or lower the reasoning budget.",
+                context.ticker,
+                cap,
+            )
         bull_case, bear_case = _extract_debate(result)
         return AgentRunResult(
             bull_case=bull_case,

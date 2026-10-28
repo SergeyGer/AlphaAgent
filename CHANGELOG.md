@@ -60,7 +60,42 @@ The lockfile was correct throughout.
 dashboard returns 200, and the MCP tool server answers `401` without its shared
 secret - the authentication guard still working on `mcp` 1.30.0.
 
-## [Unreleased]
+## [1.1.3] — 2026-10-28
+
+### Fixed
+
+- **Twenty-four agent runs failed because the response budget was too small.** The
+  worker log showed the cause on the line before each failure:
+
+  ```
+  Anthropic API usage: {'input_tokens': 7586, 'output_tokens': 2048, ...}
+  ERROR crewai: Invalid response from LLM call - None or empty.
+  ```
+
+  `2048` was `max_tokens`, exactly. The 5.x Anthropic models think adaptively by
+  default, and that thinking is billed from the same allowance as the answer — so a
+  run could reason until the budget ran out and return no text at all. CrewAI
+  surfaced that as a `ValueError` which reached the task and was logged as
+  `ERROR - agent pipeline failed` rather than as a decision.
+
+  Across the log history: **26 runs hit the cap and 24 of them failed.** The cap now
+  defaults to **8192**, and a response that consumes it is logged as a truncation
+  rather than passing as a short answer.
+
+  Cost rises about 1.4x ($0.0145 → $0.019–0.025 per run) because the model is no
+  longer being cut off mid-thought. That is the intended trade.
+
+- **Disabling thinking was tried first and is not possible through CrewAI.** It
+  serialises the parameter as `{"type": "disabled", "budget_tokens": None}`, and
+  Anthropic rejects that with `thinking.disabled.budget_tokens: Extra inputs are
+  not permitted` — the two fields are mutually exclusive. Recorded in the code so
+  the next person does not repeat the attempt.
+
+### Added
+
+- **A truncation guard.** A run whose output consumes the entire budget now logs an
+  explicit error naming the cap. Before this the failure was invisible: it either
+  crashed inside CrewAI or produced a proposal from a partial reply.
 
 ### Added
 
@@ -251,7 +286,8 @@ Initial release: a four-tier autonomous investment platform.
 - **CI** — Ruff lint/format, the full test suite against PostgreSQL 16 and
   Redis 7, migration-drift detection and a Docker build smoke test.
 
-[Unreleased]: https://github.com/SergeyGer/AlphaAgent/compare/v1.1.2...HEAD
+[Unreleased]: https://github.com/SergeyGer/AlphaAgent/compare/v1.1.3...HEAD
+[1.1.3]: https://github.com/SergeyGer/AlphaAgent/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/SergeyGer/AlphaAgent/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/SergeyGer/AlphaAgent/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/SergeyGer/AlphaAgent/compare/v1.0.0...v1.1.0
