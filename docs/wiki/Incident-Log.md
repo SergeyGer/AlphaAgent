@@ -21,6 +21,7 @@ where **the design was wrong, not the code**.
 | [INC-008](#inc-008--sentiment-scored-backwards) | Sentiment scored backwards | Algorithm | No |
 | [INC-009](#inc-009--redis-ran-with-no-authentication-on-a-published-port) | Redis ran unauthenticated on a published port | Exposure | Partly |
 | [INC-010](#inc-010--both-databases-were-reachable-from-the-public-internet) | Both databases were reachable from the public internet | Exposure | **Yes** |
+| [INC-011](#inc-011--one-run-in-a-hundred-failed-on-a-token-cap) | One run in a hundred failed on a token cap | Model budget | **Yes** |
 
 ---
 
@@ -512,3 +513,55 @@ Every setting whose safety depends on network topology — published ports,
 `ALLOWED_HOSTS`, CORS, TLS verification — is now treated as needing an explicit
 decision rather than an inherited default. The explicit form is longer and looks
 noisier, which is the point: it is a place where somebody had to decide.
+
+---
+
+## INC-011 — One run in a hundred failed on a token cap
+
+**Symptom.** Decisions occasionally appeared in the audit trail as
+`ERROR - agent pipeline failed` instead of a trade, a HOLD, or a heuristic
+fallback. Sixteen of them, scattered across two weeks, with no pattern a reader
+could see from the feed.
+
+**Impact.** Roughly **1% of agent runs produced no decision at all** (16 of 1,532).
+The guard was never bypassed — a failed run simply does nothing — but a system that
+silently declines to decide one time in a hundred is harder to trust than one that
+refuses loudly.
+
+**Root cause.** The worker log named it on the line before every failure:
+
+```
+Anthropic API usage: {'input_tokens': 7586, 'output_tokens': 2048, ...}
+ERROR crewai: Invalid response from LLM call - None or empty.
+```
+
+`2048` was `max_tokens`, exactly. The 5.x Anthropic models think adaptively by
+default, and that thinking is billed from the **same** allowance as the answer. A
+run could therefore reason until the budget was gone and return no text. CrewAI
+surfaces that as a `ValueError`, which reached the Celery task and was logged as a
+crashed pipeline.
+
+Across the log history: **26 runs consumed the cap exactly, and 24 of them failed.**
+
+**Fix.** The cap defaults to **8192** and the example `.env` says why. Cost rises
+about 1.4× — $0.0145 to $0.019–0.025 per run — because the model is no longer cut
+off mid-thought. One percent of runs failing was the wrong way to save three cents.
+
+**What was tried first and does not work.** Disabling thinking would have been
+cheaper and more precise. CrewAI accepts the parameter and serialises it as
+`{"type": "disabled", "budget_tokens": None}`; the API rejects that with
+`thinking.disabled.budget_tokens: Extra inputs are not permitted`, because the two
+fields are mutually exclusive and CrewAI cannot express the valid form. Recorded in
+the code so the attempt is not repeated.
+
+**Design change.** A run whose output consumes the entire budget now logs an
+explicit truncation error naming the cap. Before this the failure was invisible in
+two different ways: it either crashed inside CrewAI, or it produced a proposal from
+a partial reply that looked like a short answer. The number matters less than the
+fact that the condition is now stated.
+
+**Lesson.** The interesting part is not that a constant was too small. It is that
+**the failure had a signature — `output_tokens == max_tokens` — and nothing was
+looking for it.** Twenty-six runs hit that signature before anyone connected it to
+the errors. A metric that equals its own ceiling is not a coincidence; it is a
+truncation, and systems should say so at the moment it happens.

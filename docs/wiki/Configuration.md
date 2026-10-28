@@ -219,7 +219,7 @@ used instead.
 | `AI_LLM_API_KEY` | `API_KEY` | — | To use an LLM | Credential; empty disables the crew |
 | `AI_LLM_BASE_URL` | `BASE_URL` | — | No | Override for gateways; DeepSeek defaults to `https://api.deepseek.com/v1` |
 | `AI_LLM_TEMPERATURE` | `TEMPERATURE` | `0.2` | No | Sampling temperature |
-| `AI_LLM_MAX_TOKENS` | `MAX_TOKENS` | `2048` | No | Response token ceiling |
+| `AI_LLM_MAX_TOKENS` | `MAX_TOKENS` | `8192` | No | Response token ceiling. Thinking models bill their reasoning to this same budget — 2048 failed one run in a hundred |
 | `AI_REQUEST_TIMEOUT` | `REQUEST_TIMEOUT` | `90` | No | Per-request timeout in seconds |
 | `AI_MAX_RETRIES` | `MAX_RETRIES` | `2` | No | LLM retries; also drives market-data attempts (`retries + 1` = 3) |
 | `AI_ALLOW_HEURISTIC_FALLBACK` | `ALLOW_HEURISTIC_FALLBACK` | `true` | No | See the fallback table below |
