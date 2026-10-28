@@ -631,7 +631,9 @@ def _dashboard_numbers(inputs: GuardInputs, cost_basis: Decimal) -> DashboardNum
         if concentration_ceiling > 0:
             concentration_ratio = ticker_value / concentration_ceiling
 
-    loss_used = (-inputs.realised_pnl).quantize(CENT) if inputs.realised_pnl < 0 else Decimal("0.00")
+    loss_used = (
+        (-inputs.realised_pnl).quantize(CENT) if inputs.realised_pnl < 0 else Decimal("0.00")
+    )
     loss_remaining: Decimal | None = None
     loss_ratio: Decimal | None = None
     if inputs.loss_limit > 0:
@@ -1532,7 +1534,7 @@ def _meter(
         f'<p class="aa-label">{_e(label)}</p>'
         f'<p class="aa-meter-value{tone_class}">{value}</p>'
         "</div>"
-        f'{_bar(bar_pct, "rose" if over else "emerald", label)}'
+        f"{_bar(bar_pct, 'rose' if over else 'emerald', label)}"
         f'<p class="aa-meter-hint">{hint}</p>'
         "</div>"
     )
@@ -1704,8 +1706,7 @@ def _limits_panel(
         kill_value = "ARMED"
         kill_tone = "emerald"
         kill_hint = (
-            f"realised {_money(inputs.realised_pnl)} of a "
-            f"{_money(-inputs.loss_limit)} limit"
+            f"realised {_money(inputs.realised_pnl)} of a {_money(-inputs.loss_limit)} limit"
         )
 
     def ceiling_row(
@@ -1738,22 +1739,19 @@ def _limits_panel(
 
     rows = [
         (
-            '<div class="aa-limit-row">'
-            '<span class="aa-limit-name">Rule 3 · Per-trade</span>'
+            '<div class="aa-limit-row">' + '<span class="aa-limit-name">Rule 3 · Per-trade</span>'
             f'<span class="aa-limit-value">{_money(budget)}</span>'
             f'<p class="aa-limit-hint">{_pct(inputs.allocation_pct)} of '
             f"{_money(inputs.cash)} cash — a percentage of cash, not of equity</p></div>"
         ),
         (
-            '<div class="aa-limit-row">'
-            '<span class="aa-limit-name">Rule 4 · SELL cap</span>'
+            '<div class="aa-limit-row">' + '<span class="aa-limit-name">Rule 4 · SELL cap</span>'
             f'<span class="aa-limit-value">{_units(inputs.position_amount)} units</span>'
             f'<p class="aa-limit-hint">{_e(inputs.ticker)} position — a SELL cannot exceed it</p>'
             "</div>"
         ),
         (
-            '<div class="aa-limit-row">'
-            '<span class="aa-limit-name">Rule 5 · Kill switch</span>'
+            '<div class="aa-limit-row">' + '<span class="aa-limit-name">Rule 5 · Kill switch</span>'
             f'<span class="aa-limit-value aa-tone--{kill_tone}">{kill_value}</span>'
             f'<p class="aa-limit-hint">{kill_hint}</p>'
             "</div>"
@@ -1838,7 +1836,9 @@ def _render_guard_tab(
         )
         for start in range(0, len(PRESETS), PRESETS_PER_ROW):
             preset_row = PRESETS[start : start + PRESETS_PER_ROW]
-            for column, preset in zip(st.columns(len(preset_row), gap="small"), preset_row, strict=True):
+            for column, preset in zip(
+                st.columns(len(preset_row), gap="small"), preset_row, strict=True
+            ):
                 with column:
                     st.button(
                         preset.short,
@@ -2068,12 +2068,12 @@ def _render_quality_tab() -> None:
             _bullets(
                 [
                     "<code>DecisionOutcome.HORIZONS = (1, 7, 30)</code>: each scored decision "
-                    "gets one row per horizon.",
+                    + "gets one row per horizon.",
                     "Scoring is idempotent — an existing (decision, horizon) pair is skipped, "
-                    "so running the sweep more often costs only time.",
+                    + "so running the sweep more often costs only time.",
                     "The starting price is the transaction's own price whenever there is one, "
-                    "not that day's close: measuring from the close would score the trade at a "
-                    "price it never got.",
+                    + "not that day's close: measuring from the close would score the trade at a "
+                    + "price it never got.",
                 ]
             ),
         )
@@ -2082,13 +2082,13 @@ def _render_quality_tab() -> None:
             _bullets(
                 [
                     "A BUY is right when the price rises; a <strong>SELL is right when the price "
-                    "falls</strong> (<code>signed_return</code>). Scoring everything against "
-                    "“did the price go up” would mark every correct exit as a failure.",
+                    + "falls</strong> (<code>signed_return</code>). Scoring everything against "
+                    + "“did the price go up” would mark every correct exit as a failure.",
                     "A <strong>HOLD makes no directional claim</strong>: its "
-                    "<code>directional_hit</code> is <code>None</code>, not <code>False</code>.",
+                    + "<code>directional_hit</code> is <code>None</code>, not <code>False</code>.",
                     "HOLDs are excluded from the hit rate rather than counted as misses; they "
-                    "still carry a <code>decision_return_pct</code> of zero, so they stay visible "
-                    "in the average.",
+                    + "still carry a <code>decision_return_pct</code> of zero, so they stay visible "
+                    + "in the average.",
                 ]
             ),
         )
@@ -2097,12 +2097,12 @@ def _render_quality_tab() -> None:
             _bullets(
                 [
                     "The benchmark is <strong>SPY</strong>, recorded per decision; alpha is the "
-                    "decision return minus the benchmark return over the same window.",
+                    + "decision return minus the benchmark return over the same window.",
                     "A missing benchmark is <strong>null, never zero</strong> — an unknown "
-                    "comparison is not a loss.",
+                    + "comparison is not a loss.",
                     "Scorecards are computed on read (<code>build_scorecard</code>), so a "
-                    "re-evaluation shows up immediately; an empty scorecard reports a hit rate "
-                    "of <code>None</code> rather than <code>0%</code>.",
+                    + "re-evaluation shows up immediately; an empty scorecard reports a hit rate "
+                    + "of <code>None</code> rather than <code>0%</code>.",
                 ]
             ),
         )
@@ -2204,7 +2204,7 @@ def _render_thesis_tab() -> None:
         + _card(
             "Superseded, never edited",
             "<p>A new thesis on the same position closes the previous row "
-            "(<code>close_reason=\"Superseded by a new thesis on the same position.\"</code>) "
+            '(<code>close_reason="Superseded by a new thesis on the same position."</code>) '
             "instead of overwriting it, so the table reads as a history of what was believed and "
             "when.</p>",
         )
@@ -2289,16 +2289,16 @@ fundamentals ──▶ BEAR CASE ───────┘                │
             + _bullets(
                 [
                     "<strong>No agent tool touches the database</strong> — every tool is "
-                    "read-only and returns JSON.",
+                    + "read-only and returns JSON.",
                     "<strong>HOLD never reaches the database</strong>, and neither does a "
-                    "rejected proposal.",
+                    + "rejected proposal.",
                     "<strong>The guard is not the model's job</strong>: a hallucinated size, or "
-                    "an overshoot past the per-trade ceiling, the portfolio exposure ceiling or "
-                    "the concentration ceiling, is clamped or refused by deterministic "
-                    "arithmetic, not by another LLM.",
+                    + "an overshoot past the per-trade ceiling, the portfolio exposure ceiling or "
+                    + "the concentration ceiling, is clamped or refused by deterministic "
+                    + "arithmetic, not by another LLM.",
                     "Without an LLM credential the platform falls back to "
-                    "<code>HeuristicDecisionEngine</code>, a deterministic offline engine — which "
-                    "is why this demo needs no API key.",
+                    + "<code>HeuristicDecisionEngine</code>, a deterministic offline engine — which "
+                    + "is why this demo needs no API key.",
                 ]
             ),
         ),
@@ -2313,20 +2313,20 @@ fundamentals ──▶ BEAR CASE ───────┘                │
             + _bullets(
                 [
                     "<strong>Rule 3 — per-trade allocation ceiling</strong> "
-                    "(<code>max_trade_allocation_pct</code>, a percentage of <strong>cash</strong>): "
-                    "presets 1-3.",
+                    + "(<code>max_trade_allocation_pct</code>, a percentage of <strong>cash</strong>): "
+                    + "presets 1-3.",
                     "<strong>Rule 4 — SELL cannot exceed the held position</strong>: preset 5.",
                     "<strong>Rule 5 — daily-loss kill switch</strong> (BUY only): preset 4, and "
-                    "the mirrored SELL shows de-risking stays open while it is active.",
+                    + "the mirrored SELL shows de-risking stays open while it is active.",
                     "<strong>Rule 6 — portfolio exposure ceiling</strong> "
-                    "(<code>max_portfolio_exposure_pct</code>, a percentage of "
-                    "<strong>equity</strong>): presets 6 and 8.",
+                    + "(<code>max_portfolio_exposure_pct</code>, a percentage of "
+                    + "<strong>equity</strong>): presets 6 and 8.",
                     "<strong>Rule 7 — single-instrument concentration ceiling</strong> "
-                    "(<code>max_ticker_concentration_pct</code>, also a percentage of "
-                    "<strong>equity</strong>): presets 7, 8 and 9.",
+                    + "(<code>max_ticker_concentration_pct</code>, also a percentage of "
+                    + "<strong>equity</strong>): presets 7, 8 and 9.",
                 ]
             )
-            + "<p style=\"margin-top:0.55rem\"><strong>Why Exposure is always supplied.</strong> "
+            + '<p style="margin-top:0.55rem"><strong>Why Exposure is always supplied.</strong> '
             "Rules 6 and 7 are skipped when the guard is handed no <code>exposure</code>, or when "
             "equity is zero (<code>Exposure.usable</code> is false). An earlier version of this "
             "page passed none and exercised only the per-trade half while looking complete. It now "
@@ -2335,7 +2335,7 @@ fundamentals ──▶ BEAR CASE ───────┘                │
             "this instrument, at market\npositions_value_usd = that + other holdings         "
             "every holding, at market\nequity_usd          = cash + positions_value_usd    "
             "the denominator for both ceilings</div>"
-            + "<p style=\"margin-top:0.55rem\">Both ceilings are percentages of that "
+            + '<p style="margin-top:0.55rem">Both ceilings are percentages of that '
             "<strong>equity</strong> — not of cash, and not of the per-trade budget, which is a "
             "percentage of cash. A BUY that does not fit is <strong>sized down</strong> to what "
             "does, and the clamp note names the ceiling that bound it; only a BUY with no "
@@ -2360,7 +2360,7 @@ fundamentals ──▶ BEAR CASE ───────┘                │
             + _stat("0", "Network calls", "emerald")
             + _stat("2", "Pinned dependencies")
             + "</div>"
-            + "<p style=\"margin-top:0.6rem\">Django is configured with "
+            + '<p style="margin-top:0.6rem">Django is configured with '
             "<code>DATABASES={}</code> and every model instance is unsaved, so a database "
             "connection would fail loudly rather than quietly succeed. The guard is a pure "
             "function over those objects; it has no I/O to fake. Streamlit's own telemetry, if "

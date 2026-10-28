@@ -25,7 +25,7 @@ decided, why, and — after the fact — whether it was right.
 | | |
 | --- | --- |
 | [**Choose your path**](#choose-your-path) | Four tracks — investor, AI engineer, infrastructure, reviewer — with reading times |
-| [**See it running**](#see-it-running) | 90-second narrated walkthrough, live demo, and the measured result |
+| [**See it running**](#see-it-running) | A 77-second narrated walkthrough, the live demo, and the measured result |
 | [**Run it yourself**](#run-it-yourself) | One command, ~5 minutes to a running stack |
 | [**The problem worth solving**](#the-problem-worth-solving) | Why an unauditable model trading money is the wrong design |
 | [**How it works in one minute**](#how-it-works-in-one-minute) | The request path, end to end |
@@ -96,7 +96,7 @@ from a decision the model never made.
 
 | Step | Read | Time |
 | --- | --- | --- |
-| 1 | [▶ Watch the walkthrough](docs/demo-walkthrough.mp4) — narrated, real dashboard, real numbers | **1.5 min** |
+| 1 | [▶ Watch the walkthrough](#see-it-running) — one 77-second video, real dashboard, real numbers | **1.5 min** |
 | 2 | [Incident log](https://github.com/SergeyGer/AlphaAgent/wiki/Incident-Log) — ten real defects, root causes and fixes | **8 min** |
 | 3 | [ADR index](docs/adr/README.md) — sixteen decisions with the alternatives that were rejected | **6 min** |
 | 4 | [Quality signals](#quality-signals) — what each gate actually proves | **2 min** |
@@ -108,8 +108,8 @@ from a decision the model never made.
 
 [![AlphaAgent walkthrough](docs/demo-walkthrough-poster.png)](docs/demo-walkthrough.mp4)
 
-**▶ [Watch the 90-second walkthrough](docs/demo-walkthrough.mp4)** — narrated, recorded
-from the running system. The dashboard, the AI debate, the risk guard, and the
+**▶ [Watch the walkthrough](docs/demo-walkthrough.mp4)** — one 77-second video, narrated and
+recorded from the running system. The dashboard, the AI debate, the risk guard, and the
 measured result.
 
 ### ▶ [Try the live demo](https://alphaagent-6stcj667tqeawiupedhygh.streamlit.app/) — the real UI in a browser, no installation and no API keys
