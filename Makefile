@@ -7,7 +7,7 @@ PYTHON ?= venv/bin/python
 PIP ?= venv/bin/pip
 PIP_COMPILE ?= venv/bin/pip-compile
 
-.PHONY: help venv lock lock-dev install install-dev env up down start stop status logs migrate makemigrations \
+.PHONY: help venv lock lock-dev install install-dev env up down start stop status logs migrate makemigrations audit \
         wiki-push \
         coverage coverage-badge \
         seed shell test test-guardrails lint format check docker-build docker-up \
@@ -110,6 +110,39 @@ check: lint ## Lint, format check, Django checks and the test suite
 	$(PYTHON) manage.py check
 	$(PYTHON) manage.py makemigrations --check --dry-run
 	$(PYTHON) manage.py test core.tests
+
+audit: ## Scan the pinned dependencies for known vulnerabilities
+	@# WHY a throwaway environment rather than the project venv: pip-audit requires
+	@# tomli>=2.2.1 and tomli-w>=1.2.0, while crewai pins tomli~=2.0.2 and
+	@# tomli-w~=1.1.0. Those two ranges do not intersect, so no resolver can put
+	@# both in one environment - adding pip-audit to requirements-dev.in fails with
+	@# ResolutionImpossible, correctly. Auditing from outside sidesteps the conflict
+	@# entirely and still checks the lockfile that actually ships.
+	@tmp=$$(mktemp -d); \
+	echo "  installing pip-audit in $$tmp"; \
+	$(PYTHON) -m venv $$tmp/venv && $$tmp/venv/bin/pip install -q --upgrade pip pip-audit; \
+	echo "  auditing requirements.txt"; \
+	$$tmp/venv/bin/pip-audit -r requirements.txt --progress-spinner off \
+		--ignore-vuln PYSEC-2026-311 \
+		--ignore-vuln PYSEC-2026-3813 \
+		--ignore-vuln PYSEC-2026-3814 \
+		--ignore-vuln PYSEC-2026-3815; \
+	rc=$$?; rm -rf $$tmp; exit $$rc
+
+# WHY those four are ignored rather than fixed, and why ignoring them is not the
+# same as pretending they are absent:
+#
+#   - chromadb 1.5.9 is the newest published release; none of the four advisories
+#     has a fix version, so there is nothing to upgrade to.
+#   - chromadb arrives transitively through crewai and is imported at load time,
+#     but this project sets memory=False, so CrewAI's memory subsystem - the only
+#     consumer of chromadb here - never runs.
+#   - They are listed individually rather than silenced with an exclude, so a NEW
+#     advisory, or a fix appearing for one of these, still fails the target.
+#
+# This target is the only place these are visible: GitHub's Dependabot advisory
+# database does not report them, which is how they went unnoticed until the target
+# existed.
 
 # ---------------------------------------------------------------------------
 # Start / stop the whole stack

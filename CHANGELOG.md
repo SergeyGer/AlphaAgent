@@ -27,12 +27,32 @@ A security release, and the last open advisory closed.
   the old lockfile still asserts. Generating to a new path and moving it into place
   is the reliable form.
 
-### Known, not fixed
+### Corrected from the previous entry
 
-- **`requirements-dev.txt` pins `tomli` 2.0.2 and `tomli-w` 1.1.0**, while
-  `pip-audit` requires `tomli>=2.2.1` and `tomli-w>=1.2.0`. `pip install` reports
-  the conflict; it predates this release and does not affect the application, which
-  never imports either package. Recorded rather than silently carried.
+The 1.1.2 draft claimed `requirements-dev.txt` was at fault for a `tomli` /
+`tomli-w` conflict. **That diagnosis was wrong.** Neither package is pinned there;
+both arrive transitively through `crewai`, which requires `tomli~=2.0.2` and
+`tomli-w~=1.1.0`. The conflict only appeared because a `pip-audit` left over in the
+development virtualenv requires `tomli>=2.2.1`. Removing it makes
+`pip install -r requirements-dev.txt` report nothing.
+
+The lockfile was correct throughout.
+
+### Added
+
+- **`make audit`** — scans the pinned dependencies for known vulnerabilities from
+  an isolated environment. `pip-audit` cannot live in this project's virtualenv:
+  `tomli~=2.0.2` (crewai) and `tomli>=2.2.1` (pip-audit) do not intersect, so no
+  resolver can satisfy both. A throwaway environment sidesteps that entirely and
+  still audits the lockfile that actually ships.
+
+  Its first run found **five advisories in `chromadb` 1.5.9 that GitHub's
+  Dependabot does not report** — the two use different advisory databases. None has
+  a published fix and 1.5.9 is the newest release. `chromadb` arrives through
+  `crewai` and is imported at load time, but this project sets `memory=False`, so
+  CrewAI memory — the only consumer here — never runs. The four IDs are ignored
+  **individually** rather than excluded wholesale, so a new advisory still fails
+  the target.
 
 ### Verified
 
