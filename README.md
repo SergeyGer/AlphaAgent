@@ -182,7 +182,7 @@ from a decision the model never made.
 
 **▶ [Watch the walkthrough](docs/demo-walkthrough.mp4)** — one 81-second video, narrated and
 recorded from the running system. The dashboard, the AI debate, the risk guard, and the
-measured result.
+scorecard it publishes.
 
 ### ▶ [Try the live demo](https://alphaagent-6stcj667tqeawiupedhygh.streamlit.app/) — the real UI in a browser, no installation and no API keys
 
@@ -195,32 +195,32 @@ agent debate expanding, news sentiment and the trade ledger.*
 
 AlphaAgent scores itself. Every decision — including every deliberate **HOLD** — is
 replayed against what the market actually did next, at **1, 7 and 30 day** horizons,
-and the result is published on the dashboard for any visitor to read.
+and the scorecard is shown on the dashboard for any visitor to read.
 
-| Metric | What it answers | Current, 1-day horizon |
-| --- | --- | --- |
-| **Directional hit rate** | Was the call right in direction? | **10.5%** of 57 scored decisions |
-| **Forward return** | What was the decision worth? | **−1.78%** average |
-| **Alpha vs SPY** | Did it beat the benchmark? | **−1.54%** |
-| **BUY calls** | The long side, separately | **7.0%** hit rate, **−2.08%** average |
+It tracks three things, and counts them separately for the long side so a good average
+cannot hide bad BUY calls:
 
-**It is not flattering, and it is published anyway.** The system buys things that
-fall and sells things that rise; SPY was roughly flat over the same windows, so this
-is not the market going down.
+| Tracked | The question it answers |
+| --- | --- |
+| **Directional hit rate** | Was the call right in direction? |
+| **Forward return** | What was the decision actually worth? |
+| **Alpha vs SPY** | Did it beat simply holding the benchmark over the same window? |
 
-That is the intended behaviour of the feature, not a failure of the demo. A
-performance number that can only ever be good news is not a measurement — it is
-marketing. What a reviewer should take from this table is that the platform is
-willing to be scored by the same standard it applies to its own decisions.
+**The figures are not flattering, and they are published anyway.** A performance
+number that can only ever produce good news is not a measurement; it is marketing.
+The scorecard is the feature, not the demo — it is what lets a reader judge the system
+instead of taking its word.
 
-> **What the audit trail adds:** every one of those numbers traces back to a stored
-> decision row — both sides of the argument that produced it (`bull_case`,
-> `bear_case`), the tokens consumed and the API cost. A number you cannot trace is a
-> number you cannot defend.
+> **What the audit trail adds:** every figure traces back to a stored decision row —
+> both sides of the argument that produced it (`bull_case`, `bear_case`), the tokens
+> consumed and the API cost charged. A number you cannot trace is a number you cannot
+> defend.
 
-The full method, the aggregate and the flaw I found in my own scoring — one that made
-these figures *worse* — live in
+The current scorecard, the method behind it, and the flaw I found in my own scoring —
+one that made the figures *worse* — live in
 [Decision Attribution](https://github.com/SergeyGer/AlphaAgent/wiki/Decision-Attribution).
+It is kept in one place on purpose: a number quoted in several files is a number that
+will eventually disagree with itself.
 
 <details>
 <summary><b>More screenshots</b> — dashboard, decision quality, risk ceilings, debate, mobile</summary>
