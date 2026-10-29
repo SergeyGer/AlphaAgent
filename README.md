@@ -53,11 +53,15 @@ actually did. A black box becomes a system with a transcript, a cost and a grade
 
 ## The three product pillars
 
-### 1. Verifiable decision attribution
+Three claims, each of which a reviewer can check in this repository. Click one to
+open the detail; all three stay shut by default.
+
+<details>
+<summary><b>1. Verifiable decision attribution</b> — every decision is scored against what the market did next &nbsp;·&nbsp; <code>HOLD included</code></summary>
 
 Instead of hiding model performance, AlphaAgent treats transparency as the product
-metric. Every decision — including every deliberate **HOLD** — is scored retroactively
-against real market data at **1, 7 and 30 days**.
+metric. Every decision — including every deliberate **HOLD** — is scored
+retroactively against real market data at **1, 7 and 30 days**.
 
 - **Continuous KPI tracking** — absolute return, directional hit rate, and alpha
   against SPY over the same window.
@@ -68,10 +72,13 @@ against real market data at **1, 7 and 30 days**.
 
 → [Decision Attribution](https://github.com/SergeyGer/AlphaAgent/wiki/Decision-Attribution)
 
-### 2. Deterministic risk guard
+</details>
 
-The model never has the final say over capital. A zero-trust execution guard wraps the
-AI layer and enforces institutional limits in plain decimal arithmetic.
+<details>
+<summary><b>2. Deterministic risk guard</b> — the model never has the final say over capital &nbsp;·&nbsp; <code>pure function</code></summary>
+
+A zero-trust execution guard wraps the AI layer and enforces institutional limits in
+plain decimal arithmetic.
 
 - **Hard enforcement** — per-trade allocation, available cash, position size, daily
   loss, cumulative portfolio exposure and single-instrument concentration.
@@ -83,10 +90,13 @@ AI layer and enforces institutional limits in plain decimal arithmetic.
 
 → [Execution Guard](https://github.com/SergeyGer/AlphaAgent/wiki/Execution-Guard)
 
-### 3. Adversarial multi-agent architecture
+</details>
 
-Single-agent pipelines amplify hallucinations, because one model agreeing with itself
-looks like confidence. AlphaAgent forces disagreement first.
+<details>
+<summary><b>3. Adversarial multi-agent architecture</b> — disagreement first, because one model agreeing with itself looks like confidence &nbsp;·&nbsp; <code>3 agents</code></summary>
+
+Single-agent pipelines amplify hallucinations: one model agreeing with itself reads as
+certainty. AlphaAgent forces disagreement first.
 
 - **The debate** — a **Bullish Research Analyst** and a **Risk Assessor (Short
   Seller)** build opposing cases from live prices, news and filings.
@@ -96,6 +106,8 @@ looks like confidence. AlphaAgent forces disagreement first.
   stored with the decision rather than summarised away.
 
 → [Agent Debate](https://github.com/SergeyGer/AlphaAgent/wiki/Agent-Debate)
+
+</details>
 
 ---
 
