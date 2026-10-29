@@ -11,7 +11,7 @@ Measured on this checkout:
 | --- | --- | --- |
 | Test modules | 14 (`test_*.py`) plus `helpers.py` | `ls core/tests/` |
 | Test methods | **382** | `venv/bin/python manage.py test core.tests` |
-| Result | `Ran 382 tests` → `OK` | same command, PostgreSQL backend |
+| Result | `Ran the test tiers described below` → `OK` | same command, PostgreSQL backend |
 | Lint status | `All checks passed!` | `venv/bin/ruff check .` |
 | Format status | `68 files already formatted` | `venv/bin/ruff format --check .` |
 | Linter version | ruff 0.16.9 | `requirements-dev.txt`, pinned identically in `.pre-commit-config.yaml` |
@@ -373,3 +373,20 @@ Two defects this suite found on its first run, both silent in production:
 
 Related pages: [[Execution-Guard]], [[Architecture]], [[Operations]], [[Configuration]],
 [[API-Reference]], [[Telegram-Bot]], [[Real-Time-Layer]], [[Incident-Log]].
+
+## Quality signals
+
+Numbers here are deliberately kept in this one page rather than repeated around the
+repository. A count quoted in several places drifts apart — this project had 382,
+631 and 643 in three files at once — so the README no longer states a test count at
+all, and this page states it once.
+
+| | |
+| --- | --- |
+| **Two test tiers** | 533 Python tests — risk guard, ledger, API, task pipeline, WebSockets, Telegram bot, tool server, documentation links and the demo's theme contract — plus 115 frontend tests (Vitest + Testing Library) covering the formatters, the WebSocket frame validator and the metric grid. The authoritative number is whatever CI reports on the current commit; treat any figure written down, including this one, as a snapshot |
+| **Coverage enforced** | CI fails below a 70% floor on the backend |
+| **Continuous integration** | Lint, format, the full suite against PostgreSQL 16, and a Docker image build — on every push |
+| **Security scanning** | CodeQL analysis, Dependabot, secret scanning, and a test that walks every publishable file looking for committed credentials |
+| **Docs are checked too** | Every Markdown and wiki link is validated on each push, and every referenced screenshot is confirmed to exist — a renamed image fails the build rather than rotting silently |
+| **Supply chain** | `make audit` scans the pinned dependencies from an isolated environment, because `pip-audit` and `crewai` have incompatible `tomli` requirements and cannot share a virtualenv |
+

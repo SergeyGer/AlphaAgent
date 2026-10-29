@@ -4,37 +4,109 @@
 
 # AlphaAgent
 
-**An AI system that manages an investment portfolio — and can prove, months later, exactly why it made every decision it made.**
+**An enterprise-grade AI investment platform with deterministic risk governance and
+verifiable decision attribution.**
 
 [![CI](https://github.com/SergeyGer/AlphaAgent/actions/workflows/ci.yml/badge.svg)](https://github.com/SergeyGer/AlphaAgent/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/SergeyGer/AlphaAgent/actions/workflows/codeql.yml/badge.svg)](https://github.com/SergeyGer/AlphaAgent/actions/workflows/codeql.yml)
 [![Docs](https://github.com/SergeyGer/AlphaAgent/actions/workflows/docs.yml/badge.svg)](https://github.com/SergeyGer/AlphaAgent/actions/workflows/docs.yml)
-[![Tests](https://img.shields.io/badge/tests-643%20passing-brightgreen.svg)](https://github.com/SergeyGer/AlphaAgent/wiki/Quality-and-Testing)
 [![Coverage](coverage.svg)](https://github.com/SergeyGer/AlphaAgent/wiki/Quality-and-Testing)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**For:** engineers and reviewers who want to see how an LLM can be put in front of
-real money without trusting it. **It answers three questions:** what the agent
-decided, why, and — after the fact — whether it was right.
+**For:** product leaders and reviewers asking whether an LLM can be put in front of
+real capital without trusting it, and AI engineers building systems that must answer
+for their own decisions. **It answers three questions:** what the agent decided, why,
+and — after the fact — whether it was right.
 
 </div>
 
 <details>
-<summary><b>Contents</b> — 9 sections, ~8 min read, or jump straight to the code</summary>
+<summary><b>Contents</b> — 8 sections, ~7 min read, or jump straight to the code</summary>
 
 | | |
 | --- | --- |
-| [**Choose your path**](#choose-your-path) | Four tracks — investor, AI engineer, infrastructure, reviewer — with reading times |
-| [**See it running**](#see-it-running) | An 81-second narrated walkthrough, the live demo, and the measured result |
+| [**Business value**](#business-value-in-one-paragraph) | Why decoupling AI judgement from risk enforcement is the whole product |
+| [**The three product pillars**](#the-three-product-pillars) | Decision attribution, the deterministic guard, the adversarial debate |
+| [**Who this is for**](#who-this-is-for) | Four readers, and what each of them gets |
+| [**Choose your path**](#choose-your-path) | Four tracks with reading times |
+| [**See it running**](#see-it-running) | An 81-second walkthrough, the live demo, and the measured result |
 | [**Run it yourself**](#run-it-yourself) | One command, ~5 minutes to a running stack |
-| [**The problem worth solving**](#the-problem-worth-solving) | Why an unauditable model trading money is the wrong design |
 | [**How it works in one minute**](#how-it-works-in-one-minute) | The request path, end to end |
-| [**What this project demonstrates**](#what-this-project-demonstrates) | Twelve delivered areas, one line each |
 | [**Under the hood**](#under-the-hood) | Stack, and links into the full technical wiki |
-| [**Quality signals**](#quality-signals) | Tests, coverage, CI and what each gate actually proves |
 | [**Roadmap**](#roadmap) | What is deliberately not built yet |
 
 </details>
+
+---
+
+## Business value, in one paragraph
+
+Putting a language model in front of capital introduces three problems no prompt can
+solve: the model is **non-deterministic**, it **hallucinates**, and its reasoning is
+**not auditable** after the fact. AlphaAgent's answer is architectural rather than
+rhetorical — it **decouples AI judgement from financial enforcement**. The agents may
+argue whatever they like; a separate, hard-coded guard decides what is allowed to
+touch the ledger, and every decision is scored afterwards against what the market
+actually did. A black box becomes a system with a transcript, a cost and a grade.
+
+---
+
+## The three product pillars
+
+### 1. Verifiable decision attribution
+
+Instead of hiding model performance, AlphaAgent treats transparency as the product
+metric. Every decision — including every deliberate **HOLD** — is scored retroactively
+against real market data at **1, 7 and 30 days**.
+
+- **Continuous KPI tracking** — absolute return, directional hit rate, and alpha
+  against SPY over the same window.
+- **A complete audit trail** — every execution links back to the debate that produced
+  it (`bull_case`, `bear_case`), the tokens consumed, and the API cost charged.
+- **Why it matters** — it gives a stakeholder an honest, data-driven assessment of
+  LLM return on investment, rather than a demo that only shows winning trades.
+
+→ [Decision Attribution](https://github.com/SergeyGer/AlphaAgent/wiki/Decision-Attribution)
+
+### 2. Deterministic risk guard
+
+The model never has the final say over capital. A zero-trust execution guard wraps the
+AI layer and enforces institutional limits in plain decimal arithmetic.
+
+- **Hard enforcement** — per-trade allocation, available cash, position size, daily
+  loss, cumulative portfolio exposure and single-instrument concentration.
+- **Fail-safe by construction** — a pure function with no I/O. A malformed, corrupted
+  or manipulated proposal is clamped or rejected before it can reach the ledger, and
+  the refusal names the limit that bound.
+- **Why it matters** — it converts "trust the AI" into "trust the arithmetic", which
+  is a claim a risk committee can actually review.
+
+→ [Execution Guard](https://github.com/SergeyGer/AlphaAgent/wiki/Execution-Guard)
+
+### 3. Adversarial multi-agent architecture
+
+Single-agent pipelines amplify hallucinations, because one model agreeing with itself
+looks like confidence. AlphaAgent forces disagreement first.
+
+- **The debate** — a **Bullish Research Analyst** and a **Risk Assessor (Short
+  Seller)** build opposing cases from live prices, news and filings.
+- **The adjudicator** — a separate **Chief Investment Officer** agent weighs both and
+  issues one structured proposal, so no single biased prompt dictates strategy.
+- **Why it matters** — the transcript is the artefact a reviewer reads, and it is
+  stored with the decision rather than summarised away.
+
+→ [Agent Debate](https://github.com/SergeyGer/AlphaAgent/wiki/Agent-Debate)
+
+---
+
+## Who this is for
+
+| Reader | What they get |
+| --- | --- |
+| **Product leaders and reviewers** | How a generative AI product is bounded, measured and kept accountable to business metrics rather than a demo reel |
+| **AI engineers** | Production guardrails, multi-agent debate topology, and deterministic payload validation — the parts that stop an agent being a liability |
+| **Fintech architects** | A reference for attaching proprietary data over MCP and streaming reasoning over WebSocket without exposing either to the model |
+| **Infrastructure engineers** | A containerised multi-service stack with documented failure modes and an incident log written from real defects |
 
 ---
 
@@ -119,25 +191,35 @@ measured result.
 *Recorded from the live system — sign-in, portfolio metrics, the equity curve, an
 agent debate expanding, news sentiment and the trade ledger.*
 
-### It measures itself, and the answer is not flattering
+### The headline metric: decision attribution
 
-Every decision is scored against what the market did next, and the scorecard is
-shown to any visitor. Across **57 scored decisions at a 1-day horizon**:
+AlphaAgent scores itself. Every decision — including every deliberate **HOLD** — is
+replayed against what the market actually did next, at **1, 7 and 30 day** horizons,
+and the result is published on the dashboard for any visitor to read.
 
-| | |
-| --- | --- |
-| **Hit rate** | **10.5%** — 6 of 57 directional calls |
-| **Average decision return** | **−1.78%** |
-| **Alpha versus SPY** | **−1.54%** — it lost to the benchmark on every one |
-| **BUY calls at 1 day** | **7.0%** hit rate, average forward return −2.08% |
+| Metric | What it answers | Current, 1-day horizon |
+| --- | --- | --- |
+| **Directional hit rate** | Was the call right in direction? | **10.5%** of 57 scored decisions |
+| **Forward return** | What was the decision worth? | **−1.78%** average |
+| **Alpha vs SPY** | Did it beat the benchmark? | **−1.54%** |
+| **BUY calls** | The long side, separately | **7.0%** hit rate, **−2.08%** average |
 
-Put plainly: **the system buys things that fall and sells things that rise.** SPY
-was roughly flat over the same windows, so this is not the market going down.
+**It is not flattering, and it is published anyway.** The system buys things that
+fall and sells things that rise; SPY was roughly flat over the same windows, so this
+is not the market going down.
 
-That result is published rather than hidden because it is the point of the
-feature. A measurement that can only produce good news is not a measurement, and
-the honest version — including the flaw I found in my own scoring method that made
-these numbers *worse* — is in
+That is the intended behaviour of the feature, not a failure of the demo. A
+performance number that can only ever be good news is not a measurement — it is
+marketing. What a reviewer should take from this table is that the platform is
+willing to be scored by the same standard it applies to its own decisions.
+
+> **What the audit trail adds:** every one of those numbers traces back to a stored
+> decision row — both sides of the argument that produced it (`bull_case`,
+> `bear_case`), the tokens consumed and the API cost. A number you cannot trace is a
+> number you cannot defend.
+
+The full method, the aggregate and the flaw I found in my own scoring — one that made
+these figures *worse* — live in
 [Decision Attribution](https://github.com/SergeyGer/AlphaAgent/wiki/Decision-Attribution).
 
 <details>
@@ -235,23 +317,6 @@ configuration reference: [Configuration](https://github.com/SergeyGer/AlphaAgent
 
 <p align="right"><sub><a href="#top">↑ back to top</a></sub></p>
 
-## The problem worth solving
-
-Everyone can wire a language model to a trading API in an afternoon. The reason
-that is a bad idea is not the model — it is that **a language model cannot be
-audited, and money demands that it can be.**
-
-AlphaAgent is built around that constraint. Three AI agents research the market
-and argue with each other. A separate, deterministic piece of software — not a
-prompt, not another model — decides whether their proposal is allowed to become
-a real transaction. Every decision, including every decision *not* to act, is
-written to an audit trail with the full reasoning behind it.
-
-The result is a system that behaves like an autonomous agent but is accountable
-like a bank.
-
-<p align="right"><sub><a href="#top">↑ back to top</a></sub></p>
-
 ## How it works in one minute
 
 ```mermaid
@@ -287,27 +352,6 @@ concentration and the daily stop-loss are enforced in a pure function that is
 unit-tested and has no knowledge of language models. The AI proposes; the code
 decides. If the model is wrong, confused, or actively manipulated, the worst it
 can do is make a suggestion that gets rejected.
-
-<p align="right"><sub><a href="#top">↑ back to top</a></sub></p>
-
-## What this project demonstrates
-
-Everything below is in this repository and runs today.
-
-| Area | Delivered |
-| --- | --- |
-| **Multi-agent AI** | A three-agent adversarial debate on CrewAI, with a payload contract validated by a schema library and a guardrail that forces a retry on malformed output |
-| **Risk engine** | A deterministic execution guard enforcing allocation, cash, position, stop-loss, cumulative-exposure and concentration limits, designed as a pure function so it can be exhaustively tested |
-| **Autonomous scheduling** | A task queue that fans out one independent job per portfolio-and-instrument pair, on a timer, with cooldowns that stop overlapping runs compounding exposure |
-| **Decision audit trail** | Every run persisted with both sides of the argument, token usage and cost — queryable, streamable and prunable |
-| **Decision attribution** | Every decision scored against what the market did next — forward returns at 1/7/30 days, what the action was worth, and alpha against a benchmark. The audit trail proves *why*; this measures *whether it worked* |
-| **Position memory** | Each open position carries a written thesis and its own invalidation condition, fed back to the agents on every run so an exit has to argue with the reason for entry |
-| **Live analytics dashboard** | A React and TypeScript single-page app with an equity curve, allocation breakdown, real-time reasoning feed, approvals and trade history, streamed over WebSocket |
-| **Human-in-the-loop approvals** | Approve or reject any proposal from the dashboard or from Telegram, with the risk checks re-run against live prices at the moment of approval |
-| **Tool server** | Market and news data published over the Model Context Protocol, so external AI tools can consume it without touching this codebase |
-| **Telegram bot** | Inline-keyboard control: approvals, balance reports, open positions, pending queue, on-demand analysis, autopilot toggle |
-| **Operations** | Containerised multi-service stack, health checks, a pruning command for the audit trail, and documented failure modes |
-| **Quality gates** | 631 automated tests across both tiers, 79% backend coverage enforced, continuous integration on every push, static analysis, security scanning and automated dependency management |
 
 <p align="right"><sub><a href="#top">↑ back to top</a></sub></p>
 
@@ -350,19 +394,6 @@ the wiki:
 Recharts · GitHub Actions
 
 <a href="#top">↑ back to top</a>
-
-## Quality signals
-
-| | |
-| --- | --- |
-| **643 automated tests** | 528 Python — risk guard, ledger, API, task pipeline, WebSockets, Telegram bot, tool server — plus 115 frontend (Vitest + Testing Library) covering the formatters, the WebSocket frame validator and the metric grid |
-| **79% coverage, enforced** | CI fails below a 70% floor, and the badge above is regenerated from the real run on every push to `main` |
-| **Continuous integration** | Lint, format, the full test suite against PostgreSQL 16, and a Docker image build — on every push |
-| **Security scanning** | CodeQL analysis plus a test that walks every publishable file looking for committed credentials |
-| **Docs are checked too** | Every Markdown and wiki link is validated on each push, and every referenced screenshot is confirmed to exist — a renamed image fails the build rather than rotting silently |
-| **Supply chain** | Automated dependency updates, grouped and scheduled to stay reviewable |
-
-<p align="right"><sub><a href="#top">↑ back to top</a></sub></p>
 
 ## Roadmap
 

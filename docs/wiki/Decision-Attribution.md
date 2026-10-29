@@ -102,3 +102,36 @@ Worth stating plainly, because a scorecard invites more confidence than it earns
   meaningful yet.
 
 Related pages: [[Execution-Guard]], [[Agent-Debate]], [[Data-Model]], [[Quality-and-Testing]].
+
+## The published scorecard, as it stands
+
+Every decision is scored against what the market did next, and the scorecard is shown
+to any visitor of the dashboard. Across **57 scored decisions at a 1-day horizon**:
+
+| | |
+| --- | --- |
+| **Hit rate** | **10.5%** — 6 of 57 directional calls |
+| **Average decision return** | **−1.78%** |
+| **Alpha versus SPY** | **−1.54%** |
+| **BUY calls at 1 day** | **7.0%** hit rate, average forward return −2.08% |
+
+Put plainly: **the system buys things that fall and sells things that rise.** SPY was
+roughly flat over the same windows, so this is not the market going down.
+
+That result is published rather than hidden because it is the point of the feature. A
+measurement that can only produce good news is not a measurement. The flaw I found in
+my own scoring method — one that made these numbers *worse* — is recorded below.
+
+### Why this is a product feature, not a leaderboard
+
+| Question a stakeholder asks | Where the answer lives |
+| --- | --- |
+| Did the model's calls work? | Forward return per decision at 1, 7 and 30 days |
+| Did it beat the benchmark? | Alpha versus SPY over the same window |
+| Was it right in direction? | `directional_hit`, which is `None` rather than `False` while unresolved |
+| What did the run cost? | `api_cost_usd` and `tokens_used`, stored on the decision row |
+| Why was the decision made? | `bull_case` and `bear_case`, stored verbatim with the decision |
+
+The last row is the one that matters for audit: a decision row carries both sides of
+the argument that produced it, so a number can always be traced back to a transcript.
+

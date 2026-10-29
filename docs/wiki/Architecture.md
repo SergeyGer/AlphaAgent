@@ -86,6 +86,25 @@ feed at all — the WebSocket upgrade was simply refused. See
 > `gunicorn config.wsgi:application` — gunicorn then fell back to its defaults
 > (`127.0.0.1:8000`, one worker) and was unreachable from the host.
 
+## Capabilities delivered
+
+Everything below is in this repository and runs today.
+
+| Area | Delivered |
+| --- | --- |
+| **Multi-agent AI** | A three-agent adversarial debate on CrewAI — a Bullish Research Analyst, a Risk Assessor (Short Seller) and a Chief Investment Officer — with a payload contract validated by a schema library and a guardrail that forces a retry on malformed output |
+| **Risk engine** | A deterministic execution guard enforcing allocation, cash, position, stop-loss, cumulative-exposure and concentration limits, designed as a pure function so it can be exhaustively tested |
+| **Autonomous scheduling** | A task queue that fans out one independent job per portfolio-and-instrument pair, on a timer, with cooldowns that stop overlapping runs compounding exposure |
+| **Decision audit trail** | Every run persisted with both sides of the argument, token usage and cost — queryable, streamable and prunable |
+| **Decision attribution** | Every decision scored against what the market did next — forward returns at 1, 7 and 30 days, what the action was worth, and alpha against a benchmark. The audit trail proves *why*; this measures *whether it worked* |
+| **Position memory** | Each open position carries a written thesis and its own invalidation condition, fed back to the agents on every run so an exit has to argue with the reason for entry |
+| **Live analytics dashboard** | A React and TypeScript single-page app with an equity curve, allocation breakdown, real-time reasoning feed, approvals and trade history, streamed over WebSocket |
+| **Human-in-the-loop approvals** | Approve or reject any proposal from the dashboard or from Telegram, with the risk checks re-run against live prices at the moment of approval |
+| **Tool server** | Market and news data published over the Model Context Protocol, so external AI tools can consume it without touching this codebase |
+| **Telegram bot** | Inline-keyboard control: approvals, balance reports, open positions, pending queue, on-demand analysis, autopilot toggle |
+| **Operations** | Containerised multi-service stack, health checks, a pruning command for the audit trail, and documented failure modes |
+
+
 ## The decision pipeline
 
 ```mermaid
