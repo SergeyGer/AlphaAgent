@@ -10,4 +10,4 @@
 # Django    - ONLY to configure minimal settings so `services/execution.py` can
 #             import `core.models`. No database driver, no server: DATABASES={}.
 streamlit==1.65.0
-Django==5.2.17
+Django==5.2.18
