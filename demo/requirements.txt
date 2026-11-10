@@ -9,5 +9,5 @@
 # streamlit - the web UI (pinned: widget API changes between minor releases).
 # Django    - ONLY to configure minimal settings so `services/execution.py` can
 #             import `core.models`. No database driver, no server: DATABASES={}.
-streamlit==1.65.0
+streamlit==1.66.1
 Django==5.2.18
