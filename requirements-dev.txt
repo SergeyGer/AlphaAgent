@@ -897,17 +897,17 @@ coverage==7.16.2 \
     --hash=sha256:fb9d92ecfe2d5b494367c67f7446f8b75b68d8d0c8cf3bc3e6997478be25d9e2 \
     --hash=sha256:fd3d72233eb8b48acc94fa57d44e2d32ce8e7abed02882ccb6d855ccc4ed33ec
     # via -r requirements-dev.in
-crewai==1.15.32 \
-    --hash=sha256:01128d3048d8cfa3402920bde043e0c7f5ddc382e17b58a002fc82100cc1a4f0 \
-    --hash=sha256:3701640706fdb11b06455e3f1c6bbcdfabda2345b13630782cf835ba97c4c41b
+crewai==1.15.33 \
+    --hash=sha256:0e8cc1a38e1bef06e7ac6ab20737ed4bc7ba74c07a5deba4b225c261c05f701f \
+    --hash=sha256:c52e39ca9c3e0108a33a6343be37deddd3c38f268d9eae7df3b4b256936980bc
     # via -r requirements.in
-crewai-cli==1.15.32 \
-    --hash=sha256:460ff4c40b2fc61f1f00bc139e1d5e237adaad00583c8b9ccf91cbf3f7cd8e34 \
-    --hash=sha256:93d2ebfe9c00bab26eb524ddeb2b15c3322d4ceb7d82663440c401fc35d59229
+crewai-cli==1.15.33 \
+    --hash=sha256:14710fce1d0b268d75ae3f2d0acb7f7efa44fa48b55ac92a51d818dfcea7622c \
+    --hash=sha256:a07772fae510f466201d8c2c33072d037f2bfafe6cf691a4500af337a079bb18
     # via crewai
-crewai-core==1.15.32 \
-    --hash=sha256:0cc7ef0478e0ca1344742a259bf51d45e7601611d0195f9b38ede41cd488e672 \
-    --hash=sha256:395dcddc217baf613fd1eda804dac36ae365dfad20b2e9984dbdbf644f7a0316
+crewai-core==1.15.33 \
+    --hash=sha256:3837a138baf93d2d85d8a64476b4c5cefa3f763d99704a2ddcebe805105191c4 \
+    --hash=sha256:c51d8ed27d379b8f05c1ad856338c9d5b0747154055ca62999230726c8f03189
     # via
     #   crewai
     #   crewai-cli
