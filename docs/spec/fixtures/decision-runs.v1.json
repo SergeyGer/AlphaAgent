@@ -1,0 +1,742 @@
+{
+  "manifest_version": 1,
+  "schema_version": "1.0",
+  "generated_for": "Phase 1 decision review demo (REP-02, REP-03)",
+  "checksum": {
+    "algorithm": "sha256",
+    "scope": "each fixtures[] entry with its 'checksum' member removed",
+    "canonicalisation": "JSON with sorted keys, separators (',' ':'), UTF-8"
+  },
+  "honesty": {
+    "all_fixtures_synthetic": true,
+    "why": "The Phase 1 pipeline has no rebuttal stage, and no live run was available when these fixtures were authored. Every run is mode=synthetic, source=fixture, and the API exposes both so a UI can label it.",
+    "rebuttal_note": "The disagreement fixture contains a rebuttal that the current pipeline cannot produce. It exists to exercise the EVID-03 consumer contract for Phase 2; it is not a recording of a real debate.",
+    "outcome_note": "Synthetic outcome figures are illustrative fixtures, not measured performance. They are labelled method_version=attribution.synthetic.v1 and carry signal_diagnostics.synthetic=true. Do not use them for comparative claims."
+  },
+  "fixtures": [
+    {
+      "fixture_id": "risk-intervention-aapl-2026-02-03",
+      "label": "Risk intervention: the guard clamps a 40-share BUY to 2 shares",
+      "scenario": "risk_intervention",
+      "mode": "synthetic",
+      "source": "fixture",
+      "recording_date": "2026-02-03",
+      "protocol_version": "synthetic.v1",
+      "ticker": "AAPL",
+      "started_at": "2026-02-03T14:30:00Z",
+      "checksum": "932eac06a4c5588c5b90f4046465c946a4ec2d90af6ae64a24f356d7046756e2",
+      "snapshot": {
+        "portfolio_version": "synthetic-demo-v1",
+        "analysis_cutoff": "2026-02-03T14:30:20Z",
+        "captured_at": "2026-02-03T14:30:04Z",
+        "holdings": [
+          {
+            "ticker": "MSFT",
+            "quantity": "5.00000000",
+            "average_cost_usd": "400.00",
+            "as_of": "2026-02-03T14:29:58Z"
+          }
+        ],
+        "cash": {
+          "balance_usd": "10000.00",
+          "currency": "USD",
+          "as_of": "2026-02-03T14:29:58Z"
+        },
+        "quotes": {
+          "AAPL": {
+            "price_usd": "225.00",
+            "currency": "USD",
+            "as_of": "2026-02-03T14:29:58Z",
+            "source": "synthetic_snapshot"
+          },
+          "MSFT": {
+            "price_usd": "410.00",
+            "currency": "USD",
+            "as_of": "2026-02-03T14:29:58Z",
+            "source": "synthetic_snapshot"
+          }
+        }
+      },
+      "timeline": [
+        {
+          "kind": "transition",
+          "status": "collecting",
+          "at": "2026-02-03T14:30:05Z",
+          "payload": {
+            "note": "Snapshot captured; evidence collection started."
+          }
+        },
+        {
+          "kind": "event",
+          "event_type": "stage.started",
+          "stage": "collecting",
+          "agent_role": "system",
+          "at": "2026-02-03T14:30:05Z",
+          "payload": {
+            "sources_requested": [
+              "quote",
+              "news",
+              "fundamentals"
+            ]
+          }
+        },
+        {
+          "kind": "evidence",
+          "key": "aapl-quote",
+          "at": "2026-02-03T14:30:10Z",
+          "source_type": "price_quote",
+          "source_uri": "fixture://synthetic-market-data/aapl/2026-02-03",
+          "publisher": "Synthetic market data",
+          "published_at": "2026-02-03T14:29:58Z",
+          "retrieved_at": "2026-02-03T14:30:08Z",
+          "observation": {
+            "price_usd": "225.00",
+            "change_pct": "1.80"
+          },
+          "units": "USD/share",
+          "currency": "USD",
+          "is_redistributable": true
+        },
+        {
+          "kind": "evidence",
+          "key": "aapl-services-news",
+          "at": "2026-02-03T14:30:12Z",
+          "source_type": "news_article",
+          "source_uri": "fixture://synthetic-wire/aapl-services-2026-02-03",
+          "publisher": "Synthetic Wire",
+          "published_at": "2026-02-03T12:00:00Z",
+          "retrieved_at": "2026-02-03T12:05:00Z",
+          "excerpt": "Synthetic fixture text: services revenue grew 14% year over year, ahead of the 11% consensus, and gross margin held at 46.2%.",
+          "units": "pct",
+          "is_redistributable": true
+        },
+        {
+          "kind": "evidence",
+          "key": "aapl-fundamentals",
+          "at": "2026-02-03T14:30:14Z",
+          "source_type": "fundamentals",
+          "source_uri": "fixture://synthetic-fundamentals/aapl/2026-q1",
+          "publisher": "Synthetic fundamentals feed",
+          "published_at": "2026-01-30T21:05:00Z",
+          "retrieved_at": "2026-02-03T13:00:00Z",
+          "observation": {
+            "gross_margin_pct": "46.2",
+            "operating_margin_pct": "31.4",
+            "forward_pe": "31.0"
+          },
+          "units": "pct",
+          "is_redistributable": true
+        },
+        {
+          "kind": "transition",
+          "status": "analysing",
+          "at": "2026-02-03T14:30:20Z",
+          "payload": {
+            "evidence_count": 3
+          }
+        },
+        {
+          "kind": "claim",
+          "key": "bull-services",
+          "at": "2026-02-03T14:30:40Z",
+          "agent_role": "bull",
+          "stance": "bull",
+          "claim_type": "observed_fact",
+          "statement": "Services revenue grew 14% year over year and gross margin held at 46.2%.",
+          "evidence_keys": [
+            "aapl-services-news",
+            "aapl-fundamentals"
+          ],
+          "horizon": "next 2 quarters",
+          "limitations": "Synthetic source text; the underlying filing was not available offline."
+        },
+        {
+          "kind": "claim",
+          "key": "bull-multiple",
+          "at": "2026-02-03T14:30:45Z",
+          "agent_role": "bull",
+          "stance": "bull",
+          "claim_type": "interpretation",
+          "statement": "A richer services mix supports a higher multiple than the market assigns at 31x forward earnings.",
+          "evidence_keys": [
+            "aapl-services-news",
+            "aapl-fundamentals"
+          ],
+          "horizon": "12 months",
+          "limitations": "The comparison multiple is taken from a single synthetic fundamentals snapshot."
+        },
+        {
+          "kind": "claim",
+          "key": "bear-valuation",
+          "at": "2026-02-03T14:30:50Z",
+          "agent_role": "bear",
+          "stance": "bear",
+          "claim_type": "interpretation",
+          "statement": "At 31x forward earnings the shares already price in the services mix, leaving no margin for error.",
+          "evidence_keys": [
+            "aapl-fundamentals",
+            "aapl-quote"
+          ],
+          "horizon": "12 months",
+          "limitations": "Peer multiples were not available in this synthetic snapshot."
+        },
+        {
+          "kind": "claim",
+          "key": "bear-drawdown",
+          "at": "2026-02-03T14:30:55Z",
+          "agent_role": "bear",
+          "stance": "bear",
+          "claim_type": "forecast",
+          "statement": "A 10% drawdown is more likely than a 10% rally if multiple compression resumes.",
+          "evidence_keys": [
+            "aapl-quote"
+          ],
+          "horizon": "next quarter",
+          "limitations": "No options-implied distribution was available; this is a judgement, not a modelled probability."
+        },
+        {
+          "kind": "transition",
+          "status": "adjudicating",
+          "at": "2026-02-03T14:31:00Z",
+          "payload": {
+            "note": "No rebuttal stage in the current protocol; adjudication reads both initial cases."
+          }
+        },
+        {
+          "kind": "decision",
+          "at": "2026-02-03T14:31:05Z",
+          "action": "BUY",
+          "requested_quantity": "40.00000000",
+          "concise_rationale": "Services growth and resilient margin justify adding exposure. Valuation is the real objection, but it is a risk to size, not a reason to refuse the position.",
+          "decisive_claim_keys": [
+            "bull-services"
+          ],
+          "strongest_objection": "At 31x forward earnings the shares already price in the services mix, leaving no margin for error.",
+          "thesis": "Own AAPL for the services mix shift, sized so a multiple reset cannot damage the portfolio.",
+          "invalidation_condition": "Services growth below 10% or gross margin below 44% for two consecutive quarters.",
+          "engine_source": "fixture"
+        },
+        {
+          "kind": "transition",
+          "status": "validating",
+          "at": "2026-02-03T14:31:10Z",
+          "payload": {
+            "note": "Deterministic guard evaluation started."
+          }
+        },
+        {
+          "kind": "guard",
+          "at": "2026-02-03T14:31:15Z",
+          "policy_version": "guard.v1",
+          "evaluated_portfolio_version": "synthetic-demo-v1",
+          "quote_time": "2026-02-03T14:29:58Z",
+          "status": "clamped",
+          "requested_quantity": "40.00000000",
+          "allowed_quantity": "2.00000000",
+          "binding_rule": "max_trade_allocation_pct",
+          "reason_codes": [
+            "requested_notional_exceeds_trade_budget",
+            "quantity_clamped_to_budget"
+          ],
+          "numerical_checks": {
+            "quote_price_usd": "225.00",
+            "requested_notional_usd": "9000.00",
+            "cash_balance_usd": "10000.00",
+            "max_trade_allocation_pct": "5.00",
+            "max_trade_budget_usd": "500.00",
+            "allowed_notional_usd": "450.00"
+          },
+          "checks": [
+            {
+              "rule_code": "max_trade_allocation_pct",
+              "outcome": "fail",
+              "threshold": "500.00",
+              "actual": "9000.00",
+              "unit": "USD"
+            },
+            {
+              "rule_code": "max_ticker_concentration_pct",
+              "outcome": "pass",
+              "threshold": "30.00",
+              "actual": "0.00",
+              "unit": "pct"
+            },
+            {
+              "rule_code": "daily_loss_limit_usd",
+              "outcome": "not_evaluated",
+              "threshold": "500.00",
+              "actual": null,
+              "unit": "USD"
+            }
+          ]
+        },
+        {
+          "kind": "transition",
+          "status": "completed",
+          "at": "2026-02-03T14:31:20Z",
+          "payload": {
+            "note": "Proposal validated and clamped; autonomous execution permitted."
+          }
+        },
+        {
+          "kind": "outcome",
+          "at": "2026-02-04T21:00:00Z",
+          "horizon_days": 1,
+          "method_version": "attribution.synthetic.v1",
+          "maturity": "pending",
+          "benchmark_ticker": "SPY",
+          "signal_diagnostics": {
+            "synthetic": true,
+            "note": "The one-day close has not been evaluated in this fixture."
+          }
+        },
+        {
+          "kind": "outcome",
+          "at": "2026-02-10T21:00:00Z",
+          "horizon_days": 7,
+          "method_version": "attribution.synthetic.v1",
+          "maturity": "evaluated",
+          "price_at_decision": "225.00",
+          "price_at_horizon": "220.50",
+          "price_observed_at": "2026-02-10T21:00:00Z",
+          "price_source": "synthetic_fixture_close",
+          "forward_return_pct": "-2.0000",
+          "decision_return_pct": "-2.0000",
+          "benchmark_ticker": "SPY",
+          "benchmark_return_pct": "-0.4000",
+          "signal_diagnostics": {
+            "synthetic": true,
+            "sample_size": 0,
+            "note": "Illustrative fixture values, not market data. Not usable for performance claims."
+          },
+          "evaluated_at": "2026-02-10T21:00:00Z"
+        }
+      ]
+    },
+    {
+      "fixture_id": "disagreement-tsla-2026-02-04",
+      "label": "Disagreement: opposing cases, two rebuttals, explicit HOLD adjudication",
+      "scenario": "disagreement",
+      "mode": "synthetic",
+      "source": "fixture",
+      "recording_date": "2026-02-04",
+      "protocol_version": "synthetic.v1",
+      "ticker": "TSLA",
+      "started_at": "2026-02-04T15:00:00Z",
+      "checksum": "e136683a3d1eb8a41ab28f8fc6149f1586925cc3db0da510702cff23f94be0e6",
+      "snapshot": {
+        "portfolio_version": "synthetic-demo-v1",
+        "analysis_cutoff": "2026-02-04T15:00:20Z",
+        "captured_at": "2026-02-04T15:00:03Z",
+        "holdings": [],
+        "cash": {
+          "balance_usd": "10000.00",
+          "currency": "USD",
+          "as_of": "2026-02-04T14:59:58Z"
+        },
+        "quotes": {
+          "TSLA": {
+            "price_usd": "310.00",
+            "currency": "USD",
+            "as_of": "2026-02-04T14:59:58Z",
+            "source": "synthetic_snapshot"
+          }
+        }
+      },
+      "timeline": [
+        {
+          "kind": "transition",
+          "status": "collecting",
+          "at": "2026-02-04T15:00:05Z",
+          "payload": {
+            "note": "Snapshot captured; evidence collection started."
+          }
+        },
+        {
+          "kind": "evidence",
+          "key": "tsla-deliveries",
+          "at": "2026-02-04T15:00:10Z",
+          "source_type": "news_article",
+          "source_uri": "fixture://synthetic-wire/tsla-deliveries-2026-02-04",
+          "publisher": "Synthetic Wire",
+          "published_at": "2026-02-03T21:10:00Z",
+          "retrieved_at": "2026-02-04T15:00:08Z",
+          "excerpt": "Synthetic fixture text: quarterly deliveries fell 6% year over year, the second consecutive decline, while energy storage deployments rose 52%.",
+          "units": "pct",
+          "is_redistributable": true
+        },
+        {
+          "kind": "evidence",
+          "key": "tsla-segment-filing",
+          "at": "2026-02-04T15:00:12Z",
+          "source_type": "filing",
+          "source_uri": "fixture://synthetic-filings/tsla/2026-q4",
+          "publisher": "Synthetic filing archive",
+          "published_at": "2026-02-03T21:30:00Z",
+          "retrieved_at": "2026-02-04T15:00:11Z",
+          "observation": {
+            "energy_storage_share_of_revenue_pct": "12.0",
+            "automotive_gross_margin_pct": "16.4"
+          },
+          "units": "pct",
+          "is_redistributable": true
+        },
+        {
+          "kind": "evidence",
+          "key": "tsla-quote",
+          "at": "2026-02-04T15:00:14Z",
+          "source_type": "price_quote",
+          "source_uri": "fixture://synthetic-market-data/tsla/2026-02-04",
+          "publisher": "Synthetic market data",
+          "published_at": "2026-02-04T14:59:58Z",
+          "retrieved_at": "2026-02-04T15:00:13Z",
+          "observation": {
+            "price_usd": "310.00",
+            "forward_pe": "58.0"
+          },
+          "units": "USD/share",
+          "currency": "USD",
+          "is_redistributable": true
+        },
+        {
+          "kind": "transition",
+          "status": "analysing",
+          "at": "2026-02-04T15:00:20Z",
+          "payload": {
+            "evidence_count": 3
+          }
+        },
+        {
+          "kind": "claim",
+          "key": "bull-storage",
+          "at": "2026-02-04T15:00:35Z",
+          "agent_role": "bull",
+          "stance": "bull",
+          "claim_type": "interpretation",
+          "statement": "Energy storage growth of 52% is large enough to offset the vehicle margin decline.",
+          "evidence_keys": [
+            "tsla-deliveries",
+            "tsla-segment-filing"
+          ],
+          "horizon": "12 months",
+          "limitations": "Storage is still 12% of revenue; the offset is unproven."
+        },
+        {
+          "kind": "claim",
+          "key": "bull-product-cycle",
+          "at": "2026-02-04T15:00:40Z",
+          "agent_role": "bull",
+          "stance": "bull",
+          "claim_type": "forecast",
+          "statement": "A 2026 product cycle can restore volume growth without further price cuts.",
+          "evidence_keys": [
+            "tsla-quote"
+          ],
+          "horizon": "next 12 months",
+          "limitations": "No product timetable was available in the synthetic snapshot."
+        },
+        {
+          "kind": "claim",
+          "key": "bear-deliveries",
+          "at": "2026-02-04T15:00:45Z",
+          "agent_role": "bear",
+          "stance": "bear",
+          "claim_type": "observed_fact",
+          "statement": "Deliveries fell 6% year over year for a second consecutive quarter, so the core business is shrinking.",
+          "evidence_keys": [
+            "tsla-deliveries"
+          ],
+          "horizon": "next quarter",
+          "limitations": "One synthetic article is the only source for the delivery figure."
+        },
+        {
+          "kind": "claim",
+          "key": "bear-multiple",
+          "at": "2026-02-04T15:00:50Z",
+          "agent_role": "bear",
+          "stance": "bear",
+          "claim_type": "interpretation",
+          "statement": "The storage segment is too small to support a 58x forward multiple.",
+          "evidence_keys": [
+            "tsla-segment-filing",
+            "tsla-quote"
+          ],
+          "horizon": "12 months",
+          "limitations": "No peer multiple set was available; 58x is read in isolation."
+        },
+        {
+          "kind": "transition",
+          "status": "rebutting",
+          "at": "2026-02-04T15:00:55Z",
+          "payload": {
+            "note": "Synthetic rebuttal stage. The live Phase 1 pipeline has no rebuttal producer; this fixture exists to exercise the EVID-03 consumer contract."
+          }
+        },
+        {
+          "kind": "rebuttal",
+          "key": "bear-disputes-storage",
+          "at": "2026-02-04T15:01:00Z",
+          "responding_agent": "bear",
+          "target_claim_key": "bull-storage",
+          "response_type": "dispute",
+          "explanation": "Storage growth is 52% off a base that is still only 12% of revenue. Even at that growth rate it cannot offset a 6% decline in the larger vehicle business within the stated horizon.",
+          "evidence_keys": [
+            "tsla-deliveries",
+            "tsla-segment-filing"
+          ],
+          "position_change": "Remains bearish; conviction increased."
+        },
+        {
+          "kind": "rebuttal",
+          "key": "bull-qualifies-multiple",
+          "at": "2026-02-04T15:01:05Z",
+          "responding_agent": "bull",
+          "target_claim_key": "bear-multiple",
+          "response_type": "qualify",
+          "explanation": "A 58x multiple is only defensible if storage keeps compounding above 40%. The bear is right about the level and wrong about the trajectory; this is a sizing problem, not a rejection.",
+          "evidence_keys": [
+            "tsla-segment-filing"
+          ],
+          "position_change": "Trims conviction from high to moderate."
+        },
+        {
+          "kind": "transition",
+          "status": "adjudicating",
+          "at": "2026-02-04T15:01:10Z",
+          "payload": {
+            "note": "Adjudication reads both cases and both rebuttals."
+          }
+        },
+        {
+          "kind": "decision",
+          "at": "2026-02-04T15:01:20Z",
+          "action": "HOLD",
+          "requested_quantity": null,
+          "concise_rationale": "Each case rests on a verifiable fact and the rebuttals narrow the disagreement without resolving it. The multiple and the delivery decline are real; the storage offset is not yet large enough to prove itself. Holding preserves the option to act once Q1 deliveries resolve it.",
+          "decisive_claim_keys": [
+            "bull-storage",
+            "bear-deliveries"
+          ],
+          "strongest_objection": "The storage segment is too small to support a 58x forward multiple.",
+          "thesis": "No position until storage is material or deliveries stabilise.",
+          "invalidation_condition": "Two further quarters of declining deliveries with storage below 15% of revenue.",
+          "engine_source": "fixture"
+        },
+        {
+          "kind": "transition",
+          "status": "validating",
+          "at": "2026-02-04T15:01:25Z",
+          "payload": {
+            "note": "No executable proposal, so no guard evaluation."
+          }
+        },
+        {
+          "kind": "transition",
+          "status": "completed",
+          "at": "2026-02-04T15:01:30Z",
+          "payload": {
+            "note": "HOLD recorded; nothing to execute."
+          }
+        },
+        {
+          "kind": "outcome",
+          "at": "2026-02-11T21:00:00Z",
+          "horizon_days": 7,
+          "method_version": "attribution.synthetic.v1",
+          "maturity": "pending",
+          "benchmark_ticker": "SPY",
+          "signal_diagnostics": {
+            "synthetic": true,
+            "note": "HOLD makes no directional claim; no scored outcome was authored."
+          }
+        }
+      ]
+    },
+    {
+      "fixture_id": "uncertainty-msft-2026-02-05",
+      "label": "Uncertainty: unknown publication date, a degraded stage, an unpriced outcome, HOLD",
+      "scenario": "uncertainty",
+      "mode": "synthetic",
+      "source": "fixture",
+      "recording_date": "2026-02-05",
+      "protocol_version": "synthetic.v1",
+      "ticker": "MSFT",
+      "started_at": "2026-02-05T14:00:00Z",
+      "checksum": "107612de2a5a87e41b239f69f237c36f0ab9290beb6dc6f22ff8f41900c48a8e",
+      "snapshot": {
+        "portfolio_version": "synthetic-demo-v1",
+        "analysis_cutoff": "2026-02-05T14:00:20Z",
+        "captured_at": "2026-02-05T14:00:03Z",
+        "holdings": [],
+        "cash": {
+          "balance_usd": "10000.00",
+          "currency": "USD",
+          "as_of": "2026-02-05T13:59:58Z"
+        },
+        "quotes": {
+          "MSFT": {
+            "price_usd": "410.00",
+            "currency": "USD",
+            "as_of": "2026-02-05T13:59:58Z",
+            "source": "synthetic_snapshot"
+          }
+        }
+      },
+      "timeline": [
+        {
+          "kind": "transition",
+          "status": "collecting",
+          "at": "2026-02-05T14:00:05Z",
+          "payload": {
+            "note": "Snapshot captured; analyst estimate feed was expected but did not respond."
+          }
+        },
+        {
+          "kind": "evidence",
+          "key": "msft-revenue",
+          "at": "2026-02-05T14:00:10Z",
+          "source_type": "fundamentals",
+          "source_uri": "fixture://synthetic-fundamentals/msft/undated-archive",
+          "publisher": "Synthetic fundamentals archive",
+          "published_at": null,
+          "retrieved_at": "2026-02-05T13:40:00Z",
+          "observation": {
+            "revenue_growth_yoy_pct": "12.0",
+            "cloud_growth_yoy_pct": "18.0"
+          },
+          "units": "pct",
+          "is_redistributable": true
+        },
+        {
+          "kind": "evidence",
+          "key": "msft-guidance",
+          "at": "2026-02-05T14:00:12Z",
+          "source_type": "news_article",
+          "source_uri": "fixture://synthetic-wire/msft-guidance-2026-02-04",
+          "publisher": "Synthetic Wire",
+          "published_at": "2026-02-04T16:00:00Z",
+          "retrieved_at": "2026-02-05T13:45:00Z",
+          "excerpt": "Synthetic fixture text: the company deferred cloud-segment guidance, citing an ongoing systems migration, and did not give a date for resuming it.",
+          "is_redistributable": true
+        },
+        {
+          "kind": "transition",
+          "status": "analysing",
+          "at": "2026-02-05T14:00:20Z",
+          "payload": {
+            "evidence_count": 2
+          }
+        },
+        {
+          "kind": "event",
+          "event_type": "stage.failed",
+          "stage": "analysing",
+          "agent_role": "system",
+          "at": "2026-02-05T14:00:40Z",
+          "payload": {
+            "reason": "Analyst estimate feed unavailable; two of three expected evidence sources are missing. The run continues on partial data and records the gap.",
+            "missing_fields": [
+              "analyst_estimates",
+              "options_implied_distribution"
+            ]
+          }
+        },
+        {
+          "kind": "claim",
+          "key": "bull-revenue",
+          "at": "2026-02-05T14:00:45Z",
+          "agent_role": "bull",
+          "stance": "bull",
+          "claim_type": "observed_fact",
+          "statement": "Revenue grew 12% year over year and cloud grew 18%, so demand has not broken.",
+          "evidence_keys": [
+            "msft-revenue"
+          ],
+          "horizon": "next 2 quarters",
+          "limitations": "The publication date of this source is unknown; the archive is undated, so the information set available at the cutoff cannot be proven."
+        },
+        {
+          "kind": "claim",
+          "key": "bear-guidance",
+          "at": "2026-02-05T14:00:50Z",
+          "agent_role": "bear",
+          "stance": "bear",
+          "claim_type": "interpretation",
+          "statement": "Deferred cloud guidance means near-term visibility is worse than the revenue figure suggests.",
+          "evidence_keys": [
+            "msft-guidance"
+          ],
+          "horizon": "next quarter",
+          "limitations": "The article gives no reason beyond the migration and no date for resumed guidance."
+        },
+        {
+          "kind": "claim",
+          "key": "neutral-unresolved",
+          "at": "2026-02-05T14:00:55Z",
+          "agent_role": "cio",
+          "stance": "neutral",
+          "claim_type": "forecast",
+          "statement": "Neither case can be resolved before the cloud migration completes and guidance resumes.",
+          "evidence_keys": [
+            "msft-revenue",
+            "msft-guidance"
+          ],
+          "horizon": "until guidance resumes",
+          "limitations": "Analyst estimates and an implied distribution were unavailable, so no probability can be attached."
+        },
+        {
+          "kind": "transition",
+          "status": "adjudicating",
+          "at": "2026-02-05T14:01:00Z",
+          "payload": {
+            "note": "Adjudication with a recorded data gap."
+          }
+        },
+        {
+          "kind": "decision",
+          "at": "2026-02-05T14:01:05Z",
+          "action": "HOLD",
+          "requested_quantity": null,
+          "concise_rationale": "Guidance is deferred and one source has no publication date. The evidence does not support a directional position, and inventing a probability from missing inputs would be worse than holding.",
+          "decisive_claim_keys": [
+            "bear-guidance",
+            "neutral-unresolved"
+          ],
+          "strongest_objection": "Revenue and cloud growth are both real and may not require guidance to keep compounding.",
+          "thesis": "No position added until cloud visibility returns.",
+          "invalidation_condition": "Cloud guidance resumes with migration completion, or cloud growth falls below 12% for a quarter.",
+          "engine_source": "fixture"
+        },
+        {
+          "kind": "transition",
+          "status": "validating",
+          "at": "2026-02-05T14:01:10Z",
+          "payload": {
+            "note": "HOLD produces no executable order, so no guard record."
+          }
+        },
+        {
+          "kind": "transition",
+          "status": "completed",
+          "at": "2026-02-05T14:01:15Z",
+          "payload": {
+            "note": "HOLD recorded with limitations attached."
+          }
+        },
+        {
+          "kind": "outcome",
+          "at": "2026-02-06T21:00:00Z",
+          "horizon_days": 1,
+          "method_version": "attribution.synthetic.v1",
+          "maturity": "unavailable",
+          "benchmark_ticker": "SPY",
+          "signal_diagnostics": {
+            "synthetic": true,
+            "note": "No closing price was authored for this fixture."
+          },
+          "unavailable_reason": "No closing price was recorded for the decision date in the synthetic snapshot. Scoring it would require inventing one, so the outcome is recorded as unavailable rather than zero."
+        }
+      ]
+    }
+  ]
+}

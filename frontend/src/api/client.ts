@@ -1,6 +1,7 @@
 import type {
   ApiErrorPayload,
   AttributionResponse,
+  DecisionDetailPayload,
   DecisionLog,
   ListResponse,
   LoginResponse,
@@ -10,6 +11,9 @@ import type {
   Recommendation,
   RecommendationDecisionResponse,
   RunAgentResponse,
+  RunEventsResponse,
+  RunListResponse,
+  RunSummary,
   ThesisRow,
   SnapshotRange,
   ToggleAutonomyResponse,
@@ -360,6 +364,45 @@ export const api = {
   /** `POST /api/portfolio/run-agent/` → 202 `{ status, task_id, portfolio_id }` */
   runAgent(): Promise<RunAgentResponse> {
     return apiRequest<RunAgentResponse>('/api/portfolio/run-agent/', { method: 'POST' });
+  },
+
+  /* ---------------------------------------------------------------- */
+  /* Phase 1 decision runs                                            */
+  /* ---------------------------------------------------------------- */
+
+  /** `GET /api/decision-runs/` → `{ results: RunSummary[] }` */
+  decisionRuns(signal?: AbortSignal): Promise<RunListResponse> {
+    return apiRequest<RunListResponse>('/api/decision-runs/', { signal });
+  },
+
+  /** `GET /api/decision-runs/{id}/` → the run summary. */
+  decisionRun(id: string, signal?: AbortSignal): Promise<RunSummary> {
+    return apiRequest<RunSummary>(`/api/decision-runs/${encodeURIComponent(id)}/`, { signal });
+  },
+
+  /** `GET /api/decision-runs/{id}/detail/` → claims, evidence, guard, outcomes. */
+  decisionRunDetail(id: string, signal?: AbortSignal): Promise<DecisionDetailPayload> {
+    return apiRequest<DecisionDetailPayload>(
+      `/api/decision-runs/${encodeURIComponent(id)}/detail/`,
+      { signal },
+    );
+  },
+
+  /**
+   * `GET /api/decision-runs/{id}/events/?after_seq=N` → one page of events.
+   *
+   * The endpoint is incremental by design: `after_seq` is the recovery path
+   * after a dropped frame, so the hook never needs to refetch the whole stream.
+   */
+  decisionRunEvents(
+    id: string,
+    afterSeq = 0,
+    signal?: AbortSignal,
+  ): Promise<RunEventsResponse> {
+    return apiRequest<RunEventsResponse>(
+      `/api/decision-runs/${encodeURIComponent(id)}/events/`,
+      { query: { after_seq: Math.max(0, Math.floor(afterSeq)) }, signal },
+    );
   },
 };
 

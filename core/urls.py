@@ -8,6 +8,13 @@ Portfolio
     POST /api/portfolio/run-agent/             on-demand autonomous sweep
     GET  /api/portfolio/snapshots/             equity time series (dashboard chart)
 
+Decision runs
+    GET  /api/decision-runs/                   the caller's decision runs
+    GET  /api/decision-runs/<id>/              metadata, stages, cost, failure
+    GET  /api/decision-runs/<id>/detail/       cases, rebuttals, verdict, guard
+    GET  /api/decision-runs/<id>/events/       ordered event window (after_seq)
+    GET  /api/decision-runs/<id>/export/       redacted versioned JSON bundle
+
 Human-in-the-loop
     POST /api/portfolio/analyse/               advisory sweep (no execution)
     GET  /api/portfolio/recommendations/       proposals awaiting a decision
@@ -26,6 +33,13 @@ from __future__ import annotations
 from django.urls import path
 from rest_framework.authtoken.views import obtain_auth_token
 
+from core.decision_views import (
+    DecisionRunDetailView,
+    DecisionRunEventsView,
+    DecisionRunExportView,
+    DecisionRunListView,
+    DecisionRunMetadataView,
+)
 from core.views import (
     AdvisorySweepView,
     AgentDecisionLogListView,
@@ -89,6 +103,28 @@ urlpatterns = [
         "portfolio/recommendations/<int:pk>/reject/",
         RecommendationRejectView.as_view(),
         name="recommendation-reject",
+    ),
+    # -- decision runs (Phase 1) -----------------------------------------
+    path("decision-runs/", DecisionRunListView.as_view(), name="decision-run-list"),
+    path(
+        "decision-runs/<str:run_id>/",
+        DecisionRunMetadataView.as_view(),
+        name="decision-run-detail",
+    ),
+    path(
+        "decision-runs/<str:run_id>/detail/",
+        DecisionRunDetailView.as_view(),
+        name="decision-run-detail-rich",
+    ),
+    path(
+        "decision-runs/<str:run_id>/events/",
+        DecisionRunEventsView.as_view(),
+        name="decision-run-events",
+    ),
+    path(
+        "decision-runs/<str:run_id>/export/",
+        DecisionRunExportView.as_view(),
+        name="decision-run-export",
     ),
     # -- market data ------------------------------------------------------
     path("market/news/", MarketNewsView.as_view(), name="market-news"),
