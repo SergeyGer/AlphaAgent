@@ -26,7 +26,12 @@ DEMO = REPO_ROOT / "demo" / "app.py"
 REQUIREMENTS = REPO_ROOT / "demo" / "requirements.txt"
 
 #: The Streamlit release the injected CSS was verified against.
-THEMED_AGAINST = "1.65.0"
+#:
+#: 1.65.0 -> 1.66.1 was verified by running the demo on the new release and
+#: comparing the rendered dashboard shell against the 1.65.0 render: the palette,
+#: metric row, ceiling meters, tabs and verdict panel all still applied, so the
+#: data-testid selectors this theme depends on had not moved.
+THEMED_AGAINST = "1.66.1"
 
 
 class DemoThemeContractTests(SimpleTestCase):
