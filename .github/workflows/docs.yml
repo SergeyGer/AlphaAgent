@@ -67,12 +67,15 @@ jobs:
           # failing a link that points nowhere real, which is better than
           # excluding the pages from checking.
           #
-          # 429 and 503 are transient server-side refusals, not broken links. A
-          # forge returning 503 under load says nothing about whether the page
-          # exists, and failing a build for it teaches people to ignore the check
-          # - which costs more than the rare genuinely-missing link it would have
-          # caught. (The `#` rule above applies to these lines too. I repeated the
-          # mistake here and put them inside the scalar.)
+            # 429, 503 and 504 are transient server-side refusals, not broken
+            # links. A forge returning 503 under load, or a gateway whose upstream
+            # timed out (504), says nothing about whether the page actually exists,
+            # and failing a build for it teaches people to ignore the check - which
+            # costs more than the rare genuinely-missing link it would have caught.
+            # 504 was added after a red build whose only two failures were GitHub
+            # timing out on its own repository URLs, while the video link in the
+            # same run resolved fine. (The `#` rule above applies to these lines
+            # too. I repeated the mistake here and put them inside the scalar.)
           #
           # Links to this repository's own files via github.com/.../blob/ are
           # excluded as well, and that is the more precise fix. GitHub's HTML
@@ -85,7 +88,7 @@ jobs:
           args: >-
             --verbose
             --no-progress
-            --accept 200,206,429,503
+            --accept 200,206,429,503,504
             --max-retries 3
             --retry-wait-time 2
             --fallback-extensions md
