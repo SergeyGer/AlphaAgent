@@ -1,12 +1,10 @@
 #!/usr/bin/env python
-# ruff: noqa: RUF001, RUF003
 #
-# RUF001-3 flag Cyrillic characters that look like Latin ones. This file is a
-# Russian-language document generator, so those characters are the entire point;
-# the rule is silenced HERE rather than in pyproject.toml so it keeps guarding
-# every other file in the project, where a stray Cyrillic "с" in an identifier or
-# a URL would be a genuine bug that is almost impossible to see.
-"""Generate Run_Stop_Project.docx - the Russian-language operator guide.
+# RUF001/RUF003 flag characters that are confusable across scripts: a Cyrillic
+# letter that reads as Latin "c". They are not silenced here. This file generates
+# English documentation, so any Cyrillic in it is a defect that the linter should
+# catch before a reader does.
+"""Generate Run_Stop_Project.docx - the English-language operator guide.
 
 Kept in the repository, unlike its output, so the document can be regenerated
 when the commands change. The .docx itself is gitignored: it is a personal
@@ -52,8 +50,8 @@ SSH_HOST = "Hetzner"
 #: How the Linux server is named throughout. The IP is repeated deliberately: the
 #: reader works from several machines, and "the Linux server" stops being
 #: unambiguous the moment there is more than one of anything.
-SERVER = f"Linux-сервер (текущий реальный Linux сервер {SERVER_IP})"
-SRV = f"сервер {SERVER_IP}"
+SERVER = f"the Linux server (the live server at {SERVER_IP})"
+SRV = f"the server at {SERVER_IP}"
 
 #: The key file named in the reader's ~/.ssh/config. Every instruction uses this
 #: name; SSH_KEY_ALIASES are the ones that must NOT appear anywhere.
@@ -180,225 +178,224 @@ def table(doc: Document, headers: list[str], rows: list[list[str]]) -> None:
 
 
 def intro(doc: Document) -> None:
-    title = doc.add_heading("AlphaAgent — рабочий справочник оператора", level=0)
+    title = doc.add_heading("AlphaAgent — Operator Runbook", level=0)
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     body(
         doc,
-        "Всё, что нужно, чтобы начать работу над проектом, остановить его, "
-        "подключиться с нового ноутбука и не оставить открытым то, что должно "
-        "быть закрыто.",
+        "Everything you need to start work on the project, stop it, connect from a "
+        "new laptop, and never leave open what should be closed.",
         italic=True,
     )
     table(
         doc,
-        ["Раздел", "Когда нужен"],
+        ["Section", "When you need it"],
         [
-            ["1–4", "Повседневная работа: запустить, остановить, открыть в браузере"],
-            ["5", "Первый вход с нового ноутбука: SSH-ключ и настройка"],
-            ["6", "Подключение к DeepSeek Harness"],
-            ["7–8", "Dev Containers, в том числе вдвоём на одном сервере"],
-            ["9–10", "Несколько ноутбуков, клонирование репозитория"],
-            ["11", "Безопасность: fail2ban, ufw, секреты"],
-            ["12–14", "Справочник команд, разбор ошибок, шпаргалка"],
+            ["1-4", "Day-to-day work: start, stop, open in the browser"],
+            ["5", "First login from a new laptop: SSH key and setup"],
+            ["6", "Connecting to DeepSeek Harness"],
+            ["7-8", "Dev Containers, including two people on one server"],
+            ["9-10", "Several laptops, cloning the repository"],
+            ["11", "Security: fail2ban, ufw, secrets"],
+            ["12-14", "Command reference, troubleshooting, cheat sheet"],
         ],
     )
     body(
         doc,
-        f"Команды в документе выполняются либо в терминале {SERVER}, либо в "
-        f"терминале VS Code, подключённом к нему. Работа на ноутбуке без "
-        f"подключения к серверу оговаривается отдельно.",
+        f"Commands in this document are run either in a terminal on {SERVER}, or in "
+        f"a VS Code terminal connected to it. Anything done on the laptop without a "
+        f"connection to the server is called out separately.",
         italic=True,
     )
 
 
 def section_quick(doc: Document) -> None:
-    heading(doc, "1. Главное в двух словах", 1)
+    heading(doc, "1. The Short Version", 1)
     body(
         doc,
-        f"Проект состоит из шести контейнеров и работает на {SERVER}. "
-        f"Запускаются и останавливаются они одной командой — вручную запускать "
-        f"каждый не нужно.",
+        f"The project consists of six containers and runs on {SERVER}. They are "
+        f"started and stopped with a single command — there is no need to start each "
+        f"one by hand.",
     )
     table(
         doc,
-        ["Контейнер", "Что это", "Порт на сервере"],
+        ["Container", "What it is", "Port on the server"],
         [
-            ["web", "Веб-сервер: API, панель управления, WebSocket", "8080"],
-            ["worker", "Celery: выполняет задачи ИИ-агента", "—"],
-            ["beat", "Планировщик: запускает обходы по расписанию", "—"],
-            ["mcp", "Сервер инструментов (котировки, новости)", "—"],
-            ["db", "PostgreSQL 16 — база данных", "5432 (только localhost)"],
-            ["redis", "Redis 7 — очередь задач и кэш", "6379 (только localhost)"],
+            ["web", "Web server: API, control panel, WebSocket", "8080"],
+            ["worker", "Celery: runs AI-agent tasks", "—"],
+            ["beat", "Scheduler: runs scans on a schedule", "—"],
+            ["mcp", "Tool server (quotes, news)", "—"],
+            ["db", "PostgreSQL 16 — the database", "5432 (localhost only)"],
+            ["redis", "Redis 7 — task queue and cache", "6379 (localhost only)"],
         ],
     )
     body(
         doc,
-        f"Панель управления после запуска: http://127.0.0.1:8080/ "
-        f"(на {SRV}). Логин demo, пароль demo-pass-123.",
+        f"Control panel once running: http://127.0.0.1:8080/ "
+        f"(on {SRV}). Login demo, password demo-pass-123.",
     )
     warn(
         doc,
-        "Базы данных доступны только с самого сервера. Это сделано намеренно: "
-        "раньше PostgreSQL и Redis были открыты в интернет. Подробности — "
-        "в разделе 11.",
+        "The databases are reachable only from the server itself. That is "
+        "deliberate: PostgreSQL and Redis used to be exposed to the internet. See "
+        "section 11 for details.",
     )
 
 
 def section_run_stop(doc: Document) -> None:
-    heading(doc, "2. Запуск и остановка", 1)
+    heading(doc, "2. Starting and Stopping", 1)
 
-    heading(doc, "2.1. Запуск", 2)
-    body(doc, "Три способа. Выберите удобный — результат одинаковый.")
-    body(doc, "Способ 1. Из VS Code (одинаково на Windows и на Linux):", bold=True)
+    heading(doc, "2.1. Starting", 2)
+    body(doc, "Three ways. Pick whichever is convenient — the result is identical.")
+    body(doc, "Method 1. From VS Code (identical on Windows and Linux):", bold=True)
     bullet(doc, "Ctrl+Shift+P")
-    bullet(doc, "наберите Run Task и выберите «Tasks: Run Task»")
-    bullet(doc, "выберите «AlphaAgent: Start»")
-    body(doc, "Способ 2. В терминале (Linux, macOS, WSL, Git Bash):", bold=True)
+    bullet(doc, "type Run Task and select 'Tasks: Run Task'")
+    bullet(doc, "select 'AlphaAgent: Start'")
+    body(doc, "Method 2. In a terminal (Linux, macOS, WSL, Git Bash):", bold=True)
     code(doc, "make start")
-    body(doc, "Способ 3. Напрямую через Docker (работает везде):", bold=True)
+    body(doc, "Method 3. Directly through Docker (works everywhere):", bold=True)
     code(doc, "docker compose up -d --build")
     body(
         doc,
-        "Первый запуск занимает несколько минут: Docker собирает образ. "
-        "Последующие — несколько секунд.",
+        "The first start takes a few minutes: Docker builds the image. Subsequent "
+        "starts take a few seconds.",
     )
 
-    heading(doc, "2.2. Остановка — самый важный раздел", 2)
+    heading(doc, "2.2. Stopping — The Most Important Section", 2)
     body(
         doc,
-        "Команд две, и они делают разное. От выбора зависит, будут ли сервисы "
-        "разных проектов мешать друг другу.",
+        "There are two commands, and they do different things. Your choice decides "
+        "whether services from different projects will get in each other's way.",
     )
     table(
         doc,
-        ["Команда", "Что происходит", "Когда использовать"],
+        ["Command", "What happens", "When to use it"],
         [
             [
-                "make stop\n(«AlphaAgent: Stop»)",
-                "Контейнеры останавливаются, но остаются собранными. Порты и память освобождаются.",
-                "Короткий перерыв. Запуск после этого — мгновенный.",
+                "make stop\n('AlphaAgent: Stop')",
+                "Containers are stopped but stay built. Ports and memory are released.",
+                "A short break. Starting again afterwards is instant.",
             ],
             [
-                "make down\n(«AlphaAgent: Shut down»)",
-                "Контейнеры удаляются, сеть освобождается полностью.",
+                "make down\n('AlphaAgent: Shut down')",
+                "Containers are removed and the network is fully released.",
                 t(
-                    "Переключение на другой проект надолго. Именно это освобождает ",
-                    "порты 8080, 5432 и 6379.",
+                    "Switching to another project for a long time. This is what ",
+                    "actually frees ports 8080, 5432 and 6379.",
                 ),
             ],
         ],
     )
     warn(
         doc,
-        "Переключаетесь на другой проект — используйте down. Остановленные "
-        "контейнеры в некоторых конфигурациях Docker Desktop продолжают удерживать "
-        "порты, и тогда второй проект не сможет запуститься.",
+        "If you are switching to another project, use down. Under some Docker "
+        "Desktop configurations, stopped containers keep holding their ports, and "
+        "then the second project cannot start.",
     )
     body(
         doc,
-        "Данные не теряются: ни stop, ни down не удаляют тома. Удаляет данные "
-        "только down -v, и эта команда намеренно не обёрнута ни в одну задачу — "
-        "чтобы её нельзя было выполнить одной опечаткой.",
+        "No data is lost: neither stop nor down deletes volumes. Only down -v "
+        "deletes data, and that command is deliberately not wrapped in any task — "
+        "so it cannot be run by a single typo.",
         italic=True,
     )
 
-    heading(doc, "2.3. Переключение между проектами", 2)
+    heading(doc, "2.3. Switching Between Projects", 2)
     code(
         doc,
-        """# Закончили с AlphaAgent
+        """# finished with AlphaAgent
 cd ~/projects/AlphaAgent
 make down
 
-# ... работаете над другим проектом ...
+# ... working on another project ...
 
-# Вернулись
+# back again
 cd ~/projects/AlphaAgent
 make start""",
     )
 
-    heading(doc, "2.4. Автозапуск отключён", 2)
+    heading(doc, "2.4. Autostart Is Disabled", 2)
     body(
         doc,
-        "Ни один контейнер не запускается сам — ни после перезагрузки сервера, "
-        "ни после перезапуска Docker. Это сделано намеренно:",
+        "No container starts on its own — neither after a server reboot nor after a "
+        "Docker restart. That is deliberate:",
     )
-    bullet(doc, "проект не занимает память и порты, пока вы с ним не работаете;")
-    bullet(doc, "автономная торговля не возобновляется без вашего ведома;")
-    bullet(doc, "сервисы разных проектов не конкурируют за одни и те же порты.")
-    body(doc, "Проверить — в ответе должно быть no для всех контейнеров:")
+    bullet(doc, "the project occupies no memory or ports while you are not working on it;")
+    bullet(doc, "autonomous trading does not resume without your knowledge;")
+    bullet(doc, "services from different projects do not compete for the same ports.")
+    body(doc, "To check, the answer must be no for every container:")
     code(doc, "docker inspect alpha_web --format '{{.HostConfig.RestartPolicy.Name}}'")
     body(
         doc,
-        "Исключение — DeepSeek Harness: он запускается как системная служба и "
-        "после перезагрузки поднимается сам. Это отдельный сервис, см. раздел 6.",
+        "The exception is DeepSeek Harness: it runs as a system service and comes "
+        "back up by itself after a reboot. It is a separate service, see section 6.",
         italic=True,
     )
 
 
 def section_ports(doc: Document) -> None:
-    heading(doc, "3. Какой порт открывать", 1)
+    heading(doc, "3. Which Port to Open", 1)
     body(
         doc,
-        "К одному и тому же приложению ведут два пути, и номера портов у них "
-        "разные. Это самое частое место ошибки: приложение работает, а браузер "
-        "пишет, что сайт недоступен.",
+        "Two paths lead to the same application, and their port numbers differ. "
+        "This is the most common mistake: the application is running, but the "
+        "browser says the site cannot be reached.",
     )
     table(
         doc,
-        ["Где вы находитесь", "Как идёт трафик", "Адрес в браузере"],
+        ["Where you are", "How the traffic flows", "Address in the browser"],
         [
             [
-                "В VS Code, внутри Dev Container",
-                "VS Code прокидывает порт 8000 контейнера на ваш ноутбук",
+                "In VS Code, inside the Dev Container",
+                "VS Code forwards port 8000 of the container to your laptop",
                 "http://127.0.0.1:8000/",
             ],
             [
-                f"На {SRV} (по SSH)",
-                "Docker публикует порт 8000 контейнера как 8080 на сервере",
+                f"On {SRV} (over SSH)",
+                "Docker publishes port 8000 of the container as 8080 on the server",
                 "http://127.0.0.1:8080/",
             ],
         ],
     )
     body(
         doc,
-        "Это одно и то же приложение. Номера разные потому, что это два разных "
-        "механизма, а не два разных сервера.",
+        "It is the same application. The numbers differ because these are two "
+        "different mechanisms, not two different servers.",
     )
     warn(
         doc,
-        "Работаете через Dev Containers — открывайте порт 8000. Порт 8080 "
-        "существует только на стороне сервера; внутри контейнера на нём ничего не "
-        "слушает, поэтому прокидывать его бессмысленно.",
+        "If you are working through Dev Containers, open port 8000. Port 8080 "
+        "exists only on the server side; nothing listens on it inside the container, "
+        "so forwarding it is pointless.",
     )
     body(
         doc,
-        "Посмотреть, какие порты VS Code уже прокинул, можно на вкладке PORTS — "
-        "рядом с вкладкой TERMINAL внизу окна VS Code.",
+        "To see which ports VS Code has already forwarded, open the PORTS tab — "
+        "next to the TERMINAL tab at the bottom of the VS Code window.",
     )
 
 
 def section_not_serving(doc: Document) -> None:
-    heading(doc, "4. Приложение не открывается сразу после старта контейнера", 1)
+    heading(doc, "4. The Application Does Not Open Right After the Container Starts", 1)
     body(
         doc,
-        "Так и задумано. В режиме Dev Container контейнер web держится живым "
-        "специально, чтобы VS Code мог к нему подключиться, но сам веб-сервер не "
-        "запускается. Пока вы его не запустите, открывать нечего.",
+        "That is by design. In Dev Container mode the web container is kept alive "
+        "specifically so VS Code can attach to it, but the web server itself is not "
+        "started. Until you start it, there is nothing to open.",
     )
-    body(doc, "Способ 1 — через список задач VS Code:", bold=True)
-    bullet(doc, "Ctrl+Shift+P, затем «Tasks: Run Task»")
-    bullet(doc, "выберите «AlphaAgent: Run server (in this container)»")
-    body(doc, "Способ 2 — в терминале внутри контейнера:", bold=True)
+    body(doc, "Method 1 — through the VS Code task list:", bold=True)
+    bullet(doc, "Ctrl+Shift+P, then 'Tasks: Run Task'")
+    bullet(doc, "select 'AlphaAgent: Run server (in this container)'")
+    body(doc, "Method 2 — in a terminal inside the container:", bold=True)
     code(doc, "python manage.py runserver 0.0.0.0:8000")
     warn(
         doc,
-        "0.0.0.0 обязательно. По умолчанию Django слушает только 127.0.0.1 — "
-        "собственный loopback контейнера. Проброшенный порт в этом случае "
-        "подключается в пустоту, и браузер показывает ошибку, хотя в логе написано "
-        "Starting development server.",
+        "0.0.0.0 is mandatory. By default Django listens only on 127.0.0.1 — the "
+        "container's own loopback. A forwarded port then connects into the void, and "
+        "the browser shows an error even though the log says Starting development "
+        "server.",
     )
-    body(doc, "Если демо-данных ещё нет, один раз выполните:")
+    body(doc, "If there is no demo data yet, run this once:")
     code(
         doc,
         """python manage.py migrate
@@ -406,61 +403,62 @@ python manage.py seed_demo""",
     )
     body(
         doc,
-        "Или выберите задачу «AlphaAgent: Migrate + seed demo data» — она делает и то, и другое.",
+        "Or select the 'AlphaAgent: Migrate + seed demo data' task — it does both.",
     )
 
 
 def section_ssh(doc: Document) -> None:
-    heading(doc, "5. Доступ к серверу: SSH-ключ с нуля", 1)
+    heading(doc, "5. Server Access: SSH Key from Scratch", 1)
     body(
         doc,
-        f"Все дальнейшие разделы предполагают, что вы уже можете войти на {SERVER} "
-        f"без пароля. Если вы на новом ноутбуке — начните отсюда.",
+        f"All the sections below assume you can already log in to {SERVER} without "
+        f"a password. If you are on a new laptop, start here.",
     )
     body(
         doc,
-        "Вход по паролю на сервере отключён. Это правильно и должно так "
-        "остаться: пароль можно подобрать, ключ — практически нет.",
+        "Password login is disabled on the server. That is correct and must stay "
+        "that way: a password can be guessed, a key practically cannot.",
         italic=True,
     )
 
-    heading(doc, "5.1. Создание ключа на ноутбуке (Windows)", 2)
+    heading(doc, "5.1. Creating a Key on the Laptop (Windows)", 2)
     body(
         doc,
-        "Откройте PowerShell. Команда ssh-keygen входит в Windows 10 и 11 "
-        "начиная с версии 1809, отдельно ставить ничего не нужно.",
+        "Open PowerShell. The ssh-keygen command ships with Windows 10 and 11 "
+        "starting from version 1809; nothing needs to be installed separately.",
     )
     code(
         doc,
-        f'ssh-keygen -t ed25519 -C "ваш-ноутбук" -f $HOME\\.ssh\\{SSH_KEY}',
+        f'ssh-keygen -t ed25519 -C "your-laptop" -f $HOME\\.ssh\\{SSH_KEY}',
     )
-    body(doc, "На вопрос о парольной фразе (passphrase):")
-    bullet(doc, "укажите её — тогда украденный файл ключа сам по себе бесполезен;")
+    body(doc, "When asked about a passphrase:")
+    bullet(doc, "set one — then a stolen key file is useless on its own;")
     bullet(
         doc,
-        "либо нажмите Enter дважды — удобнее, но файл ключа становится "
-        "единственной защитой. Для личного ноутбука это приемлемо, для общего — нет.",
+        "or press Enter twice — more convenient, but the key file becomes the "
+        "only protection. Acceptable for a personal laptop, not for a shared one.",
     )
-    body(doc, "Создадутся два файла:")
+    body(doc, "Two files will be created:")
     table(
         doc,
-        ["Файл", "Что это", "Кому можно показывать"],
+        ["File", "What it is", "Who may see it"],
         [
-            [f"~/.ssh/{SSH_KEY}", "ЗАКРЫТЫЙ ключ", "Никому. Никогда."],
-            [f"~/.ssh/{SSH_KEY}.pub", "Открытый ключ", "Можно класть на сервер"],
+            [f"~/.ssh/{SSH_KEY}", "PRIVATE key", "Nobody. Ever."],
+            [f"~/.ssh/{SSH_KEY}.pub", "Public key", "Safe to put on the server"],
         ],
     )
-    body(doc, "На Linux и macOS команда та же, только путь без обратной косой черты:")
-    code(doc, f'ssh-keygen -t ed25519 -C "ваш-ноутбук" -f ~/.ssh/{SSH_KEY}')
+    body(doc, "On Linux and macOS the command is the same, except the path has no backslashes:")
+    code(doc, f'ssh-keygen -t ed25519 -C "your-laptop" -f ~/.ssh/{SSH_KEY}')
 
-    heading(doc, "5.2. Кладём открытую часть на сервер", 2)
+    heading(doc, "5.2. Putting the Public Part on the Server", 2)
     body(
         doc,
-        "Способ 1 — автоматический. Самый простой, если пароль на сервере ещё разрешён:",
+        "Method 1 — automatic. The simplest option if password login is still "
+        "allowed on the server:",
     )
     code(doc, f"ssh-copy-id -i ~/.ssh/{SSH_KEY}.pub root@{SERVER_IP}")
-    body(doc, "На Windows команды ssh-copy-id обычно нет. Используйте способ 2.")
-    body(doc, "Способ 2 — вручную. Выполняется в PowerShell на ноутбуке:", bold=True)
+    body(doc, "Windows usually has no ssh-copy-id. Use method 2.")
+    body(doc, "Method 2 — manual. Run it in PowerShell on the laptop:", bold=True)
     code(
         doc,
         f"type $HOME\\.ssh\\{SSH_KEY}.pub | ssh root@{SERVER_IP} "
@@ -469,331 +467,333 @@ def section_ssh(doc: Document) -> None:
     )
     body(
         doc,
-        "Права 700 на ~/.ssh и 600 на authorized_keys обязательны: sshd "
-        "отказывается использовать файл, который может прочитать кто-то ещё. Это "
-        "самая частая причина ситуации «ключ положил, а не пускает».",
+        "Permissions 700 on ~/.ssh and 600 on authorized_keys are mandatory: sshd "
+        "refuses a file that anyone else can read. This is the most common cause of "
+        "'I copied the key but it still asks for a password'.",
         italic=True,
     )
 
-    heading(doc, "5.3. Файл ~/.ssh/config на ноутбуке", 2)
+    heading(doc, "5.3. The ~/.ssh/config File on the Laptop", 2)
     body(
         doc,
-        "Создайте файл ~/.ssh/config (на Windows — "
-        "C:\\Users\\имя\\.ssh\\config) и вставьте в него следующее. Это текущее "
-        f"содержимое файла; оно позволяет писать ssh {SSH_HOST} вместо полной "
-        f"команды с IP и путём к ключу.",
+        "Create the file ~/.ssh/config (on Windows: "
+        "C:\\Users\\name\\.ssh\\config) and paste the following into it. This is the "
+        f"current content of the file; it lets you write ssh {SSH_HOST} instead of "
+        f"the full command with the IP and the key path.",
     )
     code(doc, SSH_CONFIG)
-    body(doc, "Что означает каждая строка:")
+    body(doc, "What each line means:")
     table(
         doc,
-        ["Строка", "Зачем"],
+        ["Line", "Why"],
         [
             [
                 f"Host {SSH_HOST} {SERVER_IP}",
-                f"Два имени для одного сервера: можно писать ssh {SSH_HOST} или ssh {SERVER_IP}.",
+                f"Two names for one server: you can write ssh {SSH_HOST} or ssh {SERVER_IP}.",
             ],
-            ["HostName / User", "Адрес и пользователь по умолчанию."],
+            ["HostName / User", "Address and default user."],
             [
                 f"IdentityFile ~/.ssh/{SSH_KEY}",
-                "Какой ключ использовать. Именно этот файл, не какой-либо другой.",
+                "Which key to use. This exact file, not any other.",
             ],
             [
                 "IdentitiesOnly yes",
                 t(
-                    "Использовать только указанный ключ, а не перебирать всё из ",
-                    "ssh-agent. Убирает ошибку Too many authentication failures.",
+                    "Use only the specified key instead of trying everything in ",
+                    "ssh-agent. Removes the Too many authentication failures error.",
                 ),
             ],
             [
                 "AddKeysToAgent yes",
-                "Один раз ввели парольную фразу — дальше агент помнит ключ до перезагрузки.",
+                "Enter the passphrase once, then the agent remembers the key until a reboot.",
             ],
             [
                 "ServerAliveInterval 30\nServerAliveCountMax 4",
                 t(
-                    "Не рвать соединение при простое: сервер опрашивается не реже ",
-                    "раза в 30 секунд, разрыв после четырёх пропусков.",
+                    "Do not drop an idle connection: the server is probed at least ",
+                    "every 30 seconds, with a disconnect after four missed replies.",
                 ),
             ],
-            ["TCPKeepAlive yes", "Держать TCP-соединение живым на уровне сокета."],
+            ["TCPKeepAlive yes", "Keep the TCP connection alive at the socket level."],
             [
                 t(
                     "PasswordAuthentication no\nKbdInteractiveAuthentication no\n",
                     "PreferredAuthentications publickey",
                 ),
                 t(
-                    "Явно требовать ключ. Даже если на сервере пароль случайно ",
-                    "включат, этот ноутбук им не воспользуется.",
+                    "Explicitly require a key. Even if password auth is accidentally ",
+                    "re-enabled on the server, this laptop will not use it.",
                 ),
             ],
         ],
     )
 
-    heading(doc, "5.4. Проверка", 2)
+    heading(doc, "5.4. Verification", 2)
     code(doc, f'ssh -T {SSH_HOST}\nssh {SSH_HOST} "hostname && whoami"')
     body(
         doc,
-        "Первая команда должна подключиться без запроса пароля. Вторая вернёт имя сервера и root.",
+        "The first command should connect without asking for a password. The second "
+        "returns the server hostname and root.",
     )
-    body(doc, "Если просит пароль — почти всегда одна из трёх причин:")
+    body(doc, "If it asks for a password, it is almost always one of three causes:")
     table(
         doc,
-        ["Симптом", "Причина"],
+        ["Symptom", "Cause"],
         [
             [
-                "Просит пароль",
-                "Открытая часть не попала в ~/.ssh/authorized_keys. Проверьте: "
+                "Asks for a password",
+                "The public part did not make it into ~/.ssh/authorized_keys. Check: "
                 f'ssh {SSH_HOST} "grep -c . ~/.ssh/authorized_keys"',
             ],
             [
                 "Permission denied (publickey)",
-                "Права на файлы. Должно быть 700 у ~/.ssh и 600 у authorized_keys.",
+                "File permissions. ~/.ssh must be 700 and authorized_keys 600.",
             ],
             [
-                "Сразу отказ, без запроса",
-                "Ключ не тот. Проверьте, что IdentityFile указывает на "
-                f"~/.ssh/{SSH_KEY} и что этот файл существует.",
+                "Rejected immediately, with no prompt",
+                "Wrong key. Check that IdentityFile points to "
+                f"~/.ssh/{SSH_KEY} and that this file exists.",
             ],
         ],
     )
     warn(
         doc,
-        "Закрытый ключ (~/.ssh/"
+        "The private key (~/.ssh/"
         + SSH_KEY
-        + ") не копируется на сервер и не передаётся никому. На сервер кладётся "
-        "только файл с расширением .pub. Если закрытый ключ попал в третьи руки — "
-        "его строку немедленно удаляют из authorized_keys на сервере и создают "
-        "новый ключ.",
+        + ") is never copied to the server and never handed to anyone. Only the "
+        ".pub file goes to the server. If the private key falls into the wrong "
+        "hands, delete its line from authorized_keys on the server immediately and "
+        "create a new key.",
     )
 
 
 def section_dsh(doc: Document) -> None:
-    heading(doc, "6. Подключение к DeepSeek Harness", 1)
+    heading(doc, "6. Connecting to DeepSeek Harness", 1)
     body(
         doc,
-        f"DeepSeek Harness — веб-интерфейс ИИ-агента. Он работает на {SRV} как "
-        f"системная служба {DSH_UNIT} и слушает только 127.0.0.1:{DSH_PORT}. Из "
-        f"интернета он недоступен — и это правильно, поэтому подключение идёт "
-        f"через SSH-туннель.",
+        f"DeepSeek Harness is the AI agent's web interface. It runs on {SRV} as the "
+        f"system service {DSH_UNIT} and listens only on 127.0.0.1:{DSH_PORT}. It is "
+        f"not reachable from the internet — and rightly so, which is why access goes "
+        f"through an SSH tunnel.",
     )
 
-    heading(doc, "6.1. Что это значит на практике", 2)
+    heading(doc, "6.1. What That Means in Practice", 2)
     table(
         doc,
-        ["Факт", "Следствие"],
+        ["Fact", "Consequence"],
         [
             [
-                f"Слушает 127.0.0.1:{DSH_PORT}",
-                "Напрямую по адресу сервера открыть нельзя — только через туннель.",
+                f"Listens on 127.0.0.1:{DSH_PORT}",
+                "You cannot open it directly at the server address — only through a tunnel.",
             ],
             [
-                f"Служба {DSH_UNIT}, Restart=always",
-                "Перезагрузили сервер — поднялась сама. Запускать вручную не нужно.",
+                f"Service {DSH_UNIT}, Restart=always",
+                "Reboot the server and it comes back by itself. No manual start needed.",
             ],
             [
-                "Требуется токен в адресе",
-                "Просто открыть порт недостаточно: нужен адрес с параметром token.",
+                "Requires a token in the address",
+                "Opening the port is not enough: you need the address with the token parameter.",
             ],
             [
-                "Токен меняется при каждом перезапуске",
-                "Старая ссылка перестаёт работать. Берём актуальную из журнала.",
+                "The token changes on every restart",
+                "An old link stops working. Take the current one from the journal.",
             ],
         ],
     )
 
-    heading(doc, "6.2. Подключение с ноутбука (Windows или Linux)", 2)
-    body(doc, "Шаг 1. Откройте SSH-туннель. В отдельном окне терминала:", bold=True)
+    heading(doc, "6.2. Connecting from the Laptop (Windows or Linux)", 2)
+    body(doc, "Step 1. Open the SSH tunnel. In a separate terminal window:", bold=True)
     code(doc, f"ssh -N -L {DSH_PORT}:127.0.0.1:{DSH_PORT} {SSH_HOST}")
     body(
         doc,
-        "Окно останется занятым — это нормально, туннель работает, пока оно "
-        "открыто. Флаг -N означает «не выполнять команду на сервере, только "
-        "пробросить порт».",
+        "The window stays occupied — that is normal; the tunnel works while it is "
+        "open. The -N flag means 'run no command on the server, only forward the "
+        "port'.",
         italic=True,
     )
-    body(doc, "Шаг 2. Во втором окне терминала возьмите актуальный адрес:", bold=True)
+    body(doc, "Step 2. In a second terminal window, get the current address:", bold=True)
     code(
         doc,
         f"ssh {SSH_HOST} \"journalctl -u {DSH_UNIT} -n 40 --no-pager | grep 'dsh web:' | tail -1\"",
     )
     body(
         doc,
-        f"Команда вернёт строку вида dsh web: http://127.0.0.1:{DSH_PORT}/?token=… "
-        f"— это и есть нужный адрес.",
+        f"The command returns a line like dsh web: http://127.0.0.1:{DSH_PORT}/?token=... "
+        f"— that is the address you need.",
     )
-    body(doc, "Шаг 3. Откройте этот адрес в браузере ноутбука.", bold=True)
+    body(doc, "Step 3. Open that address in your laptop browser.", bold=True)
     body(
         doc,
-        f"Порт {DSH_PORT} на ноутбуке теперь ведёт на сервер, поэтому адрес "
-        f"127.0.0.1:{DSH_PORT} в браузере — это DeepSeek Harness.",
+        f"Port {DSH_PORT} on the laptop now leads to the server, so "
+        f"127.0.0.1:{DSH_PORT} in the browser is DeepSeek Harness.",
     )
     warn(
         doc,
-        "Не пересылайте ссылку с токеном в мессенджерах и не храните её в "
-        "заметках. Токен даёт полный доступ к агенту. Он меняется при перезапуске "
-        f"службы, поэтому после systemctl restart {DSH_UNIT} возьмите новый.",
+        "Do not forward a link containing the token through messengers, and do not "
+        "keep it in notes. The token grants full access to the agent. It changes "
+        "whenever the service restarts, so after systemctl restart "
+        f"{DSH_UNIT} take a fresh one.",
     )
 
-    heading(doc, "6.3. Альтернатива: проброс через VS Code", 2)
+    heading(doc, "6.3. Alternative: Forwarding Through VS Code", 2)
     body(
         doc,
-        "Если VS Code уже подключён к серверу, отдельный туннель не нужен: на "
-        f"вкладке PORTS нажмите «Forward a Port» и укажите {DSH_PORT}. Дальше "
-        f"откройте http://127.0.0.1:{DSH_PORT}/ — токен всё равно потребуется.",
+        "If VS Code is already connected to the server, a separate tunnel is "
+        f"unnecessary: on the PORTS tab click 'Forward a Port' and enter {DSH_PORT}. "
+        f"Then open http://127.0.0.1:{DSH_PORT}/ — you will still need the token.",
     )
 
-    heading(doc, "6.4. Управление службой", 2)
+    heading(doc, "6.4. Managing the Service", 2)
     table(
         doc,
-        ["Задача", "Команда"],
+        ["Task", "Command"],
         [
-            ["Статус", f"systemctl status {DSH_UNIT}"],
-            ["Перезапустить", f"systemctl restart {DSH_UNIT}"],
-            ["Остановить", f"systemctl stop {DSH_UNIT}"],
-            ["Логи", f"journalctl -u {DSH_UNIT} -f"],
+            ["Status", f"systemctl status {DSH_UNIT}"],
+            ["Restart", f"systemctl restart {DSH_UNIT}"],
+            ["Stop", f"systemctl stop {DSH_UNIT}"],
+            ["Logs", f"journalctl -u {DSH_UNIT} -f"],
             [
-                "Адрес с токеном",
+                "Address with token",
                 f"journalctl -u {DSH_UNIT} -n 40 | grep 'dsh web:' | tail -1",
             ],
-            ["Версия", "dsh --version"],
+            ["Version", "dsh --version"],
         ],
     )
     body(
         doc,
-        f"Остановка {DSH_UNIT} не влияет на контейнеры AlphaAgent: это разные "
-        f"вещи. Можно остановить агента и продолжить работать с проектом.",
+        f"Stopping {DSH_UNIT} does not affect the AlphaAgent containers: they are "
+        f"separate things. You can stop the agent and keep working on the project.",
         italic=True,
     )
 
 
 def section_devcontainers(doc: Document) -> None:
-    heading(doc, "7. Dev Containers: подробная инструкция", 1)
+    heading(doc, "7. Dev Containers: Detailed Instructions", 1)
     body(
         doc,
-        "Сценарий: несколько разработчиков подключаются каждый со своего "
-        f"ноутбука с Windows к {SERVER} и работают через расширение Dev "
-        f"Containers в VS Code.",
+        "Scenario: several developers each connect from their own Windows laptop "
+        f"to {SERVER} and work through the Dev Containers extension in VS Code.",
     )
 
-    heading(doc, "7.1. Как это устроено", 2)
+    heading(doc, "7.1. How It Works", 2)
     body(
         doc,
-        "Принципиально важно понять одну вещь: расширение Dev Containers "
-        "запускает контейнер там, где работает Docker. Docker работает на "
-        f"{SRV}. Значит, код, база данных и вычисления находятся на сервере, а "
-        f"ноутбук используется только как экран и клавиатура.",
+        "One thing is essential to understand: the Dev Containers extension "
+        "starts the container wherever Docker runs. Docker runs on "
+        f"{SRV}. That means the code, the database and the computation live on the "
+        f"server, while the laptop is used only as a screen and keyboard.",
     )
     table(
         doc,
-        ["Что где живёт", "Где физически"],
+        ["What lives where", "Where physically"],
         [
-            ["Файлы проекта", f"На {SRV}, в /root/projects/AlphaAgent"],
-            ["Контейнеры, база, Redis", f"На {SRV}"],
-            ["Терминал внутри VS Code", "Внутри контейнера на сервере"],
-            ["Окно VS Code", "На вашем ноутбуке"],
-            ["Браузер с панелью управления", "На ноутбуке, через проброс порта"],
+            ["Project files", f"On {SRV}, in /root/projects/AlphaAgent"],
+            ["Containers, database, Redis", f"On {SRV}"],
+            ["Terminal inside VS Code", "Inside the container on the server"],
+            ["VS Code window", "On your laptop"],
+            ["Browser with the control panel", "On the laptop, through a forwarded port"],
         ],
     )
     body(
         doc,
-        "Из этого следует главное: ноутбук не обязан быть мощным, и на нём не "
-        "нужно ничего устанавливать, кроме VS Code и клиента SSH.",
+        "The main consequence: the laptop does not have to be powerful, and nothing "
+        "needs to be installed on it except VS Code and an SSH client.",
     )
 
-    heading(doc, "7.2. Первое подключение с нового ноутбука", 2)
-    numbered(doc, "Установить VS Code и расширения Remote - SSH и Dev Containers.")
-    numbered(doc, "Создать SSH-ключ и положить открытую часть на сервер — раздел 5.")
+    heading(doc, "7.2. First Connection from a New Laptop", 2)
+    numbered(doc, "Install VS Code and the Remote - SSH and Dev Containers extensions.")
+    numbered(doc, "Create an SSH key and put the public part on the server — section 5.")
     numbered(
         doc,
-        f"Подключиться к серверу: Ctrl+Shift+P, затем «Remote-SSH: Connect to "
-        f"Host», затем {SSH_HOST}.",
+        f"Connect to the server: Ctrl+Shift+P, then 'Remote-SSH: Connect to "
+        f"Host', then {SSH_HOST}.",
     )
-    numbered(doc, "Открыть папку: File, затем Open Folder, затем /root/projects/AlphaAgent.")
+    numbered(doc, "Open the folder: File, then Open Folder, then /root/projects/AlphaAgent.")
     numbered(
         doc,
-        "VS Code предложит «Reopen in Container» — согласиться. Либо "
-        "Ctrl+Shift+P, затем «Dev Containers: Reopen in Container».",
+        "VS Code will offer 'Reopen in Container' — accept. Or "
+        "Ctrl+Shift+P, then 'Dev Containers: Reopen in Container'.",
     )
-    numbered(doc, "Дождаться сборки. В первый раз это несколько минут.")
+    numbered(doc, "Wait for the build. The first time it takes a few minutes.")
     numbered(
         doc,
-        "Один раз выполнить «AlphaAgent: Migrate + seed demo data», затем "
-        "«AlphaAgent: Run server (in this container)».",
+        "Run 'AlphaAgent: Migrate + seed demo data' once, then "
+        "'AlphaAgent: Run server (in this container)'.",
     )
-    numbered(doc, "Открыть вкладку PORTS, найти порт 8000, нажать значок глобуса.")
+    numbered(doc, "Open the PORTS tab, find port 8000, click the globe icon.")
     body(
         doc,
-        "После этого в браузере ноутбука работает http://127.0.0.1:8000/.",
+        "After that, http://127.0.0.1:8000/ works in the laptop browser.",
         bold=True,
     )
 
-    heading(doc, "7.3. Что происходит при открытии контейнера", 2)
+    heading(doc, "7.3. What Happens When the Container Opens", 2)
     bullet(
         doc,
-        "VS Code собирает тот же docker-compose.yml, что и обычный запуск, плюс "
-        "тонкую надстройку из .devcontainer. Это не отдельное окружение — "
-        "расхождений «в контейнере работает, в бою нет» быть не может;",
+        "VS Code builds the same docker-compose.yml as a normal start, plus a "
+        "thin overlay from .devcontainer. It is not a separate environment, so "
+        "there can be no 'works in the container, fails in production' divergence;",
     )
     bullet(
         doc,
-        "контейнер web запускается с командой sleep infinity, чтобы VS Code было "
-        "к чему подключиться. Поэтому сервер надо запускать вручную (раздел 4);",
+        "the web container starts with the sleep infinity command so VS Code has "
+        "something to attach to. That is why the dev server must be started by hand "
+        "(section 4);",
     )
     bullet(
         doc,
-        "папка проекта монтируется внутрь контейнера, поэтому правки в редакторе "
-        "сразу видны в контейнере;",
+        "the project folder is mounted into the container, so edits in the editor "
+        "are visible in the container immediately;",
     )
     bullet(
         doc,
-        "закрытие окна VS Code останавливает контейнеры (настройка "
-        "shutdownAction: stopCompose). Это защита от ситуации, когда вы ушли, а "
-        "стек держит порты.",
+        "closing the VS Code window stops the containers (the "
+        "shutdownAction: stopCompose setting). This guards against walking away "
+        "while the stack keeps holding ports.",
     )
 
-    heading(doc, "7.4. Два разработчика на одном сервере", 2)
+    heading(doc, "7.4. Two Developers on One Server", 2)
     body(
         doc,
-        "Здесь есть развилка, и её надо выбрать осознанно. Оба варианта рабочие, "
-        "но ведут себя по-разному.",
+        "There is a fork in the road here, and it should be chosen deliberately. "
+        "Both options work, but they behave differently.",
     )
-    body(doc, "Вариант A. Один общий набор контейнеров.", bold=True)
+    body(doc, "Option A. One shared set of containers.", bold=True)
     body(
         doc,
-        "Оба подключаются к одному и тому же контейнеру web. Просто, настраивать "
-        "ничего не нужно. Подходит, когда вы работаете в разное время или вместе "
-        "разбираете одну задачу.",
+        "Both connect to the same web container. Simple, nothing to configure. "
+        "This works when you work at different times or debug one task together.",
     )
-    body(doc, "Минусы, которые надо знать заранее:")
+    body(doc, "The downsides you need to know in advance:")
     bullet(
         doc,
-        "база данных одна на двоих: миграции и демо-данные видят оба, и "
-        "«у меня всё сломалось» может означать «партнёр только что удалил таблицу»;",
-    )
-    bullet(
-        doc,
-        "сервер runserver один: если его запустили вы, второй разработчик "
-        "получит Address already in use. Запускает кто-то один;",
+        "one database for two: both see migrations and demo data, and "
+        "'it broke on my side' can mean 'my partner just dropped a table';",
     )
     bullet(
         doc,
-        "файлы общие: правки видны сразу, конфликты возможны прямо в рабочей папке.",
+        "one runserver: if you started it, the second developer gets "
+        "Address already in use. Exactly one person starts it;",
     )
-    body(doc, "Вариант B. У каждого свой набор контейнеров.", bold=True)
+    bullet(
+        doc,
+        "shared files: edits are visible immediately, and conflicts can happen "
+        "right in the working folder.",
+    )
+    body(doc, "Option B. Each developer has their own set of containers.", bold=True)
     body(
         doc,
-        "Полная изоляция: свои контейнеры, своя база, свои порты. Так можно "
-        "работать одновременно, не мешая друг другу. Требует несколько переменных "
-        f"в файле .env на {SRV}.",
+        "Full isolation: your own containers, your own database, your own ports. "
+        "That lets you work at the same time without getting in each other's way. "
+        f"It requires a few variables in the .env file on {SRV}.",
     )
     warn(
         doc,
-        "У каждого разработчика должен быть свой .env, потому что переменные ниже "
-        "разные. Общий .env означает общие порты и общий конфликт.",
+        "Each developer must have their own .env, because the variables below "
+        "differ. A shared .env means shared ports and shared conflicts.",
     )
-    body(doc, "Первый разработчик — значения по умолчанию, менять ничего не нужно.")
-    body(doc, f"Второй разработчик добавляет в свой .env на {SRV}:")
+    body(doc, "The first developer uses the defaults; nothing needs changing.")
+    body(doc, f"The second developer adds the following to their .env on {SRV}:")
     code(
         doc,
         """COMPOSE_PROJECT_NAME=alphaagent-dev2
@@ -804,423 +804,429 @@ ALPHA_REDIS_PORT=6380""",
     )
     table(
         doc,
-        ["Переменная", "Что изолирует"],
+        ["Variable", "What it isolates"],
         [
-            ["COMPOSE_PROJECT_NAME", "Отдельный набор контейнеров и отдельная сеть."],
-            ["ALPHA_CONTAINER_PREFIX", "Имена контейнеров: alpha2_web вместо alpha_web."],
-            ["ALPHA_WEB_PORT", "Порт панели управления на сервере."],
-            ["ALPHA_DB_PORT", "Порт PostgreSQL на сервере."],
-            ["ALPHA_REDIS_PORT", "Порт Redis на сервере."],
+            ["COMPOSE_PROJECT_NAME", "A separate set of containers and a separate network."],
+            ["ALPHA_CONTAINER_PREFIX", "Container names: alpha2_web instead of alpha_web."],
+            ["ALPHA_WEB_PORT", "Control panel port on the server."],
+            ["ALPHA_DB_PORT", "PostgreSQL port on the server."],
+            ["ALPHA_REDIS_PORT", "Redis port on the server."],
         ],
     )
     body(
         doc,
-        "После этого второй разработчик работает так же, но его приложение "
-        "открывается на http://127.0.0.1:8081/, а база доступна на порту 5433.",
+        "After that the second developer works the same way, but their application "
+        "opens at http://127.0.0.1:8081/, and the database is available on port 5433.",
     )
     warn(
         doc,
-        "Все эти порты остаются привязанными к 127.0.0.1. Менять привязку на "
-        "0.0.0.0 нельзя ни при каком числе разработчиков — см. раздел 11.",
+        "All these ports stay bound to 127.0.0.1. Never change the binding to "
+        "0.0.0.0, regardless of how many developers there are — see section 11.",
     )
 
-    heading(doc, "7.5. Частые ошибки", 2)
+    heading(doc, "7.5. Common Failures", 2)
     table(
         doc,
-        ["Симптом", "Причина и что делать"],
+        ["Symptom", "Cause and what to do"],
         [
             [
-                "Сайт недоступен на порту 8080",
-                "Не тот порт. В Dev Containers приложение на 8000 (раздел 3).",
+                "Site unreachable on port 8080",
+                "Wrong port. In Dev Containers the application is on 8000 (section 3).",
             ],
             [
-                "Сайт недоступен на порту 8000",
-                "Сервер не запущен. Контейнер стартует со sleep infinity (раздел 4).",
+                "Site unreachable on port 8000",
+                "The server is not running. The container starts with sleep infinity (section 4).",
             ],
             [
-                "В логе Starting development server, а браузер не открывает",
-                "Запущено на 127.0.0.1 вместо 0.0.0.0 (раздел 4).",
+                "Log says Starting development server but the browser does not open",
+                "Started on 127.0.0.1 instead of 0.0.0.0 (section 4).",
             ],
             [
                 "Address already in use",
-                "Сервер уже запущен — ваш второй раз или коллегой. См. 7.4.",
+                "The server is already running — your second instance or a colleague's. See 7.4.",
             ],
             [
                 "container name already in use",
                 t(
-                    "Два набора контейнеров с одинаковым префиксом. Задайте ",
-                    "ALPHA_CONTAINER_PREFIX и COMPOSE_PROJECT_NAME (7.4).",
+                    "Two sets of containers share the same prefix. Set ",
+                    "ALPHA_CONTAINER_PREFIX and COMPOSE_PROJECT_NAME (7.4).",
                 ),
             ],
             [
-                "Правки не видны в контейнере",
+                "Edits not visible in the container",
                 t(
-                    "Сломалось монтирование. Проверьте, что в ",
-                    ".devcontainer/docker-compose.extend.yml монтируется точка, а не две точки.",
+                    "The mount is broken. Check that ",
+                    ".devcontainer/docker-compose.extend.yml mounts a single dot, not two dots.",
                 ),
             ],
             [
                 "env file .env not found",
-                f"Нет файла .env на {SRV}. Выполните make env.",
+                f"No .env file on {SRV}. Run make env.",
             ],
         ],
     )
 
 
 def section_sync(doc: Document) -> None:
-    heading(doc, "8. Синхронизация рабочих окружений", 1)
+    heading(doc, "8. Keeping Work Environments in Sync", 1)
     body(
         doc,
-        "Когда над проектом работают несколько человек с разных ноутбуков, "
-        "рассинхронизация окружений — главный источник загадочных ошибок. Правило "
-        "простое: то, что можно хранить в Git, хранится в Git; то, что нельзя, "
-        "синхронизируется отдельно и осознанно.",
+        "When several people work on the project from different laptops, "
+        "out-of-sync environments are the main source of mysterious failures. The "
+        "rule is simple: whatever can live in Git lives in Git; whatever cannot is "
+        "synced separately and deliberately.",
     )
 
-    heading(doc, "8.1. Что общее, а что личное", 2)
+    heading(doc, "8.1. What Is Shared and What Is Personal", 2)
     table(
         doc,
-        ["Что", "Где живёт", "Как синхронизируется"],
+        ["What", "Where it lives", "How it is synced"],
         [
-            ["Код, миграции, тесты", "Git", "git pull и git push"],
+            ["Code, migrations, tests", "Git", "git pull and git push"],
             [
                 ".env",
-                f"Только на {SRV}, в Git не попадает",
-                "Вручную, по защищённому каналу. См. 8.2",
+                f"Only on {SRV}, never in Git",
+                "By hand, over a secure channel. See 8.2",
             ],
             [
                 "docker-compose.yml, .devcontainer",
                 "Git",
-                "git pull — одинаково у всех автоматически",
+                "git pull — identical for everyone automatically",
             ],
             [
-                "Расширения VS Code",
-                ".vscode/extensions.json в Git",
-                "VS Code предложит установить при открытии папки",
+                "VS Code extensions",
+                ".vscode/extensions.json in Git",
+                "VS Code offers to install them when you open the folder",
             ],
             [
-                "Личные настройки VS Code",
-                ".vscode/settings.json — в Git не попадает",
-                "Не синхронизируются, и это нормально",
+                "Personal VS Code settings",
+                ".vscode/settings.json — not in Git",
+                "Not synced, and that is fine",
             ],
             [
-                "База данных и Redis",
-                "Тома Docker на сервере",
-                "Общие для варианта A, свои для варианта B",
+                "Database and Redis",
+                "Docker volumes on the server",
+                "Shared in option A, separate in option B",
             ],
         ],
     )
 
-    heading(doc, "8.2. Синхронизация .env", 2)
+    heading(doc, "8.2. Syncing .env", 2)
     body(
         doc,
-        "Файл .env содержит пароли базы данных, Redis, Django и ключ API. В Git "
-        "он не попадает и не должен. При этом у всех участников значения должны "
-        "совпадать — иначе один видит базу, а другой нет.",
+        "The .env file holds the database, Redis and Django passwords and the API "
+        "key. It does not go into Git and must not. At the same time every "
+        "participant must have the same values, otherwise one of you sees the "
+        "database and the other does not.",
     )
-    body(doc, "Как правильно передать .env новому разработчику:", bold=True)
-    numbered(doc, f"Скопировать файл с {SRV} во временное место.")
-    numbered(doc, "Передать через защищённый канал: scp по SSH или менеджер паролей.")
-    numbered(doc, "После передачи временную копию удалить.")
+    body(doc, "How to hand .env to a new developer properly:", bold=True)
+    numbered(doc, f"Copy the file from {SRV} to a temporary location.")
+    numbered(doc, "Send it over a secure channel: scp over SSH or a password manager.")
+    numbered(doc, "Delete the temporary copy after sending.")
     code(
         doc,
-        f"""# с ноутбука разработчика
+        f"""# from the developer's laptop
 scp {SSH_HOST}:/root/projects/AlphaAgent/.env ./env.backup
-# передать коллеге защищённым каналом (не почтой, не мессенджером)
-# после — удалить временные копии
+# send it to the colleague over a secure channel (not email, not a messenger)
+# afterwards delete the temporary copies
 rm ./env.backup""",
     )
     warn(
         doc,
-        "Никогда не отправляйте .env по электронной почте, в мессенджере или в "
-        "задаче трекера. Это файл с паролями. Если он туда попал — считайте пароли "
-        "скомпрометированными и смените их.",
+        "Never send .env by email, in a messenger or in a tracker ticket. It is a "
+        "file full of passwords. If it went there, consider the passwords "
+        "compromised and change them.",
     )
-    body(doc, "Проверить, что .env не попал в Git (на сервере или на ноутбуке):")
+    body(doc, "To verify that .env is not in Git (on the server or on the laptop):")
     code(
         doc,
-        """git check-ignore -v .env                # должен показать строку из .gitignore
-git log --all --full-history -- .env    # должно быть пусто""",
+        """git check-ignore -v .env                # should print a line from .gitignore
+git log --all --full-history -- .env    # should be empty""",
     )
     body(
         doc,
-        "Если вторая команда что-то вернула, файл когда-то был закоммичен. Смены "
-        "паролей тогда недостаточно: значение осталось в истории. См. раздел 11.5.",
+        "If the second command returns something, the file was committed at some "
+        "point. Changing the passwords is then not enough: the value is still in the "
+        "history. See section 11.5.",
     )
 
-    heading(doc, "8.3. Синхронизация расширений и настроек VS Code", 2)
+    heading(doc, "8.3. Syncing VS Code Extensions and Settings", 2)
     body(
         doc,
-        "Файл .vscode/extensions.json хранится в Git. Когда вы открываете папку, "
-        "VS Code сам предлагает установить перечисленные расширения — это и есть "
-        "синхронизация, делать ничего не нужно.",
+        "The .vscode/extensions.json file lives in Git. When you open the folder, "
+        "VS Code offers to install the listed extensions — that is the sync, and "
+        "nothing needs to be done.",
     )
     body(
         doc,
-        "Файл .vscode/settings.json намеренно не хранится в Git: у каждого свои "
-        "шрифт, тема и размер отступов. На работу проекта это не влияет.",
+        "The .vscode/settings.json file is deliberately not in Git: everyone has "
+        "their own font, theme and indent size. It does not affect how the project "
+        "works.",
         italic=True,
     )
     body(
         doc,
-        "Настройки внутри контейнера задаются в .devcontainer/devcontainer.json и "
-        "применяются у всех одинаково при сборке контейнера.",
+        "Settings inside the container are defined in .devcontainer/devcontainer.json "
+        "and applied identically to everyone when the container is built.",
     )
 
-    heading(doc, "8.4. Гигиена Git при работе вдвоём", 2)
-    bullet(doc, "Перед началом работы: git pull. Перед уходом: git push.")
+    heading(doc, "8.4. Git Hygiene When Working as a Pair", 2)
+    bullet(doc, "Before you start: git pull. Before you leave: git push.")
     bullet(
         doc,
-        "Не работайте вдвоём в одной ветке на одном сервере без нужды. Разные "
-        "ветки — разные задачи, конфликтов меньше.",
+        "Do not work in the same branch on the same server unless you have to. Different "
+        "branches mean different tasks and fewer conflicts.",
     )
     bullet(
         doc,
-        "Никогда не делайте git add -A не глядя. Эта команда затягивает в коммит "
-        "всё, включая .env, если он случайно не в .gitignore. Смотрите git status "
-        "перед коммитом.",
+        "Never run git add -A blindly. That command drags everything into the "
+        "commit, including .env if it is accidentally not in .gitignore. Look at "
+        "git status before committing.",
     )
     bullet(
         doc,
-        "Файлы состояния вроде celerybeat-schedule меняются сами. Они в "
-        ".gitignore, и это правильно: их не надо ни коммитить, ни чинить.",
+        "State files such as celerybeat-schedule change on their own. They are in "
+        ".gitignore, and rightly so: do not commit them and do not try to fix them.",
     )
 
 
 def section_laptops(doc: Document) -> None:
-    heading(doc, "9. Один разработчик, несколько ноутбуков", 1)
+    heading(doc, "9. One Developer, Several Laptops", 1)
     body(
         doc,
-        "Ситуация: вы работаете то с одного ноутбука, то с другого, и оба "
-        f"подключаются к одному и тому же {SERVER}. Хорошая новость: почти ничего "
-        f"не нужно делать по-особому, потому что код и окружение живут на сервере, "
-        f"а не на ноутбуке.",
+        "The situation: you work from one laptop, then from another, and both "
+        f"connect to {SERVER}. The good news: almost nothing needs to be done "
+        f"differently, because the code and the environment live on the server, not "
+        f"on the laptop.",
     )
-    body(doc, "Что нужно на каждом новом ноутбуке:", bold=True)
+    body(doc, "What every new laptop needs:", bold=True)
     table(
         doc,
-        ["Шаг", "Зачем"],
+        ["Step", "Why"],
         [
-            ["VS Code, Remote-SSH, Dev Containers", "Без них нет подключения"],
+            ["VS Code, Remote-SSH, Dev Containers", "No connection without them"],
             [
-                "Свой SSH-ключ для этого ноутбука",
-                "Раздел 5. Не копируйте ключ с другого ноутбука",
+                "Its own SSH key for this laptop",
+                "Section 5. Do not copy a key from another laptop",
             ],
-            ["Строка в ~/.ssh/config", "Раздел 5.3"],
-            ["Ничего больше", "Git, Python и Docker на ноутбуке не нужны"],
+            ["A line in ~/.ssh/config", "Section 5.3"],
+            ["Nothing else", "Git, Python and Docker are not needed on the laptop"],
         ],
     )
     warn(
         doc,
-        "Заведите отдельный ключ на каждый ноутбук, а не один общий. Если ноутбук "
-        "потерян, вы удаляете одну строку из authorized_keys — и доступ теряет "
-        "только он, а не все ваши машины.",
+        "Create a separate key for each laptop rather than one shared key. If a "
+        "laptop is lost, you delete one line from authorized_keys, and only that "
+        "laptop loses access, not all your machines.",
     )
-    body(doc, "Как отозвать доступ с потерянного ноутбука:", bold=True)
+    body(doc, "How to revoke access from a lost laptop:", bold=True)
     code(
         doc,
-        """# на сервере: посмотреть, какие ключи есть
+        """# on the server: list the keys that exist
 cat ~/.ssh/authorized_keys
-# удалить строку потерянного ноутбука (осторожно, не удалите остальные)
+# delete the line of the lost laptop (careful, do not delete the others)
 nano ~/.ssh/authorized_keys""",
     )
     body(
         doc,
-        "Чтобы различать ключи, указывайте комментарий при создании: "
-        'ssh-keygen -C "ноутбук-имя-дата". Он виден в конце строки в authorized_keys.',
+        "To tell keys apart, add a comment when creating them: "
+        'ssh-keygen -C "laptop-name-date". It is visible at the end of the line in '
+        "authorized_keys.",
         italic=True,
     )
-    body(doc, "Что не надо делать:", bold=True)
+    body(doc, "What not to do:", bold=True)
     bullet(
         doc,
-        "копировать папку проекта на ноутбук и работать локально — тогда появятся "
-        "две расходящиеся копии;",
+        "copy the project folder to the laptop and work locally — that creates two "
+        "diverging copies;",
     )
-    bullet(doc, "копировать закрытый SSH-ключ между ноутбуками;")
+    bullet(doc, "copy the private SSH key between laptops;")
     bullet(
         doc,
-        "заводить на ноутбуке свой Docker и свою базу — они не будут знать о данных на сервере.",
+        "set up Docker and a database of your own on the laptop — they will know "
+        "nothing about the data on the server.",
     )
     body(
         doc,
-        "Исключение — если вы сознательно хотите работать офлайн. Тогда см. "
-        "раздел 10: там описано, как получить копию, но это отдельный режим, а не "
-        "обычный.",
+        "The exception is working offline on purpose. See section 10: it explains "
+        "how to get a copy, but that is a separate mode, not the normal one.",
         italic=True,
     )
 
 
 def section_clone(doc: Document) -> None:
-    heading(doc, "10. Клонирование репозитория на ноутбук", 1)
+    heading(doc, "10. Cloning the Repository to a Laptop", 1)
     body(
         doc,
-        "В обычных условиях программировать на ноутбуке не нужно: код и окружение "
-        "живут на сервере. Но копия на ноутбуке бывает полезна — посмотреть код без "
-        "подключения, сделать быструю правку в документации, или просто иметь "
-        "резервную копию.",
+        "Under normal conditions there is no need to program on the laptop: the "
+        "code and the environment live on the server. But a local copy can be "
+        "useful — to read the code without a connection, make a quick documentation "
+        "edit, or simply have a backup.",
     )
     warn(
         doc,
-        "Клонирование даёт вам файлы, по сути, только для чтения. Если вы начнёте "
-        "править их на ноутбуке и коммитить, а параллельно то же самое делать на "
-        "сервере, получите расходящиеся истории и конфликты. Рабочее место — сервер.",
+        "Cloning gives you files that are, in effect, read-only. If you start "
+        "editing them on the laptop and committing while doing the same on the "
+        "server in parallel, you will get diverging histories and conflicts. The "
+        "server is the workplace.",
     )
 
-    heading(doc, "10.1. Клонирование", 2)
+    heading(doc, "10.1. Cloning", 2)
     body(
         doc,
-        "Клонировать нужно из GitHub, а не с сервера. GitHub — источник правды; "
-        "сервер это просто машина, где проект запущен.",
+        "Clone from GitHub, not from the server. GitHub is the source of truth; "
+        "the server is just the machine where the project runs.",
     )
     code(
         doc,
-        """# на ноутбуке
+        """# on the laptop
 git clone https://github.com/SergeyGer/AlphaAgent.git
 cd AlphaAgent""",
     )
     body(
         doc,
-        "Если репозиторий приватный, понадобится доступ к GitHub: либо вход через "
-        "браузер (VS Code и Git Credential Manager это умеют), либо personal "
-        "access token. Токен хранится в менеджере учётных данных, а не в файле "
-        "внутри проекта.",
+        "If the repository is private, you will need GitHub access: either a "
+        "browser login (VS Code and Git Credential Manager can do that) or a "
+        "personal access token. The token belongs in the credential manager, not in "
+        "a file inside the project.",
     )
 
-    heading(doc, "10.2. Чего в репозитории нет", 2)
+    heading(doc, "10.2. What the Repository Does Not Contain", 2)
     body(
         doc,
-        "Часть файлов намеренно не хранится в Git. После клонирования их не "
-        "будет, и это ожидаемо, а не поломка.",
+        "Some files are deliberately not stored in Git. They will be missing after "
+        "cloning, and that is expected, not breakage.",
     )
     table(
         doc,
-        ["Файл", "Почему не в Git", "Откуда взять"],
+        ["File", "Why it is not in Git", "Where to get it"],
         [
             [
                 ".env",
-                "Содержит пароли и ключи API",
-                f"С {SRV}: scp {SSH_HOST}:/root/projects/AlphaAgent/.env .",
+                "Contains passwords and API keys",
+                f"From {SRV}: scp {SSH_HOST}:/root/projects/AlphaAgent/.env .",
             ],
             [
                 "Run_Stop_Project.docx",
-                "Личный справочник, а не часть проекта",
-                "Этот документ. См. 10.3",
+                "A personal reference, not part of the project",
+                "This document. See 10.3",
             ],
             [
                 ".vscode/settings.json",
-                "Личные настройки редактора",
-                "Не нужен, VS Code создаст свой",
+                "Personal editor settings",
+                "Not needed; VS Code creates its own",
             ],
             [
                 "celerybeat-schedule*",
-                "Состояние планировщика, меняется само",
-                "Появится при запуске",
+                "Scheduler state, changes by itself",
+                "Appears on startup",
             ],
             [
                 "node_modules, venv, htmlcov",
-                "Артефакты сборки",
-                "Создаются командами установки",
+                "Build artefacts",
+                "Created by the install commands",
             ],
         ],
     )
 
-    heading(doc, "10.3. Как хранить .env и Run_Stop_Project.docx на ноутбуках", 2)
+    heading(doc, "10.3. How to Keep .env and Run_Stop_Project.docx on Laptops", 2)
     body(
         doc,
-        "Оба файла нужны на каждом ноутбуке, но в Git им нельзя. Практичный "
-        "подход — отдельное место, которое синхронизируется не через Git проекта.",
+        "Both files are needed on every laptop, but neither may go into Git. A "
+        "practical approach is a separate location synced outside the project's Git.",
     )
-    body(doc, "Вариант 1. Приватный Git-репозиторий для личных файлов.", bold=True)
+    body(doc, "Option 1. A private Git repository for personal files.", bold=True)
     code(
         doc,
         """alphaagent-private/
     .env
     Run_Stop_Project.docx
-    README.md          # что это и почему здесь""",
+    README.md          # what this is and why it lives here""",
     )
     body(
         doc,
-        "Отдельный приватный репозиторий, куда кладутся именно эти файлы. Плюс: "
-        "версионирование и доступ с любого ноутбука. Минус: .env теперь лежит в "
-        "Git, пусть и в приватном. Приемлемо только если вы понимаете риск и "
-        "включили двухфакторную аутентификацию на GitHub.",
+        "A separate private repository for exactly these files. Pro: versioning "
+        "and access from any laptop. Con: .env now lives in Git, even if the "
+        "repository is private. Acceptable only if you understand the risk and have "
+        "enabled two-factor authentication on GitHub.",
     )
-    body(doc, "Вариант 2. Менеджер паролей.", bold=True)
+    body(doc, "Option 2. A password manager.", bold=True)
     body(
         doc,
-        "1Password, Bitwarden, KeePass — хранят .env как защищённую заметку, а "
-        "документ как вложение. Плюс: не в Git вообще. Это предпочтительный "
-        "вариант для .env.",
+        "1Password, Bitwarden, KeePass store .env as a secure note and the document "
+        "as an attachment. Pro: not in Git at all. This is the preferred option "
+        "for .env.",
     )
-    body(doc, "Вариант 3. Копия на сервере и scp по требованию.", bold=True)
+    body(doc, "Option 3. A copy on the server and scp on demand.", bold=True)
     body(
         doc,
-        f"Источник правды для .env — {SRV}. На новый ноутбук файл забирается "
-        f"одной командой, когда он действительно нужен:",
+        f"The source of truth for .env is {SRV}. A new laptop fetches the file "
+        f"with one command when it actually needs it:",
     )
     code(doc, f"scp {SSH_HOST}:/root/projects/AlphaAgent/.env ./")
     body(
         doc,
-        "Для Run_Stop_Project.docx этот вариант тоже работает: документ лежит на "
-        "сервере в корне проекта и не попадает в Git, поэтому его можно забрать "
-        "так же.",
+        "This option works for Run_Stop_Project.docx too: the document sits on the "
+        "server in the project root and never enters Git, so it can be fetched the "
+        "same way.",
     )
     warn(
         doc,
-        f"Какой бы вариант вы ни выбрали, у файла .env должна быть резервная "
-        f"копия вне {SRV}. Если сервер потерян, а .env был только на нём, пароли "
-        f"придётся восстанавливать по памяти.",
+        f"Whichever option you choose, .env must have a backup outside {SRV}. If "
+        f"the server is lost and .env existed only there, the passwords will have to "
+        f"be restored from memory.",
     )
 
 
 def section_security(doc: Document) -> None:
-    heading(doc, "11. Безопасность", 1)
+    heading(doc, "11. Security", 1)
     body(
         doc,
-        f"Сервер {SERVER_IP} имеет публичный IP-адрес, то есть его видят сканеры "
-        f"всего интернета круглосуточно. Ниже — что уже сделано и что стоит "
-        f"сделать.",
+        f"The server {SERVER_IP} has a public IP address, so internet-wide scanners "
+        f"see it around the clock. Below is what is already done and what is worth "
+        f"doing.",
     )
 
-    heading(doc, "11.1. Что уже закрыто", 2)
+    heading(doc, "11.1. What Is Already Locked Down", 2)
     table(
         doc,
-        ["Что", "Состояние"],
+        ["What", "State"],
         [
-            ["PostgreSQL 5432", "Только 127.0.0.1 — из интернета недоступен"],
-            ["Redis 6379", "Только 127.0.0.1 и с паролем"],
-            ["Вход по паролю SSH", "Отключён, только ключи"],
-            ["DeepSeek Harness 3080", "Только 127.0.0.1, доступ через туннель"],
+            ["PostgreSQL 5432", "127.0.0.1 only — unreachable from the internet"],
+            ["Redis 6379", "127.0.0.1 only, and password-protected"],
+            ["SSH password login", "Disabled, keys only"],
+            ["DeepSeek Harness 3080", "127.0.0.1 only, access through a tunnel"],
             [
-                "Панель управления 8080",
-                "Доступна с сервера; Django отсекает чужие Host",
+                "Control panel 8080",
+                "Reachable from the server; Django rejects foreign Host headers",
             ],
         ],
     )
     body(
         doc,
-        "Это проверено и закреплено автотестом: если кто-то снова опубликует базу "
-        "в интернет, сборка упадёт.",
+        "This is verified and enforced by an automated test: if someone publishes a "
+        "database to the internet again, the build fails.",
         italic=True,
     )
 
-    heading(doc, "11.2. fail2ban — защита от перебора", 2)
+    heading(doc, "11.2. fail2ban — Brute-Force Protection", 2)
     body(
         doc,
-        "Даже с отключённым паролем SSH кто-то будет стучаться. fail2ban читает "
-        "логи и временно блокирует адреса, с которых идут неудачные попытки.",
+        "Even with SSH password auth disabled, someone will keep knocking. fail2ban "
+        "reads the logs and temporarily blocks the addresses that produce failed "
+        "attempts.",
     )
-    body(doc, f"Установка (на {SRV}, от root):", bold=True)
+    body(doc, f"Install (on {SRV}, as root):", bold=True)
     code(
         doc,
         """apt update && apt install -y fail2ban
 systemctl enable --now fail2ban""",
     )
-    body(doc, "Настройка в файле /etc/fail2ban/jail.local:", bold=True)
+    body(doc, "Configuration in /etc/fail2ban/jail.local:", bold=True)
     code(
         doc,
         """[DEFAULT]
-# Блокировка на 1 час после 5 неудач в течение 10 минут
+# Block for 1 hour after 5 failures within 10 minutes
 bantime  = 1h
 findtime = 10m
 maxretry = 5
@@ -1231,7 +1237,7 @@ port    = ssh
 logpath = %(sshd_log)s
 backend = %(sshd_backend)s""",
     )
-    body(doc, "Применить и проверить:", bold=True)
+    body(doc, "Apply and verify:", bold=True)
     code(
         doc,
         """systemctl restart fail2ban
@@ -1239,230 +1245,231 @@ fail2ban-client status sshd""",
     )
     body(
         doc,
-        "Вывод покажет число заблокированных адресов. Если оно растёт, защита "
-        "работает и отсекает автоматические попытки.",
+        "The output shows the number of banned addresses. If it grows, the "
+        "protection is working and cutting off automated attempts.",
     )
     warn(
         doc,
-        "Не ставьте bantime слишком большим и не блокируйте навсегда: если вы "
-        "ошиблись паролем с нового ноутбука, заблокируете себя. Начинайте с "
-        "bantime 1h и maxretry 5.",
+        "Do not set bantime too high and do not ban forever: if you mistype a "
+        "password from a new laptop, you will lock yourself out. Start with "
+        "bantime 1h and maxretry 5.",
     )
-    body(doc, "Разблокировать свой адрес, если всё-таки попали под блокировку:")
-    code(doc, "fail2ban-client set sshd unbanip ВАШ.IP.АДРЕС")
+    body(doc, "To unban your own address if you do get blocked:")
+    code(doc, "fail2ban-client set sshd unbanip YOUR.IP.ADDRESS")
 
-    heading(doc, "11.3. Межсетевой экран (ufw)", 2)
+    heading(doc, "11.3. Firewall (ufw)", 2)
     body(
         doc,
-        f"Сейчас ufw на {SRV} не активен. Порт 8080 открыт наружу, и это "
-        f"осознанное решение — но лучше ограничить круг того, что вообще видно.",
+        f"ufw is currently not active on {SRV}. Port 8080 is open to the outside, "
+        f"and that is a deliberate decision — but it is better to limit what is "
+        f"visible at all.",
     )
-    body(doc, "Минимальная настройка, которая не отрежет вас от сервера:", bold=True)
+    body(doc, "The minimal setup that will not cut you off from the server:", bold=True)
     code(
         doc,
-        """# СНАЧАЛА разрешить SSH, иначе потеряете доступ
+        """# FIRST allow SSH, otherwise you lose access
 ufw allow 22/tcp
-# Затем включить
+# Then enable
 ufw --force enable
 ufw status verbose""",
     )
     warn(
         doc,
-        "Порядок обязателен: сначала ufw allow 22/tcp, только потом enable. Если "
-        "включить раньше, SSH-соединение оборвётся и войти будет нечем — "
-        "понадобится консоль хостера.",
+        "The order is mandatory: ufw allow 22/tcp first, enable only after that. "
+        "If you enable it earlier, the SSH connection drops and you will have no way "
+        "in — you will need the hosting provider's console.",
     )
     body(
         doc,
-        "Нужен ли 8080 снаружи — решать вам. Если вы работаете только через VS "
-        "Code, он не нужен: проброс порта работает поверх SSH. Тогда 8080 тоже "
-        "можно закрыть:",
+        "Whether you need 8080 on the outside is your call. If you work only "
+        "through VS Code, you do not need it: port forwarding runs over SSH. Then 8080 can "
+        "be closed as well:",
     )
     code(
         doc,
         """ufw deny 8080/tcp
-# и дополнительно привязать панель к localhost:
-# в .env   ALPHA_WEB_PORT=127.0.0.1:8080""",
+# and additionally bind the panel to localhost:
+# in .env   ALPHA_WEB_PORT=127.0.0.1:8080""",
     )
 
-    heading(doc, "11.4. Docker и права", 2)
+    heading(doc, "11.4. Docker and Permissions", 2)
     bullet(
         doc,
-        "Не добавляйте пользователей в группу docker без необходимости: членство "
-        "в ней равноценно root, потому что позволяет смонтировать любой каталог "
-        "хоста в контейнер.",
+        "Do not add users to the docker group unless it is necessary: membership is "
+        "equivalent to root, because it lets you mount any host directory into a "
+        "container.",
     )
     bullet(
         doc,
-        "Базы данных держите на 127.0.0.1. Это уже сделано и проверяется тестом.",
+        "Keep databases on 127.0.0.1. That is already done and covered by a test.",
     )
     bullet(
         doc,
-        "Не публикуйте порт 2375 (Docker API) ни при каких обстоятельствах.",
+        "Never publish port 2375 (the Docker API) under any circumstances.",
     )
     bullet(
         doc,
-        "Обновляйте образы: docker compose pull и пересборка раз в месяц. "
-        "Устаревший образ — самая частая причина взлома.",
+        "Update images: docker compose pull and a rebuild once a month. An outdated "
+        "image is the most common cause of a breach.",
     )
 
-    heading(doc, "11.5. Секреты", 2)
+    heading(doc, "11.5. Secrets", 2)
     table(
         doc,
-        ["Правило", "Почему"],
+        ["Rule", "Why"],
         [
             [
-                ".env не попадает в Git никогда",
-                "В нём пароли базы, Redis, Django и ключ API",
+                ".env never goes into Git",
+                "It holds the database, Redis and Django passwords and the API key",
             ],
             [
-                "Секрет, попавший в историю Git, считается утёкшим",
-                "Он остаётся в старых коммитах даже после удаления файла",
+                "A secret that reached Git history counts as leaked",
+                "It stays in old commits even after the file is deleted",
             ],
             [
-                "Токен DeepSeek Harness — как пароль",
-                "Он даёт полный доступ к агенту",
+                "The DeepSeek Harness token is a password",
+                "It grants full access to the agent",
             ],
             [
-                "Ключ API Anthropic нельзя класть в код",
-                "Только в .env, и только на сервере",
+                "The Anthropic API key must not go into code",
+                "Only into .env, and only on the server",
             ],
             [
-                "Права на .env — 600",
-                "Чтобы прочитать мог только владелец: chmod 600 .env",
+                ".env permissions are 600",
+                "So that only the owner can read it: chmod 600 .env",
             ],
         ],
     )
-    body(doc, "Если секрет всё же попал в Git, порядок действий:")
-    numbered(doc, "Немедленно сменить сам секрет — это главное.")
-    numbered(doc, "Удалить его из истории: git filter-repo или BFG Repo-Cleaner.")
-    numbered(doc, "Проверить, не пользовался ли им кто-то ещё (логи провайдера).")
+    body(doc, "If a secret did reach Git, the order of action is:")
+    numbered(doc, "Change the secret itself immediately — that is the main step.")
+    numbered(doc, "Remove it from history: git filter-repo or BFG Repo-Cleaner.")
+    numbered(doc, "Check whether anyone else has used it (the provider's logs).")
     numbered(
         doc,
-        "Только после этого успокоиться: удаление из истории без смены секрета бесполезно.",
+        "Only then treat the incident as closed: removing it from history without changing the secret is pointless.",
     )
-    body(doc, "Проверка, что сейчас ничего лишнего не отслеживается:")
+    body(doc, "Check that nothing extra is currently tracked:")
     code(
         doc,
-        """git ls-files | grep -E "\\.env$|token|secret|key" || echo "чисто\"""",
+        """git ls-files | grep -E "\\.env$|token|secret|key" || echo "clean\"""",
     )
 
 
 def section_commands(doc: Document) -> None:
-    heading(doc, "12. Полезные команды", 1)
+    heading(doc, "12. Useful Commands", 1)
     table(
         doc,
-        ["Задача", "Команда"],
+        ["Task", "Command"],
         [
-            ["Запустить всё", "make start"],
-            ["Остановить, оставив собранным", "make stop"],
-            ["Остановить и освободить порты", "make down"],
-            ["Посмотреть, что работает", "make status"],
-            ["Логи всех сервисов", "make logs"],
-            ["Консоль Django", "make shell"],
-            ["Тесты", "make test"],
-            ["Линтер", "make lint"],
-            ["Всё сразу: линт, проверки, тесты", "make check"],
-            ["Войти на сервер", f"ssh {SSH_HOST}"],
+            ["Start everything", "make start"],
+            ["Stop, leaving it built", "make stop"],
+            ["Stop and free the ports", "make down"],
+            ["See what is running", "make status"],
+            ["Logs of all services", "make logs"],
+            ["Django console", "make shell"],
+            ["Tests", "make test"],
+            ["Linter", "make lint"],
+            ["Everything at once: lint, checks, tests", "make check"],
+            ["Log in to the server", f"ssh {SSH_HOST}"],
             [
-                "Туннель к DeepSeek Harness",
+                "Tunnel to DeepSeek Harness",
                 f"ssh -N -L {DSH_PORT}:127.0.0.1:{DSH_PORT} {SSH_HOST}",
             ],
             [
-                "Адрес DeepSeek Harness с токеном",
+                "DeepSeek Harness address with token",
                 f"journalctl -u {DSH_UNIT} -n 40 | grep 'dsh web:' | tail -1",
             ],
-            ["Статус DeepSeek Harness", f"systemctl status {DSH_UNIT}"],
-            ["Статус fail2ban", "fail2ban-client status sshd"],
-            ["Статус файрвола", "ufw status verbose"],
+            ["DeepSeek Harness status", f"systemctl status {DSH_UNIT}"],
+            ["fail2ban status", "fail2ban-client status sshd"],
+            ["Firewall status", "ufw status verbose"],
         ],
     )
 
 
 def section_troubleshooting(doc: Document) -> None:
-    heading(doc, "13. Если что-то не работает", 1)
+    heading(doc, "13. When Something Does Not Work", 1)
     table(
         doc,
-        ["Сообщение или симптом", "Что делать"],
+        ["Message or symptom", "What to do"],
         [
             [
                 "port is already allocated",
                 t(
-                    "Порт занят другим проектом. make down здесь или в другом проекте. ",
-                    "Либо сменить порт в .env (ALPHA_WEB_PORT и другие).",
+                    "The port is taken by another project. Run make down here or in the other ",
+                    "project, or change the port in .env (ALPHA_WEB_PORT and the others).",
                 ),
             ],
             [
                 "env file .env not found",
-                f"Нет .env на {SRV}. Выполните make env.",
+                f"No .env on {SRV}. Run make env.",
             ],
             [
                 "Cannot connect to the Docker daemon",
                 t(
-                    "Docker не запущен: systemctl start docker на сервере, либо ",
-                    "запустите Docker Desktop на Windows.",
+                    "Docker is not running: systemctl start docker on the server, or ",
+                    "start Docker Desktop on Windows.",
                 ),
             ],
             [
-                "Страница не открывается сразу после старта",
-                "Подождите 30–40 секунд: база должна стать готовой. make status.",
+                "Page does not open right after start",
+                "Wait 30-40 seconds: the database has to become ready. make status.",
             ],
             [
                 "Permission denied (publickey)",
-                "Права 700/600 на ~/.ssh и authorized_keys, либо ключ не тот (раздел 5.4).",
+                "Permissions 700/600 on ~/.ssh and authorized_keys, or the wrong key (section 5.4).",
             ],
             [
-                "Address already in use внутри контейнера",
-                "Сервер уже запущен — ваш второй раз или коллегой (раздел 7.4).",
+                "Address already in use inside the container",
+                "The server is already running — your second instance or a colleague's (section 7.4).",
             ],
             [
                 "DeepSeek Harness: authentication required",
-                "Ссылка без токена или токен устарел. Возьмите свежий из журнала (раздел 6.2).",
+                "The link has no token, or the token is stale. Get a fresh one from the journal (section 6.2).",
             ],
             [
-                "DeepSeek Harness не открывается совсем",
-                "Туннель не поднят. Проверьте, что окно с ssh -N -L открыто (раздел 6.2).",
+                "DeepSeek Harness does not open at all",
+                "The tunnel is not up. Check that the ssh -N -L window is open (section 6.2).",
             ],
         ],
     )
 
 
 def section_cheatsheet(doc: Document) -> None:
-    heading(doc, "14. Шпаргалка", 1)
-    body(doc, "Если запомнить только это — уже можно работать:", bold=True)
+    heading(doc, "14. Cheat Sheet", 1)
+    body(doc, "If you remember only this, you can already work:", bold=True)
     code(
         doc,
-        """# работа
+        """# work
 ssh Hetzner
 cd ~/projects/AlphaAgent
 make start
 
-# браузер (на сервере)
+# browser (on the server)
 http://127.0.0.1:8080/
 
-# закончили
+# done
 make down""",
     )
-    body(doc, "Через Dev Containers:", bold=True)
+    body(doc, "Through Dev Containers:", bold=True)
     code(
         doc,
         """Ctrl+Shift+P -> Dev Containers: Reopen in Container
 Ctrl+Shift+P -> Tasks: Run Task -> AlphaAgent: Run server (in this container)
-# браузер: http://127.0.0.1:8000/
-# порт в браузере смотрим на вкладке PORTS""",
+# browser: http://127.0.0.1:8000/
+# port in the browser is shown on the PORTS tab""",
     )
     body(doc, "DeepSeek Harness:", bold=True)
     code(
         doc,
-        f"""ssh -N -L {DSH_PORT}:127.0.0.1:{DSH_PORT} Hetzner        # окно 1, оставить открытым
-ssh Hetzner "journalctl -u {DSH_UNIT} -n 40 | grep 'dsh web:' | tail -1"   # окно 2
-# открыть полученный адрес в браузере""",
+        f"""ssh -N -L {DSH_PORT}:127.0.0.1:{DSH_PORT} Hetzner        # window 1, leave it open
+ssh Hetzner "journalctl -u {DSH_UNIT} -n 40 | grep 'dsh web:' | tail -1"   # window 2
+# open the resulting address in the browser""",
     )
     doc.add_paragraph()
     body(
         doc,
-        "Файл создан скриптом scripts/make_run_stop_doc.py. Если команды в "
-        "проекте изменятся — запустите скрипт заново.",
+        "This file was generated by scripts/make_run_stop_doc.py. If the commands "
+        "in the project change, run the script again.",
         italic=True,
     )
 
