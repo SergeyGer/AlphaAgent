@@ -29,7 +29,7 @@ and — after the fact — whether it was right.
 | [**The three product pillars**](#the-three-product-pillars) | Decision attribution, the deterministic guard, the adversarial debate |
 | [**Who this is for**](#who-this-is-for) | Four readers, and what each of them gets |
 | [**Choose your path**](#choose-your-path) | Four tracks with reading times |
-| [**See it running**](#see-it-running) | An 81-second walkthrough, the live demo, and the measured result |
+| [**See it running**](#see-it-running) | A narrated walkthrough, the live demo, and the screenshot tour |
 | [**Run it yourself**](#run-it-yourself) | One command, ~5 minutes to a running stack |
 | [**How it works in one minute**](#how-it-works-in-one-minute) | The request path, end to end |
 | [**Under the hood**](#under-the-hood) | Stack, and links into the full technical wiki |
@@ -180,7 +180,7 @@ from a decision the model never made.
 
 | Step | Read | Time |
 | --- | --- | --- |
-| 1 | [▶ Watch the walkthrough](#see-it-running) — one 81-second video, real dashboard, real numbers | **1.5 min** |
+| 1 | [▶ Watch the walkthrough](https://youtu.be/DfOMb_l19p8) — real dashboard, real debate, real guard | **2 min** |
 | 2 | [Incident log](https://github.com/SergeyGer/AlphaAgent/wiki/Incident-Log) — ten real defects, root causes and fixes | **8 min** |
 | 3 | [ADR index](docs/adr/README.md) — sixteen decisions with the alternatives that were rejected | **6 min** |
 | 4 | [Quality signals](#quality-signals) — what each gate actually proves | **2 min** |
@@ -190,11 +190,11 @@ from a decision the model never made.
 ---
 ## See it running
 
-[![AlphaAgent walkthrough](docs/demo-walkthrough-poster.png)](docs/demo-walkthrough.mp4)
+[![AlphaAgent walkthrough](docs/demo-walkthrough-poster.png)](https://youtu.be/DfOMb_l19p8)
 
-**▶ [Watch the walkthrough](docs/demo-walkthrough.mp4)** — one 81-second video, narrated and
-recorded from the running system. The dashboard, the AI debate, the risk guard, and the
-scorecard it publishes.
+**▶ [Watch the walkthrough](https://youtu.be/DfOMb_l19p8)** — narrated, and recorded from the
+running system. The dashboard, the AI debate, the risk guard, and the scorecard it
+publishes.
 
 ### ▶ [Try the live demo](https://alphaagent-6stcj667tqeawiupedhygh.streamlit.app/) — the real UI in a browser, no installation and no API keys
 
