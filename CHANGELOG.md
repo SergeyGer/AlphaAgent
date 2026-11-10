@@ -7,7 +7,35 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **Phase 1 of the technical specification: explain one decision.** A reviewer can
+  now open a decision and read the decisive evidence, the strongest objection, the
+  reason for the verdict, the guard intervention and the measured outcome without
+  reading a raw log — offline, with no keys.
+
+  Backend: nine additive tables (`DecisionRun`, `RunEvent`, `InputSnapshot`,
+  `DecisionRecord`, `GuardRecord`, `EvidenceItem`, `Claim`, `Rebuttal`,
+  `OutcomeRecord`), the `services/decision_runs.py` and `services/evidence.py`
+  domain layer, and five read endpoints under `/api/decision-runs/` — list,
+  metadata, detail, paginated events with `after_seq` recovery, and a redacted
+  export.
+
+  Frontend: `DecisionDetail`, `EvidenceDrawer`, `DebateTimeline`,
+  `GuardComparison`, `ReplayControls` and a `#/runs` route.
+
+  Three fixtures load through `manage.py load_decision_fixtures`: a guard clamp, a
+  disagreement with rebuttals, and an uncertainty case that reports `unavailable`
+  rather than inventing a price.
+
+  **What is deliberately absent.** The current pipeline has no rebuttal stage, so a
+  run that did not produce rebuttals renders no rebuttal section at all, and all
+  three fixtures are labelled `mode="synthetic"` with `source="fixture"` and exposed
+  as such through the API. `portfolio_impact` is `null`, not zero, because portfolio
+  accounting is not reconciled yet.
+
+  Baseline and scope decisions are recorded in `docs/spec/IMPLEMENTATION-NOTE.md`;
+  the five-phase programme is in the Roadmap wiki page.
 
 ## [1.1.4] — 2026-10-28
 

@@ -123,3 +123,39 @@ build:
 - [[Incident-Log]] — the evidence behind the ordering
 - [[Engineering-Decisions]] — the decisions these items would revisit
 - [[Execution-Guard]] — where a deployment ceiling would live
+
+## Implementation programme (Technical Specification v1.0)
+
+The specification at `docs/spec/IMPLEMENTATION-NOTE.md` sets out a five-phase
+programme. It is a programme, not a single change: each phase has an exit gate, and
+later phases depend on earlier ones. Recorded here so the boundary between shipped
+and planned stays explicit.
+
+| Phase | Deliverable | State |
+| --- | --- | --- |
+| **0 / Baseline** | Pin the commit, inventory models, endpoints and events, confirm fallback and transaction behaviour, record divergences | **Done** — baseline `1527cdc`, divergences recorded |
+| **1 / Explain one decision** | Decision detail, guard comparison, legacy labels, recorded fixture playback, accurate README and video edits | **In progress** |
+| **2 / Real rebuttals** | Evidence and claim contracts populated by a live protocol, independent first round, one bounded response round, stage events, repair budgets | Planned |
+| **3 / Measure value** | Versioned signal diagnostics, ledger-based portfolio performance, experiment manifests, V0–V3 reports | Planned |
+| **4 / Allocate capital** | Complete portfolio brief, target weights, deterministic plan sizing, advisory workflow | Planned |
+| **5 / Publish evidence** | Curated recorded cases, revised demonstration, methodology report | Planned |
+
+### Why the phases cannot be collapsed
+
+- **Phase 2 needs real evidence.** Phase 1 establishes the claim, rebuttal and
+  evidence contracts and serves them; a rebuttal section only appears when a run
+  actually produced rebuttals. Fixtures are labelled `synthetic` so a reviewer can
+  tell the difference. Letting the UI imply a debate that never happened would
+  breach the specification's REL-02 invariants.
+- **Phase 3 needs Phase 4's opposite.** Metric definitions must be frozen before any
+  comparative performance claim. Adding portfolio accounting after publishing a
+  comparison would mean re-labelling numbers that people already quoted.
+- **Phase 4 needs Phase 3.** An allocator without reconciled portfolio accounting and
+  execution safeguards is the exact configuration REL-02 calls release-blocking.
+
+### What Phase 1 deliberately does not do
+
+The specification's acceptance for Phase 1 is that a reviewer can identify the
+decisive evidence, the strongest objection, the reason for the verdict, the guard
+intervention and the measured outcome **without reading a raw log, offline, with no
+keys**. It does not require new agents, and this implementation adds none.

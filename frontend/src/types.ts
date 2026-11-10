@@ -399,6 +399,174 @@ export interface RunAgentResponse {
 }
 
 /* ------------------------------------------------------------------ */
+/* Decision runs — Phase 1 explainability contract                     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * How a run was produced. This is a provenance label, not a quality signal:
+ * `heuristic` and `legacy` specifically mean the LLM debate did not happen, and
+ * the detail view has to say so rather than presenting their data as complete.
+ */
+export type RunMode = 'live' | 'recorded' | 'heuristic' | 'legacy' | 'synthetic';
+
+/** Pipeline stage / terminal state of one decision run. */
+export type RunStatus =
+  | 'queued'
+  | 'collecting'
+  | 'analysing'
+  | 'rebutting'
+  | 'adjudicating'
+  | 'validating'
+  | 'awaiting_approval'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+
+/** Header row from `GET /api/decision-runs/`. */
+export interface RunSummary {
+  id: string;
+  ticker: string;
+  status: RunStatus;
+  mode: RunMode;
+  protocol_version: string;
+  started_at: string | null;
+  completed_at: string | null;
+  latency_ms: number | null;
+  error_code: string | null;
+}
+
+export type AgentRole = 'bull' | 'bear';
+export type ClaimType = 'observed_fact' | 'interpretation' | 'forecast';
+export type RebuttalResponseType = 'agree' | 'dispute' | 'qualify' | 'insufficient_evidence';
+
+/** One factual/interpretive/forecast claim made by a debating agent. */
+export interface Claim {
+  claim_id: string;
+  agent_role: AgentRole;
+  stance: string;
+  /** Maximum 280 characters on the wire. */
+  statement: string;
+  claim_type: ClaimType;
+  evidence_ids: string[];
+  horizon: string | null;
+  limitations: string | null;
+}
+
+/** A response aimed at one specific claim (Phase 2 populates these). */
+export interface Rebuttal {
+  rebuttal_id: string;
+  responding_agent: AgentRole;
+  target_claim_id: string;
+  response_type: RebuttalResponseType;
+  explanation: string;
+  evidence_ids: string[];
+  position_change: string | null;
+}
+
+/** A typed numeric observation attached to evidence. */
+export interface EvidenceObservation {
+  value: string;
+  unit: string;
+  currency: string | null;
+}
+
+/** One stored source behind a claim or rebuttal. */
+export interface EvidenceItem {
+  id: string;
+  source_type: string;
+  source_uri: string | null;
+  publisher: string | null;
+  /** `null` means the source did not publish a timestamp — not "at zero". */
+  published_at: string | null;
+  retrieved_at: string;
+  excerpt: string | null;
+  observation: EvidenceObservation | null;
+  content_hash: string;
+}
+
+export type GuardCheckOutcome = 'pass' | 'fail' | 'not_evaluated';
+
+export interface GuardCheck {
+  rule_code: string;
+  outcome: GuardCheckOutcome;
+  threshold: string | null;
+  actual: string | null;
+  unit: string | null;
+}
+
+/** The deterministic risk guard's comparison of a requested vs allowed order. */
+export interface GuardComparison {
+  status: 'approved' | 'clamped' | 'rejected';
+  requested_quantity: string;
+  allowed_quantity: string;
+  binding_rule: string | null;
+  reason_codes: string[];
+  checks: GuardCheck[];
+}
+
+export type OutcomeMaturity = 'pending' | 'matured' | 'evaluated' | 'unavailable';
+
+/** One horizon's measured (or explicitly unmeasured) outcome. */
+export interface OutcomeView {
+  horizon_days: number;
+  maturity: OutcomeMaturity;
+  signal_score: string | null;
+  benchmark: string | null;
+  /** Often null in Phase 1 — that is rendered as "Not available", never zero. */
+  portfolio_impact: string | null;
+  method_version: string;
+}
+
+/**
+ * The full detail payload from `GET /api/decision-runs/{id}/detail/`.
+ *
+ * Named `DecisionDetailPayload` in the frontend because `DecisionDetail` is
+ * already the primary screen component.
+ */
+export interface DecisionDetailPayload {
+  run: RunSummary;
+  /**
+   * The decided action, when a producer supplies it outside the rationale.
+   * Absent from the Phase 1 contract's required fields, so it is optional and
+   * rendered only if present — never inferred from a claim.
+   */
+  action?: string | null;
+  rationale: string | null;
+  decisive_claim_ids: string[];
+  strongest_objection: string | null;
+  claims: Claim[];
+  rebuttals: Rebuttal[];
+  evidence: EvidenceItem[];
+  guard: GuardComparison | null;
+  outcomes: OutcomeView[];
+  /** False for legacy/sequential runs that never had a rebuttal stage. */
+  has_rebuttals: boolean;
+}
+
+/** One persisted pipeline event, ordered by `seq`. */
+export interface RunEvent {
+  event_id: string;
+  seq: number;
+  type: string;
+  stage: string | null;
+  agent_role: string | null;
+  occurred_at: string;
+  payload: Record<string, unknown>;
+}
+
+/** `GET /api/decision-runs/` envelope. */
+export interface RunListResponse {
+  results: RunSummary[];
+}
+
+/** `GET /api/decision-runs/{id}/events/?after_seq=N` envelope. */
+export interface RunEventsResponse {
+  events: RunEvent[];
+  next: string | null;
+  last_sequence: number;
+}
+
+/* ------------------------------------------------------------------ */
 /* WebSocket contract                                                  */
 /* ------------------------------------------------------------------ */
 

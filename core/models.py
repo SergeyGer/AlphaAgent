@@ -683,3 +683,35 @@ class TelegramLink(models.Model):
             link_code_issued_at__gte=now - cls.LINK_CODE_TTL,
             is_active=True,
         )
+
+
+# ---------------------------------------------------------------------------
+# Phase 1: decision runs, evidence, claims, guard records, outcomes
+# ---------------------------------------------------------------------------
+# Imported last and re-exported so Django's app loader registers the models while
+# the Phase 0 schema above stays untouched (DATA-04). See core/decision_models.py
+# for why they live in a separate module.
+from core.decision_models import (  # noqa: E402,F401
+    AgentRole,
+    Claim,
+    ClaimStance,
+    ClaimType,
+    DecisionAction,
+    DecisionRecord,
+    DecisionRun,
+    DecisionStatus,
+    EvidenceItem,
+    EvidenceSourceType,
+    GuardRecord,
+    GuardStatus,
+    InputSnapshot,
+    OutcomeMaturity,
+    OutcomeRecord,
+    Rebuttal,
+    RebuttalResponseType,
+    RunEvent,
+    RunEventType,
+    RunMode,
+    RunSource,
+    RunStage,
+)
