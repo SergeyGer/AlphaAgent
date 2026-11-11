@@ -218,6 +218,21 @@ class Transaction(models.Model):
     tx_type = models.CharField(max_length=4, choices=TxType.choices)
     amount = models.DecimalField(max_digits=18, decimal_places=8)
     price = models.DecimalField(max_digits=12, decimal_places=2)
+    #: Fee charged on this fill, if one was recorded.
+    #:
+    #: NULL and zero are different claims and the distinction is deliberate: a
+    #: zero says a fee was measured and it was nil, while NULL says no fee was
+    #: recorded at all. Existing rows are NULL after the additive migration
+    #: because no fee was ever recorded for them; backfilling a zero would turn
+    #: "unknown" into a measurement nobody made. Phase 3's accounting reports
+    #: ``fees_complete=false`` when any fill in the window is NULL.
+    fee = models.DecimalField(
+        max_digits=12,
+        decimal_places=8,
+        null=True,
+        blank=True,
+        help_text="Fee charged on this fill. NULL means no fee was recorded; 0 means a zero fee was recorded.",
+    )
     executed_by = models.CharField(max_length=10, choices=ExecutedBy.choices)
     timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
 
@@ -232,6 +247,10 @@ class Transaction(models.Model):
         constraints = [
             models.CheckConstraint(condition=Q(amount__gt=0), name="tx_amount_positive"),
             models.CheckConstraint(condition=Q(price__gt=0), name="tx_price_positive"),
+            models.CheckConstraint(
+                condition=Q(fee__isnull=True) | Q(fee__gte=0),
+                name="tx_fee_non_negative",
+            ),
         ]
 
     def __str__(self) -> str:
@@ -714,4 +733,22 @@ from core.decision_models import (  # noqa: E402,F401
     RunMode,
     RunSource,
     RunStage,
+)
+
+# ---------------------------------------------------------------------------
+# Phase 3: measurement tables (external flows, experiments)
+# ---------------------------------------------------------------------------
+# Imported last for the same reason as the Phase 1 models: the Phase 0 schema and
+# its consumer contract stay untouched, and Django registers these tables through
+# this module. See core/measurement_models.py.
+from core.measurement_models import (  # noqa: E402,F401
+    CashFlow,
+    CashFlowType,
+    Experiment,
+    ExperimentEvaluationMode,
+    ExperimentRun,
+    ExperimentRunStatus,
+    ExperimentStatus,
+    ExperimentVariant,
+    PrimaryMetricFamily,
 )

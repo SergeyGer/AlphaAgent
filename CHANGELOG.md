@@ -9,6 +9,49 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **Phase 3 of the technical specification: measurement, kept honest by
+  construction.** The specification's gate is that accounting fixtures and leakage
+  tests pass, and the central requirement is that signal diagnostics and portfolio
+  performance can never be mistaken for one another.
+
+  - **Two metric families, provably separate.** `services/signal_diagnostics.py`
+    produces forward returns, signed action scores and directional hit rates, and its
+    `PerDecisionScoreSeries` **raises `MetricFamilyError`** on `total()`, `sum()`,
+    `+` and `sum([series])`. Per-decision scores cover overlapping windows with
+    unequal position sizes; their sum is not a portfolio return, so no API can
+    produce one. `services/portfolio_accounting.py` computes the other family from
+    cash, holdings, fills, fees and flows.
+  - **Accounting (MET-02).** `E(t) = cash + Σ quantity × price`, flow-boundary time-
+    weighted return with a Modified Dietz fallback, maximum drawdown, turnover with
+    its formula, contribution analysis that reconciles to the equity change, and a
+    separate net-of-LLM equity series with no double counting.
+  - **No lookahead (MET-03).** A `PriceBook` separates *validity* from *knowledge
+    time*; a price earlier than the decision is rejected, and weekend targets roll to
+    the next session or return `unavailable` rather than zero.
+  - **Experiments (EXP-01..05).** A versioned manifest with a checksum, variants
+    V0–V4 (V4 declared and unimplemented, excluded from the equal-opportunity
+    denominator rather than counted as zero), seven freeze checks, seeded time-block
+    bootstrap, and a report that includes failed runs in the denominator.
+
+  **Two additions to existing tables, both driven by gaps found while implementing:**
+  `Transaction.fee` is **nullable** — `null` means *no fee was recorded*, `0` means
+  *recorded as zero* — with no backfill, and external flows live in a separate
+  `CashFlow` table because `services/ledger.py` treats every non-BUY row as a SELL
+  and `tx_type` is `varchar(4)`.
+
+  **73 new tests**, covering BUY→HOLD→SELL, fees recorded/zero/unknown, deposits that
+  must not read as returns, missing benchmarks, weekend maturities, overlapping
+  decisions, price leakage, future data, and failed runs staying in the denominator.
+
+  The example report is built from a synthetic manifest fixture and says so: 
+  `engineering_validation_only: true`, `no_profitability_claim: true`,
+  `profitability_threshold: null`, Sharpe **not** computed, and
+  `strict_historical_claims: false` because the content is synthetic.
+
+## [1.1.6] — 2026-11-11
+
+### Added
+
 - **Phase 2 of the technical specification: a real, bounded debate protocol.** The
   pipeline was a single sequential crew that produced free-text cases; it now runs an
   explicit protocol that records what actually happened.

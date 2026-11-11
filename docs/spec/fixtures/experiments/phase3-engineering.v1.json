@@ -1,0 +1,350 @@
+{
+  "manifest_version": 1,
+  "schema_version": "1.0",
+  "experiment_id": "phase3-engineering.v1",
+  "label": "Phase 3 measurement harness - engineering validation",
+  "description": "A synthetic measurement fixture that exercises the Phase 3 report end to end: separate signal-diagnostics and portfolio-performance families, every EXP-01 variant declared, a scheduled run with no stored output, an unknown fee, an external deposit, an explicit net-of-LLM series, and a pre-registered signal-diagnostics primary metric. It is not a protocol comparison and makes no profitability claim.",
+  "generated_for": "Phase 3 accounting and measurement gate (MET-01..MET-05, EXP-01..EXP-05)",
+  "declared_at": "2026-02-10T00:00:00Z",
+  "observation_window": {
+    "start": "2026-02-03T00:00:00Z",
+    "end": "2026-02-11T00:00:00Z"
+  },
+  "evaluation_mode": "historical",
+  "as_of": "2026-02-12T00:00:00Z",
+  "primary_metric": {
+    "id": "mean_action_score_pct",
+    "family": "signal_diagnostics",
+    "horizon_days": 7,
+    "direction": "higher_is_better",
+    "description": "Mean signed action score at the 7-day horizon (BUY=forward, SELL=-forward, HOLD=0 by convention)."
+  },
+  "sample_requirements": {
+    "minimum_scheduled_runs": 4,
+    "minimum_completed_runs": 3,
+    "minimum_observations": 2,
+    "note": "Below this, the report is engineering validation only; it is not a comparative result."
+  },
+  "cost_ceiling_usd": "1.00",
+  "acceptable_drawdown_pct": "10.00",
+  "uncertainty": {
+    "method": "time_block_bootstrap.v1",
+    "block_size": 2,
+    "resamples": 500,
+    "confidence": "0.95",
+    "seed": 20260210
+  },
+  "benchmark": {
+    "ticker": "SPY",
+    "asset_class": "equity",
+    "selection_rule": "declared_equity_benchmark"
+  },
+  "frozen": {
+    "instruments": [
+      "AAPL",
+      "MSFT",
+      "TSLA"
+    ],
+    "dates": {
+      "start": "2026-02-03T00:00:00Z",
+      "end": "2026-02-11T00:00:00Z"
+    },
+    "trade_opportunities": "One scheduled decision per variant; V0 has no stored deterministic baseline, so its schedule is deliberately not executed.",
+    "starting_portfolio_state": {
+      "cash": "10000.00",
+      "positions": {}
+    },
+    "risk_rules": {
+      "max_trade_allocation_pct": "5.00",
+      "max_portfolio_exposure_pct": "90.00",
+      "max_ticker_concentration_pct": "30.00",
+      "daily_loss_limit_usd": "500.00"
+    },
+    "execution_assumptions": {
+      "guard_policy_version": "guard.v1",
+      "fill_rule": "first_executable_mark_at_or_after_decision.v1",
+      "slippage_bps": "0",
+      "fee_model": "recorded fees only; NULL means unrecorded"
+    },
+    "snapshot_hashes": {
+      "risk-intervention-aapl-2026-02-03": "1f34b80fa9dd90c9be3b81adad320d5c50c1d999b2a08e02f6c25610fb9eb52e",
+      "disagreement-tsla-2026-02-04": "85a1617a86466af62ab8c881eb14f9a234048356c923eb48ac0a5ae0eb25828b",
+      "uncertainty-msft-2026-02-05": "cd42ab0216409643920567cbe12f3326dfe356e67d8acc77bd03e511536da892"
+    }
+  },
+  "variants": [
+    {
+      "key": "V0",
+      "label": "Deterministic baseline",
+      "engine": "deterministic_baseline",
+      "protocol_version": "heuristic_fallback.v1",
+      "implemented": true,
+      "requires_rebuttals": false,
+      "description": "No LLM. The deterministic engine's proposal is the baseline every model variant has to beat.",
+      "budget": {
+        "max_cost_usd": "1.00",
+        "max_input_tokens": 100000,
+        "max_output_tokens": 20000
+      }
+    },
+    {
+      "key": "V1",
+      "label": "One analyst",
+      "engine": "single_agent",
+      "protocol_version": "single_agent_baseline.v1",
+      "implemented": true,
+      "requires_rebuttals": false,
+      "description": "One analyst, validated proposal, no adversarial round.",
+      "model_configuration": {
+        "provider": "synthetic",
+        "model": "synthetic.v1",
+        "parameters": {}
+      },
+      "budget": {
+        "max_cost_usd": "1.00",
+        "max_input_tokens": 100000,
+        "max_output_tokens": 20000
+      }
+    },
+    {
+      "key": "V2",
+      "label": "Current pipeline",
+      "engine": "debate",
+      "protocol_version": "debate.v1",
+      "implemented": true,
+      "requires_rebuttals": false,
+      "description": "The production debate protocol as currently shipped.",
+      "model_configuration": {
+        "provider": "synthetic",
+        "model": "synthetic.v1",
+        "parameters": {}
+      },
+      "budget": {
+        "max_cost_usd": "1.00",
+        "max_input_tokens": 100000,
+        "max_output_tokens": 20000
+      }
+    },
+    {
+      "key": "V3",
+      "label": "Explicit rebuttal",
+      "engine": "debate_with_rebuttal",
+      "protocol_version": "debate.v1",
+      "implemented": true,
+      "requires_rebuttals": true,
+      "description": "Runs whose recorded rebuttal round is present.",
+      "model_configuration": {
+        "provider": "synthetic",
+        "model": "synthetic.v1",
+        "parameters": {}
+      },
+      "budget": {
+        "max_cost_usd": "1.00",
+        "max_input_tokens": 100000,
+        "max_output_tokens": 20000
+      }
+    },
+    {
+      "key": "V4",
+      "label": "Portfolio allocation",
+      "engine": "portfolio_allocation",
+      "protocol_version": "",
+      "implemented": false,
+      "requires_rebuttals": false,
+      "unimplemented_reason": "Portfolio allocation is Phase 4 scope. The variant is declared and not measured in Phase 3.",
+      "description": "Portfolio-level allocation across instruments. Not implemented here.",
+      "budget": {
+        "max_cost_usd": "1.00",
+        "max_input_tokens": 100000,
+        "max_output_tokens": 20000
+      }
+    }
+  ],
+  "runs": [
+    {
+      "run_key": "deterministic-baseline-aapl-2026-02-03",
+      "variant": "V0",
+      "scheduled_at": "2026-02-03T14:30:00Z",
+      "fixture_id": "deterministic-aapl-2026-02-03",
+      "note": "No deterministic baseline run is stored in this checkout, so the schedule is counted as not executed rather than dropped."
+    },
+    {
+      "run_key": "single-analyst-msft-2026-02-05",
+      "variant": "V1",
+      "scheduled_at": "2026-02-05T14:30:00Z",
+      "fixture_id": "uncertainty-msft-2026-02-05"
+    },
+    {
+      "run_key": "current-pipeline-aapl-2026-02-03",
+      "variant": "V2",
+      "scheduled_at": "2026-02-03T14:30:00Z",
+      "fixture_id": "risk-intervention-aapl-2026-02-03"
+    },
+    {
+      "run_key": "explicit-rebuttal-tsla-2026-02-04",
+      "variant": "V3",
+      "scheduled_at": "2026-02-04T14:30:00Z",
+      "fixture_id": "disagreement-tsla-2026-02-04"
+    }
+  ],
+  "accounting": {
+    "source": "manifest_fixture",
+    "opening_state": {
+      "at": "2026-02-03T00:00:00Z",
+      "cash": "10000.00",
+      "positions": {}
+    },
+    "fills": [
+      {
+        "at": "2026-02-03T15:00:00Z",
+        "ticker": "AAPL",
+        "side": "BUY",
+        "quantity": "10",
+        "price": "100.00",
+        "fee": "2.50"
+      },
+      {
+        "at": "2026-02-04T15:00:00Z",
+        "ticker": "MSFT",
+        "side": "BUY",
+        "quantity": "2",
+        "price": "410.00",
+        "fee": null
+      },
+      {
+        "at": "2026-02-06T15:00:00Z",
+        "ticker": "AAPL",
+        "side": "SELL",
+        "quantity": "5",
+        "price": "110.00",
+        "fee": "1.25"
+      }
+    ],
+    "flows": [
+      {
+        "at": "2026-02-05T15:00:00Z",
+        "flow_type": "DEPOSIT",
+        "amount": "2000.00"
+      }
+    ],
+    "marks": [
+      {
+        "ticker": "AAPL",
+        "at": "2026-02-03T00:00:00Z",
+        "price": "100.00",
+        "source": "fixture_mark"
+      },
+      {
+        "ticker": "AAPL",
+        "at": "2026-02-04T15:00:00Z",
+        "price": "95.00",
+        "source": "fixture_mark"
+      },
+      {
+        "ticker": "AAPL",
+        "at": "2026-02-05T15:00:00Z",
+        "price": "108.00",
+        "source": "fixture_mark"
+      },
+      {
+        "ticker": "AAPL",
+        "at": "2026-02-06T15:00:00Z",
+        "price": "110.00",
+        "source": "fixture_mark"
+      },
+      {
+        "ticker": "AAPL",
+        "at": "2026-02-07T15:00:00Z",
+        "price": "112.00",
+        "source": "fixture_mark"
+      },
+      {
+        "ticker": "AAPL",
+        "at": "2026-02-10T00:00:00Z",
+        "price": "115.00",
+        "source": "fixture_mark"
+      },
+      {
+        "ticker": "MSFT",
+        "at": "2026-02-03T00:00:00Z",
+        "price": "410.00",
+        "source": "fixture_mark"
+      },
+      {
+        "ticker": "MSFT",
+        "at": "2026-02-04T15:00:00Z",
+        "price": "412.00",
+        "source": "fixture_mark"
+      },
+      {
+        "ticker": "MSFT",
+        "at": "2026-02-05T15:00:00Z",
+        "price": "405.00",
+        "source": "fixture_mark"
+      },
+      {
+        "ticker": "MSFT",
+        "at": "2026-02-06T15:00:00Z",
+        "price": "420.00",
+        "source": "fixture_mark"
+      },
+      {
+        "ticker": "MSFT",
+        "at": "2026-02-07T15:00:00Z",
+        "price": "418.00",
+        "source": "fixture_mark"
+      },
+      {
+        "ticker": "MSFT",
+        "at": "2026-02-10T00:00:00Z",
+        "price": "425.00",
+        "source": "fixture_mark"
+      },
+      {
+        "ticker": "AAPL",
+        "at": "2026-02-11T00:00:00Z",
+        "price": "115.00",
+        "source": "fixture_mark"
+      },
+      {
+        "ticker": "MSFT",
+        "at": "2026-02-11T00:00:00Z",
+        "price": "425.00",
+        "source": "fixture_mark"
+      }
+    ],
+    "llm_costs": [
+      {
+        "at": "2026-02-04T18:00:00Z",
+        "amount": "0.250000",
+        "source": "declared_measurement_fixture"
+      }
+    ],
+    "llm_costs_complete": true,
+    "counterfactual_rule": {
+      "holding_period_days": 7,
+      "horizons_days": [
+        1,
+        7,
+        30
+      ],
+      "quantity_basis": "requested_quantity",
+      "exit_rule": "first_known_mark_at_or_after_horizon.v1"
+    }
+  },
+  "honesty": {
+    "all_runs_synthetic": true,
+    "accounting_fixture_synthetic": true,
+    "why": "The three stored decision runs are the Phase 1 synthetic fixtures; no live protocol produced them and no model was called to build this report.",
+    "accounting_note": "The ledger is an explicitly synthetic accounting fixture declared in the manifest. It is not the realised history of the demo account and must not be read as such.",
+    "survivorship_bias": "Three large-cap US equities were selected by hand. Delisted, acquired and failed companies are absent, so the sample is survivorship-biased.",
+    "pretraining_contamination": "Unknown and unmeasured: no LLM was called for these stored runs, and no model/pretraining window is recorded.",
+    "comparison_note": "Variant labels exercise the harness. They do not compare protocol quality."
+  },
+  "checksum": {
+    "algorithm": "sha256",
+    "scope": "the entire manifest with its 'checksum' member removed",
+    "canonicalisation": "JSON with sorted keys, separators (',' ':'), UTF-8",
+    "value": "5e984b5a949d18c0f42e32f8c77e6a8dfd19499e2c89ad801aee8592c7bb3284"
+  }
+}
