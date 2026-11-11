@@ -1232,9 +1232,6 @@ def _aggregate_costs(arm_runs: Sequence[ArmRun]) -> dict:
 
 
 def _aggregate_cost_across_arms(arm_costs: Sequence[dict]) -> dict:
-    def tokens(key: str, field: str) -> int:
-        return sum(int(cost.get(key, {}).get(field, 0)) for cost in arm_costs)
-
     billed = [cost["billed_cost_usd"] for cost in arm_costs if cost["billed_cost_usd"] is not None]
     priced = [
         cost["price_table_cost_usd"]
