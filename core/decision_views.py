@@ -132,7 +132,7 @@ class DecisionRunMetadataView(APIView):
         try:
             payload = build_run_metadata(run, events=events)
         except Exception as exc:
-            raise _projection_failed(exc, "metadata") from exc
+            raise _projection_failed(exc, "metadata") from None
         return Response(payload, status=status.HTTP_200_OK)
 
 
@@ -153,7 +153,7 @@ class DecisionRunDetailView(APIView):
         try:
             payload = build_run_detail(run, events=events)
         except Exception as exc:
-            raise _projection_failed(exc, "detail") from exc
+            raise _projection_failed(exc, "detail") from None
         return Response(payload, status=status.HTTP_200_OK)
 
 
