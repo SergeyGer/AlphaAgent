@@ -55,9 +55,11 @@ __all__ = [
     "can_transition",
     "create_run",
     "legal_targets",
+    "link_legacy_log",
     "record_failure",
     "stage_states",
     "transition_status",
+    "update_protocol_metadata",
 ]
 
 TERMINAL_STATUSES = frozenset(
@@ -266,6 +268,7 @@ def create_run(
     input_tokens=None,
     output_tokens=None,
     cached_input_tokens=None,
+    protocol_metadata: dict | None = None,
 ) -> DecisionRun:
     """Create a run in ``queued`` and write its ``run.created`` event.
 
@@ -318,6 +321,7 @@ def create_run(
             legacy_log=legacy_log,
             fixture_id=fixture_id,
             fixture_checksum=fixture_checksum,
+            protocol_metadata=json_safe(protocol_metadata or {}),
         )
         event = _create_event(
             run,
@@ -446,6 +450,46 @@ def record_failure(
         occurred_at=occurred_at,
         payload=payload,
     )
+
+
+def update_protocol_metadata(run: DecisionRun, **values) -> dict:
+    """Merge provenance into ``run.protocol_metadata`` and persist it.
+
+    Written once at the end of a protocol (and again on the failed path), so the
+    run row carries the budgets, usage and raw validated outputs without a
+    second table. ``None`` values are dropped rather than stored, so a missing
+    measurement stays missing instead of becoming a JSON ``null`` that reads
+    like a recorded absence.
+    """
+    merged = dict(run.protocol_metadata or {})
+    merged.update({key: value for key, value in values.items() if value is not None})
+    merged = json_safe(merged)
+    DecisionRun.objects.filter(pk=run.pk).update(
+        protocol_metadata=merged, updated_at=timezone.now()
+    )
+    run.protocol_metadata = merged
+    return merged
+
+
+def link_legacy_log(run: DecisionRun, legacy_log) -> None:
+    """Point a run at the ``AgentDecisionLog`` row it explains (DATA-04).
+
+    The Phase 0 audit row is still written by ``tasks.py`` after the guard runs,
+    so the link is established after the protocol has finished. Only an unlinked
+    row can be attached: the unique constraint means two runs must not both claim
+    to explain one decision, and updating it again would silently repoint the
+    record.
+    """
+    if legacy_log is None:
+        return
+    if run.legacy_log_id is not None and run.legacy_log_id != legacy_log.id:
+        raise DecisionRunError(
+            f"Decision run {run.id} already explains AgentDecisionLog {run.legacy_log_id}."
+        )
+    if legacy_log.portfolio_id != run.portfolio_id:
+        raise DecisionRunError("The legacy decision log belongs to a different portfolio.")
+    DecisionRun.objects.filter(pk=run.pk, legacy_log__isnull=True).update(legacy_log=legacy_log)
+    run.legacy_log_id = legacy_log.id
 
 
 def stage_states(run: DecisionRun, events=None) -> dict:

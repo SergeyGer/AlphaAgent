@@ -58,6 +58,16 @@ ensure_writable_runtime_home()
 from django.conf import settings  # noqa: E402
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator  # noqa: E402
 
+from core.models import Portfolio  # noqa: E402
+from services.debate_protocol import (  # noqa: E402
+    HEURISTIC_PROTOCOL_VERSION,
+    DebateProtocol,
+    ModelUsage,
+    ProtocolBudget,
+    StageFailure,
+    classify_provider_exception,
+    record_heuristic_attempt,
+)
 from services.fundamentals import get_financial_health, get_price_history  # noqa: E402
 from services.llm_hooks import build_llm_interceptor  # noqa: E402
 from services.market_data import get_latest_quote  # noqa: E402
@@ -313,6 +323,14 @@ class AgentRunResult:
     source: str = "crewai"  # crewai | heuristic_fallback
     error: str | None = None
     latency_ms: int = 0
+    #: The ``DecisionRun`` this invocation produced, when the producer recorded
+    #: one. UUID as a string: the result crosses the Celery boundary, and a UUID
+    #: object is not JSON-serialisable there.
+    decision_run_id: str | None = None
+    #: Which protocol produced the result (``debate.v1``,
+    #: ``single_agent_baseline.v1``, ``heuristic_fallback.v1`` or
+    #: ``legacy_sequential``).
+    protocol_version: str = ""
     extra: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -630,6 +648,16 @@ class AlphaAgentOrchestrator:
     def is_configured(self) -> bool:
         """True when an LLM credential is available for the crew."""
         return bool(self.api_key) and self.provider not in {"none", "disabled", ""}
+
+    @property
+    def debate_config(self) -> dict[str, Any]:
+        """Phase 2 protocol budgets and selector (``settings.DEBATE_CONFIG``).
+
+        Read from settings per call rather than cached at construction so a
+        management command test can override it, and so a worker picks up a
+        changed budget without a restart.
+        """
+        return dict(getattr(settings, "DEBATE_CONFIG", {}) or {})
 
     def build_llm(self) -> Any:
         """Instantiate the CrewAI LLM (DeepSeek-R1 or GPT-4o)."""
@@ -1060,6 +1088,281 @@ class AlphaAgentOrchestrator:
             latency_ms=int((time.monotonic() - started) * 1000),
         )
 
+    # -- Phase 2 protocol --------------------------------------------------
+    def run_protocol(
+        self,
+        context: DecisionContext,
+        *,
+        record: bool = True,
+        model_client: Any = None,
+    ) -> AgentRunResult:
+        """Run the bounded, recorded debate protocol (DEB-01 - DEB-05).
+
+        ``record=False`` runs the protocol without writing anything (the
+        dry-run command's contract). An injected ``model_client`` is used as-is
+        and is treated as configured, which is the seam tests and the offline
+        demo substitute; the provider check below only governs a client this
+        method builds itself.
+
+        A protocol failure is typed and already recorded on the failed run. When
+        ``ALLOW_HEURISTIC_FALLBACK`` is on, the deterministic engine answers and
+        its decision is recorded as a **separate** ``mode="heuristic"`` run with
+        no claims and no rebuttals - the failed run keeps its own history and
+        gains a limitation naming the fallback.
+        """
+        started = time.monotonic()
+        protocol_name = str(self.debate_config.get("PROTOCOL") or "debate.v1").strip().lower()
+        if protocol_name not in {"debate.v1", "single_agent.v1", "legacy_sequential"}:
+            logger.warning(
+                "Unknown AI_DEBATE_PROTOCOL %r; falling back to debate.v1", protocol_name
+            )
+            protocol_name = "debate.v1"
+
+        portfolio = None
+        if record and context.portfolio_id:
+            portfolio = (
+                Portfolio.objects.select_related("user").filter(pk=context.portfolio_id).first()
+            )
+            if portfolio is None:
+                logger.warning(
+                    "Portfolio %s no longer exists; the protocol run will not be recorded",
+                    context.portfolio_id,
+                )
+
+        if protocol_name == "legacy_sequential":
+            # The pre-Phase-2 pipeline, kept behind explicit configuration for
+            # compatibility. It records no run: its cases are free text sliced
+            # out of the crew output, so it cannot populate the claim contract
+            # honestly.
+            result = self.run(context)
+            result.extra.update(
+                {
+                    "recorded": False,
+                    "protocol_version": "legacy_sequential",
+                    "mode": None,
+                    "recorded_because": "legacy_sequential records no decision run",
+                }
+            )
+            result.protocol_version = "legacy_sequential"
+            return result
+
+        if model_client is None and not self.is_configured:
+            reason = (
+                "No LLM credential configured (AI_LLM_API_KEY empty) - "
+                "using the deterministic decision engine."
+            )
+            logger.info("AI fallback for %s: %s", context.ticker, reason)
+            return self._heuristic_result(
+                context,
+                portfolio=portfolio,
+                reason=reason,
+                started=started,
+                failed_run=None,
+            )
+
+        client = model_client if model_client is not None else CrewAIStageClient(self)
+        protocol = DebateProtocol(
+            client=client,
+            budget=ProtocolBudget.from_settings(self.debate_config),
+            config=self.debate_config,
+            provider=str(getattr(client, "provider", "") or self.provider),
+            model=str(getattr(client, "model", "") or self.config.get("MODEL", "")),
+            parameters=dict(getattr(client, "parameters", {}) or {}),
+        )
+
+        try:
+            if protocol_name == "single_agent.v1":
+                outcome = protocol.run_single_agent_baseline(
+                    context, portfolio=portfolio, record=record
+                )
+            else:
+                outcome = protocol.run(context, portfolio=portfolio, record=record)
+        except StageFailure as exc:
+            logger.error(
+                "Debate protocol failed for %s at %s: %s",
+                context.ticker,
+                exc.stage,
+                exc.detail,
+            )
+            if not self.config.get("ALLOW_HEURISTIC_FALLBACK", True):
+                raise
+            return self._heuristic_result(
+                context,
+                portfolio=portfolio,
+                reason=f"{exc.code}: {exc.detail}",
+                started=started,
+                failed_run=exc.run,
+            )
+
+        return self._result_from_outcome(outcome, started)
+
+    def _result_from_outcome(self, outcome: Any, started: float) -> AgentRunResult:
+        """Translate a protocol outcome into the existing ``AgentRunResult``."""
+        adjudication = outcome.proposal
+        proposal = TradeProposal(
+            action=adjudication.action,
+            amount=float(adjudication.amount),
+            sentiment=adjudication.sentiment,
+            reasoning=adjudication.reasoning,
+            thesis=adjudication.thesis,
+            invalidation=adjudication.invalidation_condition,
+        )
+        usage = outcome.usage
+        run = outcome.run
+        return AgentRunResult(
+            proposal=proposal,
+            reasoning=adjudication.reasoning,
+            bull_case=_case_text("BULL", outcome.cases.get("bull", [])),
+            bear_case=_case_text("BEAR", outcome.cases.get("bear", [])),
+            tokens_used=usage.input_tokens + usage.output_tokens,
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+            cached_input_tokens=0,
+            cache_write_tokens=0,
+            api_cost_usd=usage.cost_usd,
+            source="crewai",
+            latency_ms=int((time.monotonic() - started) * 1000),
+            decision_run_id=str(run.id) if run is not None else None,
+            protocol_version=run.protocol_version if run is not None else "",
+            extra={
+                "recorded": outcome.recorded,
+                "mode": run.mode if run is not None else None,
+                "limits": outcome.limits,
+                "rebuttals": int((outcome.metadata.get("counts") or {}).get("rebuttals", 0)),
+                "analyst_consensus": outcome.metadata.get("analyst_consensus"),
+                "usage": usage.as_dict(),
+            },
+        )
+
+    def _heuristic_result(
+        self,
+        context: DecisionContext,
+        *,
+        portfolio: Portfolio | None,
+        reason: str,
+        started: float,
+        failed_run: Any,
+    ) -> AgentRunResult:
+        """Deterministic answer, recorded as an attempt of its own when possible."""
+        fallback = HeuristicDecisionEngine()
+        proposal = fallback.decide(context, reason_prefix=f"[{reason}] ")
+        bull, bear = fallback.debate(context)
+
+        run = None
+        if portfolio is not None:
+            snapshot = failed_run.snapshot if failed_run is not None else None
+            try:
+                run = record_heuristic_attempt(
+                    context=context,
+                    portfolio=portfolio,
+                    proposal=proposal,
+                    reasoning=proposal.reasoning,
+                    error=reason,
+                    snapshot=snapshot,
+                    failed_run=failed_run,
+                )
+            except Exception as exc:  # pragma: no cover - must never break a decision
+                logger.exception("Could not record the heuristic fallback run: %s", exc)
+
+        return AgentRunResult(
+            proposal=proposal,
+            reasoning=proposal.reasoning,
+            bull_case=bull,
+            bear_case=bear,
+            source="heuristic_fallback",
+            error=reason,
+            latency_ms=int((time.monotonic() - started) * 1000),
+            decision_run_id=str(run.id) if run is not None else None,
+            protocol_version=HEURISTIC_PROTOCOL_VERSION if run is not None else "",
+            extra={
+                "recorded": run is not None,
+                "mode": run.mode if run is not None else None,
+                "fallback_of": str(failed_run.id) if failed_run is not None else None,
+                "debate_executed": False,
+            },
+        )
+
+
+# ---------------------------------------------------------------------------
+# Real provider wiring for the protocol's model seam
+# ---------------------------------------------------------------------------
+class CrewAIStageClient:
+    """One-shot model calls through CrewAI's ``LLM`` (the protocol's seam).
+
+    The protocol does not import CrewAI: it asks for ``complete(stage, prompt)``
+    and this class supplies it. Usage is read as the delta of CrewAI's cumulative
+    counters, and cost is priced with the project's table, so the monetary budget
+    is enforced against measured usage rather than a guess.
+    """
+
+    def __init__(self, orchestrator: AlphaAgentOrchestrator) -> None:
+        self.provider = orchestrator.provider
+        self.model = str(orchestrator.config.get("MODEL") or "deepseek-reasoner")
+        self.parameters = {
+            "temperature": orchestrator.config.get("TEMPERATURE", 0.2),
+            "max_output_tokens": int(orchestrator.config.get("MAX_TOKENS", 8192)),
+            "request_timeout_seconds": orchestrator.config.get("REQUEST_TIMEOUT", 90),
+        }
+        #: Populated after each call; the protocol reads it to account usage.
+        self.last_usage: ModelUsage | None = None
+        self._llm = orchestrator.build_llm()
+        self._totals = self._read_totals()
+
+    def _read_totals(self) -> tuple[int, int]:
+        try:
+            summary = self._llm.get_token_usage_summary()
+        except Exception as exc:  # pragma: no cover - provider-specific accounting
+            logger.debug("Token usage summary unavailable: %s", exc)
+            return 0, 0
+        return (
+            _read_number(summary, "prompt_tokens", "input_tokens", "prompt_token_count"),
+            _read_number(summary, "completion_tokens", "output_tokens"),
+        )
+
+    def complete(self, stage: str, prompt: str) -> str:
+        try:
+            reply = self._llm.call(prompt)
+        except Exception as exc:
+            raise classify_provider_exception(exc, stage=stage) from exc
+
+        previous_in, previous_out = self._totals
+        self._totals = self._read_totals()
+        input_tokens = max(0, self._totals[0] - previous_in)
+        output_tokens = max(0, self._totals[1] - previous_out)
+        self.last_usage = ModelUsage(
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cost_usd=estimate_cost(
+                TokenUsage(
+                    total=input_tokens + output_tokens,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                ),
+                self.model,
+            ),
+            reported=True,
+        )
+        return reply if isinstance(reply, str) else str(reply)
+
+
+def _case_text(heading: str, claims: list[dict[str, Any]]) -> str:
+    """Render recorded claims for the legacy ``AgentDecisionLog`` text columns.
+
+    The Phase 0 consumer expects ``bull_case`` / ``bear_case`` as text. This is
+    generated from the claims that were actually persisted, so the audit row and
+    the decision detail cannot disagree about what was argued.
+    """
+    if not claims:
+        return f"{heading} CASE - no material claim was recorded."
+    lines = [f"{heading} CASE"]
+    for claim in claims:
+        evidence = ", ".join(claim.get("evidence_ids") or []) or "none"
+        lines.append(
+            f"- [{claim.get('claim_type', 'claim')}] {claim.get('statement', '')} "
+            f"(evidence: {evidence})"
+        )
+    return "\n".join(lines)
+
 
 # ---------------------------------------------------------------------------
 # CrewAI guardrail
@@ -1260,10 +1563,26 @@ def estimate_cost(usage: TokenUsage | int, model: str) -> Decimal:
 # ---------------------------------------------------------------------------
 # Public entrypoint used by tasks.py
 # ---------------------------------------------------------------------------
-def run_alpha_agent(context: DecisionContext) -> AgentRunResult:
-    """Execute the bull -> bear -> CIO debate for one portfolio/ticker pair."""
+def run_alpha_agent(
+    context: DecisionContext,
+    *,
+    record: bool = True,
+    model_client: Any = None,
+) -> AgentRunResult:
+    """Produce one decision for a portfolio/ticker pair.
+
+    Since Phase 2 the default producer is the bounded, recorded debate protocol
+    in :mod:`services.debate_protocol`; the pre-Phase-2 sequential crew is still
+    available behind ``AI_DEBATE_PROTOCOL=legacy_sequential``. ``record=False``
+    keeps the dry-run command read-only, and ``model_client`` is the injectable
+    seam used by the offline demo and the protocol tests.
+    """
     orchestrator = AlphaAgentOrchestrator()
     if context.news_report is None:
         limit = int(getattr(settings, "AI_CONFIG", {}).get("NEWS_ARTICLE_LIMIT", 10))
         context.news_report = build_news_report(context.ticker, limit=limit)
-    return orchestrator.run(context)
+    return orchestrator.run_protocol(
+        context,
+        record=record,
+        model_client=model_client,
+    )

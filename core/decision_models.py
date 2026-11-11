@@ -323,6 +323,12 @@ class DecisionRun(models.Model):
     config_hash = models.CharField(max_length=64, null=True, blank=True)
     prompt_hash = models.CharField(max_length=64, null=True, blank=True)
 
+    #: Phase 2 provenance: provider, model id, parameters, prompt-template
+    #: version, tool versions, budget limits actually applied, per-stage usage
+    #: and the raw validated stage outputs (DEB-05). Empty for a Phase 1 fixture
+    #: or a legacy run, which recorded no protocol of this kind.
+    protocol_metadata = models.JSONField(default=dict, blank=True)
+
     started_at = models.DateTimeField(default=timezone.now, db_index=True)
     completed_at = models.DateTimeField(null=True, blank=True)
     #: Wall-clock duration, stored rather than derived so it survives a clock
