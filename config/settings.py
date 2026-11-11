@@ -303,6 +303,13 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": crontab(hour=21, minute=5, day_of_week="1-5"),
         "options": {"expires": 3600},
     },
+    # Deliver queued notifications. This is the reconnect-independent catch-up
+    # path: sockets are hints, the outbox row is the durable record.
+    "flush-event-outbox": {
+        "task": "tasks.flush_event_outbox_task",
+        "schedule": crontab(minute="*"),
+        "options": {"expires": 60},
+    },
     # Expire recommendations nobody acted on.
     "expire-stale-recommendations": {
         "task": "tasks.expire_stale_recommendations_task",

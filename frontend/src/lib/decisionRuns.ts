@@ -536,9 +536,67 @@ export function lastEventSequence(events: readonly RunEvent[]): number | null {
   return sequences.length === 0 ? null : (sequences[sequences.length - 1] ?? null);
 }
 
+/**
+ * The last sequence in an unbroken run starting at 1.
+ *
+ * A gap must not be mistaken for the tail. If events 1, 2 and 5 are held, the
+ * highest sequence is 5 but the next event we can safely request is 3; asking
+ * for `after_seq=5` would leave 3 and 4 missing forever. The recovery cursor is
+ * therefore the last *contiguous* sequence, and 0 when even 1 is missing.
+ */
+export function lastContiguousSequence(events: readonly RunEvent[]): number {
+  const sequences = eventSequences(events);
+  let expected = 1;
+  for (const seq of sequences) {
+    if (seq < expected) continue;
+    if (seq > expected) break;
+    expected += 1;
+  }
+  return expected - 1;
+}
+
+/** Count of sequences at or below `upTo` that are not held locally. */
+export function missingSequenceCount(events: readonly RunEvent[], upTo: number | null): number {
+  if (upTo === null || upTo < 1) return 0;
+  const held = new Set(eventSequences(events));
+  let missing = 0;
+  for (let seq = 1; seq <= upTo; seq += 1) {
+    if (!held.has(seq)) missing += 1;
+  }
+  return missing;
+}
+
 export function isAtReplayEnd(events: readonly RunEvent[], cursorSeq: number | null): boolean {
   const last = lastEventSequence(events);
   return last === null || cursorSeq === last;
+}
+
+/**
+ * Events whose persistence changes the detail payload (a stage transition, a
+ * claim/rebuttal, the decision, the guard or an outcome). Token-level noise is
+ * excluded so an active run's detail is not refetched on every delta.
+ */
+const DETAIL_REFRESH_PATTERN =
+  /^(?:status\.changed|stage\.(?:started|completed|failed)|claim\.created|rebuttal\.created|decision\.proposed|guard\.evaluated|outcome\.recorded|run\.(?:created|completed)|limitation\.recorded)$/i;
+
+export function isDetailRefreshEvent(event: RunEvent | null | undefined): boolean {
+  if (!event || typeof event.type !== 'string') return false;
+  const type = event.type.trim();
+  if (!DETAIL_REFRESH_PATTERN.test(type)) return false;
+  // A stage.started for adjudication is itself a persisted stage event; all of
+  // the above are. The pattern is the allow-list, not a heuristic.
+  return true;
+}
+
+/** New persisted detail-changing events after `afterSeq`, ordered by sequence. */
+export function eventsRequiringDetailRefresh(
+  events: readonly RunEvent[],
+  afterSeq: number,
+): RunEvent[] {
+  return events
+    .filter((event) => typeof event?.seq === 'number' && event.seq > afterSeq)
+    .filter(isDetailRefreshEvent)
+    .sort((left, right) => left.seq - right.seq);
 }
 
 /**
@@ -669,4 +727,411 @@ export function presentText(value: string | null | undefined): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
   return trimmed === '' ? null : trimmed;
+}
+
+/* ------------------------------------------------------------------ */
+/* Run links (legacy audit rows → structured explanation)              */
+/* ------------------------------------------------------------------ */
+
+interface RunLinkCarrier {
+  run_id?: unknown;
+  decision_run_id?: unknown;
+  run?: { id?: unknown } | null;
+}
+
+function idText(value: unknown): string | null {
+  if (typeof value === 'string') return presentText(value);
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  return null;
+}
+
+/**
+ * The associated run id from whichever shape the API publishes.
+ *
+ * Phase 0 rows (`AgentDecisionLog`, executed transactions, scored outcomes) have
+ * no run at all. A syntactically present but blank field is "no mapping", never
+ * a link to `/runs/`.
+ */
+export function runLinkId(source: RunLinkCarrier | null | undefined): string | null {
+  if (!source || typeof source !== 'object') return null;
+  return (
+    idText(source.run_id) ??
+    idText(source.decision_run_id) ??
+    idText(source.run?.id) ??
+    null
+  );
+}
+
+/** Hash route for one run, or `null` when there is no mapping. */
+export function decisionRunHref(runId: string | number | null | undefined): string | null {
+  const id = idText(runId);
+  return id === null ? null : `#/runs/${encodeURIComponent(id)}`;
+}
+
+/* ------------------------------------------------------------------ */
+/* Replay timing                                                       */
+/* ------------------------------------------------------------------ */
+
+export type ReplayTimingMode = 'compressed' | 'recorded';
+
+export const REPLAY_TIMING_MODES: readonly ReplayTimingMode[] = ['compressed', 'recorded'];
+
+/** Fixed delay used by compressed playback at 1×. */
+export const COMPRESSED_STEP_MS = 800;
+
+/** Floor shared by both modes so a step is never instantaneous to the eye. */
+export const MIN_STEP_MS = 120;
+
+export function isReplayTimingMode(value: unknown): value is ReplayTimingMode {
+  return value === 'compressed' || value === 'recorded';
+}
+
+function eventTimeMs(event: RunEvent | null | undefined): number | null {
+  if (!event) return null;
+  const parsed = Date.parse(event.occurred_at);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+/**
+ * Delay before the next event is revealed.
+ *
+ * `compressed` is a fixed 800 ms divided by speed — fast enough to review a
+ * 300-event run, and explicitly *not* the recorded pace. `recorded` uses the
+ * stored `occurred_at` delta between the cursor and the next sequence, divided
+ * by speed, so a five-second gap plays as five seconds at 1×. When timestamps
+ * are missing or non-monotonic it falls back to the compressed delay rather
+ * than inventing a pace; both paths apply the accessibility floor.
+ */
+export function playbackDelayMs(
+  events: readonly RunEvent[],
+  cursorSeq: number | null,
+  speed: number,
+  mode: ReplayTimingMode,
+): number {
+  const divisor = Number.isFinite(speed) && speed > 0 ? speed : 1;
+  const compressed = Math.max(MIN_STEP_MS, Math.round(COMPRESSED_STEP_MS / divisor));
+  if (mode !== 'recorded') return compressed;
+
+  const sequences = eventSequences(events);
+  const nextSeq =
+    cursorSeq === null ? (sequences[0] ?? null) : (sequences.find((seq) => seq > cursorSeq) ?? null);
+  if (nextSeq === null) return compressed;
+
+  const current =
+    cursorSeq === null
+      ? null
+      : (events.find((event) => event.seq === cursorSeq) ?? null);
+  const next = events.find((event) => event.seq === nextSeq) ?? null;
+  const from = eventTimeMs(current);
+  const to = eventTimeMs(next);
+  if (current !== null && from === null) return compressed;
+  if (to === null) return compressed;
+
+  // At the start there is no previous instant. The first recorded event is
+  // revealed immediately by the play handler, so this branch is only reached
+  // when a caller asks for the delay without that handler.
+  if (current === null) return Math.max(MIN_STEP_MS, Math.round(COMPRESSED_STEP_MS / divisor));
+
+  const delta = to - (from as number);
+  if (!Number.isFinite(delta) || delta < 0) return compressed;
+  return Math.max(MIN_STEP_MS, Math.round(delta / divisor));
+}
+
+export function replayTimingLabel(mode: ReplayTimingMode, speed: number): string {
+  const rate = Number.isFinite(speed) && speed > 0 ? speed : 1;
+  if (mode === 'recorded') {
+    return `Recorded-time playback — delays follow the stored event timestamps at ${rate}×. This is not compressed.`;
+  }
+  const perEvent = Math.round(COMPRESSED_STEP_MS / rate);
+  return rate === 1
+    ? `Compressed timing — ${COMPRESSED_STEP_MS} ms per event. This is not the recorded pace.`
+    : `Compressed timing — ${perEvent} ms per event at ${rate}× (${COMPRESSED_STEP_MS} ms at 1×). This is not the recorded pace.`;
+}
+
+/* ------------------------------------------------------------------ */
+/* As-of-sequence presentation                                         */
+/* ------------------------------------------------------------------ */
+
+interface SequenceIndex {
+  claim: Map<string, number>;
+  rebuttal: Map<string, number>;
+  evidence: Map<string, number>;
+  outcome: Map<string, number>;
+  decision: number | null;
+  guard: number | null;
+  terminal: number | null;
+}
+
+function payloadStringValue(
+  payload: Record<string, unknown> | null | undefined,
+  keys: readonly string[],
+): string | null {
+  if (!payload || typeof payload !== 'object') return null;
+  for (const key of keys) {
+    const value = payload[key];
+    if (typeof value === 'string' && value.trim() !== '') return value.trim();
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  }
+  return null;
+}
+
+function earliest(map: Map<string, number>, key: string, seq: number): void {
+  const previous = map.get(key);
+  if (previous === undefined || seq < previous) map.set(key, seq);
+}
+
+function indexEventVisibility(events: readonly RunEvent[]): SequenceIndex {
+  const index: SequenceIndex = {
+    claim: new Map(),
+    rebuttal: new Map(),
+    evidence: new Map(),
+    outcome: new Map(),
+    decision: null,
+    guard: null,
+    terminal: null,
+  };
+
+  for (const event of sortEvents(events)) {
+    if (!event || typeof event.seq !== 'number' || !Number.isFinite(event.seq)) continue;
+    const type = (event.type ?? '').trim().toLowerCase();
+    const payload = event.payload ?? {};
+    const seq = event.seq;
+
+    if (/^claim\.(created|recorded)$/.test(type) || /claim.*(created|recorded)/.test(type)) {
+      const id = payloadStringValue(payload, ['claim_id', 'claimId']);
+      if (id) earliest(index.claim, id, seq);
+    }
+    if (/^rebuttal\.(created|recorded)$/.test(type) || /rebuttal.*(created|recorded)/.test(type)) {
+      const id = payloadStringValue(payload, ['rebuttal_id', 'rebuttalId']);
+      if (id) earliest(index.rebuttal, id, seq);
+    }
+    if (/^evidence\.(recorded|available)$/.test(type) || /evidence.*(recorded|available)/.test(type)) {
+      const id = payloadStringValue(payload, ['evidence_id', 'evidenceId', 'id']);
+      if (id) earliest(index.evidence, id, seq);
+    }
+    if (/^outcome\.(recorded|evaluated)$/.test(type) || /outcome.*(recorded|evaluated)/.test(type)) {
+      const id = payloadStringValue(payload, ['outcome_id', 'outcomeId', 'id']);
+      if (id) earliest(index.outcome, id, seq);
+      const horizon = payloadStringValue(payload, ['horizon_days', 'horizonDays']);
+      if (horizon) earliest(index.outcome, `horizon:${horizon}`, seq);
+    }
+    if (/^decision\.(proposed|recorded)$/.test(type) || /decision.*(proposed|recorded)/.test(type)) {
+      if (index.decision === null || seq < index.decision) index.decision = seq;
+    }
+    if (/^guard\.(evaluated|recorded)$/.test(type) || /guard.*(evaluated|recorded)/.test(type)) {
+      if (index.guard === null || seq < index.guard) index.guard = seq;
+    }
+    const payloadStatus = payloadStringValue(payload, ['status'])?.toLowerCase() ?? null;
+    if (
+      /^run\.(completed|failed|cancelled)$/.test(type) ||
+      (type === 'status.changed' && payloadStatus !== null && isTerminalRunStatus(payloadStatus))
+    ) {
+      if (index.terminal === null || seq < index.terminal) index.terminal = seq;
+    }
+  }
+
+  return index;
+}
+
+/**
+ * Status at a cursor, inferred from persisted transitions up to it.
+ *
+ * Before the first transition a run is queued, not "completed" — the final
+ * status belongs to the future. At the replay tail the stored summary is the
+ * authority, because the event stream may not repeat every status change.
+ */
+export function runStatusAtCursor(
+  events: readonly RunEvent[],
+  cursorSeq: number | null,
+): RunStatus {
+  const visible = eventsUpTo(events, cursorSeq);
+  let status: RunStatus = 'queued';
+  for (const event of visible) {
+    if (!event) continue;
+    const type = (event.type ?? '').trim().toLowerCase();
+    const payloadStatus = payloadStringValue(event.payload, ['status'])?.toLowerCase() ?? null;
+    if (type === 'status.changed' && payloadStatus !== null) {
+      status = payloadStatus as RunStatus;
+    } else if (type === 'stage.started' && typeof event.stage === 'string') {
+      const normalized = event.stage.trim().toLowerCase() as RunStatus;
+      if (RUN_STATUS_LABELS[normalized] !== undefined) status = normalized;
+    } else if (type === 'claim.created' && (status === 'queued' || status === 'collecting')) {
+      status = 'analysing';
+    } else if (type === 'rebuttal.created') {
+      status = 'rebutting';
+    } else if (type === 'decision.proposed') {
+      status = 'adjudicating';
+    } else if (type === 'guard.evaluated') {
+      status = 'validating';
+    } else if (type === 'stage.failed') {
+      status = 'failed';
+    } else if (type === 'run.completed') {
+      status = 'completed';
+    }
+  }
+  return status;
+}
+
+export interface AsOfHiddenCounts {
+  claims: number;
+  rebuttals: number;
+  evidence: number;
+  outcomes: number;
+}
+
+export interface AsOfPresentation {
+  /** The detail payload reduced to what was persisted at `cursorSeq`. */
+  detail: DecisionDetailPayload;
+  cursorSeq: number | null;
+  /** True when the cursor is at (or beyond) the stored tail. */
+  atEnd: boolean;
+  atStart: boolean;
+  status: RunStatus;
+  verdictVisible: boolean;
+  guardVisible: boolean;
+  outcomesVisible: boolean;
+  visibleClaimIds: string[];
+  visibleRebuttalIds: string[];
+  visibleEvidenceIds: string[];
+  hidden: AsOfHiddenCounts;
+  /** The final rationale sentence, when a caller wants to pin it outside the scene. */
+  finalSummary: string | null;
+}
+
+/**
+ * Build the one replay-scene state shared by claim cards, rebuttals, the
+ * verdict, the guard and the timeline.
+ *
+ * `cursorSeq === undefined` means "no replay is active": the final payload is
+ * returned unchanged. A numeric cursor filters every stage-backed section by
+ * the persisted event that produced it, so the scene cannot show a verdict
+ * before the decision was recorded. `cursorSeq === null` is the start of the
+ * replay and shows only the run shell.
+ *
+ * At the very end of the log the stored detail is authoritative; there is no
+ * future left to hide. Before that point, content with no corresponding event is
+ * withheld rather than guessed at. A summary that is intentionally pinned by
+ * the caller is returned separately as `finalSummary` and never injected into
+ * the scene.
+ */
+export function buildAsOfPresentation(
+  detail: DecisionDetailPayload | null,
+  events: readonly RunEvent[],
+  cursorSeq: number | null | undefined,
+): AsOfPresentation | null {
+  if (!detail || !detail.run) return null;
+
+  const eventList = Array.isArray(events) ? events.filter(Boolean) : [];
+  const last = lastEventSequence(eventList);
+  const atEnd = cursorSeq === undefined ? true : last === null || (cursorSeq ?? -1) >= last;
+  const atStart = cursorSeq === null;
+  const visibleEvents = cursorSeq === undefined ? eventList : eventsUpTo(eventList, cursorSeq);
+  const index = indexEventVisibility(visibleEvents);
+
+  const claims = Array.isArray(detail.claims) ? detail.claims.filter(Boolean) : [];
+  const rebuttals = Array.isArray(detail.rebuttals) ? detail.rebuttals.filter(Boolean) : [];
+  const evidence = Array.isArray(detail.evidence) ? detail.evidence.filter(Boolean) : [];
+  const outcomes = Array.isArray(detail.outcomes) ? detail.outcomes.filter(Boolean) : [];
+
+  const visibleClaims = atEnd
+    ? claims
+    : claims.filter((claim) => {
+        const id = presentText(claim?.claim_id);
+        return id !== null && index.claim.has(id);
+      });
+  const visibleClaimIds = new Set(
+    visibleClaims.map((claim) => presentText(claim?.claim_id)).filter((id): id is string => id !== null),
+  );
+
+  const visibleRebuttals = atEnd
+    ? rebuttals
+    : rebuttals.filter((rebuttal) => {
+        const id = presentText(rebuttal?.rebuttal_id);
+        return id !== null && index.rebuttal.has(id);
+      });
+
+  const visibleEvidence = atEnd
+    ? evidence
+    : evidence.filter((item) => {
+        const id = presentText(item?.id);
+        return id !== null && index.evidence.has(id);
+      });
+
+  const verdictVisible =
+    index.decision !== null
+      ? true
+      : atEnd &&
+        (detail.rationale !== null ||
+          detail.action !== null ||
+          (Array.isArray(detail.decisive_claim_ids) && detail.decisive_claim_ids.length > 0));
+
+  const guardVisible = index.guard !== null || (atEnd && detail.guard !== null);
+
+  const visibleOutcomes = atEnd
+    ? outcomes
+    : outcomes.filter((outcome) => {
+        const id = presentText((outcome as { id?: string }).id);
+        if (id !== null && index.outcome.has(id)) return true;
+        // Some producers omit outcome ids from the event payload; the horizon
+        // is then the only join key available, and it still has to be recorded.
+        const horizon = typeof outcome?.horizon_days === 'number' ? String(outcome.horizon_days) : null;
+        return horizon !== null && index.outcome.has(`horizon:${horizon}`);
+      });
+
+  const status = atEnd ? detail.run.status : runStatusAtCursor(eventList, cursorSeq ?? null);
+  const terminalStatus = isTerminalRunStatus(status);
+
+  const reduced = {
+    ...detail,
+    run: {
+      ...detail.run,
+      status,
+      completed_at: terminalStatus ? detail.run.completed_at : null,
+      latency_ms: terminalStatus ? detail.run.latency_ms : null,
+      error_code: status === detail.run.status ? detail.run.error_code : null,
+    },
+    rationale: verdictVisible ? detail.rationale : null,
+    decisive_claim_ids: verdictVisible
+      ? atEnd
+        ? Array.isArray(detail.decisive_claim_ids)
+          ? detail.decisive_claim_ids
+          : []
+        : (Array.isArray(detail.decisive_claim_ids) ? detail.decisive_claim_ids : []).filter((id) =>
+            visibleClaimIds.has(id),
+          )
+      : [],
+    strongest_objection: verdictVisible ? detail.strongest_objection : null,
+    action: verdictVisible ? (detail.action ?? null) : null,
+    claims: visibleClaims,
+    rebuttals: visibleRebuttals,
+    evidence: visibleEvidence,
+    guard: guardVisible ? detail.guard : null,
+    outcomes: visibleOutcomes,
+    has_rebuttals: atEnd ? detail.has_rebuttals : visibleRebuttals.length > 0,
+  };
+
+  return {
+    detail: reduced,
+    cursorSeq: cursorSeq ?? null,
+    atEnd,
+    atStart,
+    status,
+    verdictVisible,
+    guardVisible,
+    outcomesVisible: atEnd || visibleOutcomes.length > 0 || index.outcome.size > 0,
+    visibleClaimIds: [...visibleClaimIds],
+    visibleRebuttalIds: visibleRebuttals
+      .map((rebuttal) => presentText(rebuttal?.rebuttal_id))
+      .filter((id): id is string => id !== null),
+    visibleEvidenceIds: visibleEvidence
+      .map((item) => presentText(item?.id))
+      .filter((id): id is string => id !== null),
+    hidden: {
+      claims: claims.length - visibleClaims.length,
+      rebuttals: rebuttals.length - visibleRebuttals.length,
+      evidence: evidence.length - visibleEvidence.length,
+      outcomes: outcomes.length - visibleOutcomes.length,
+    },
+    finalSummary: firstSentence(detail.rationale),
+  };
 }

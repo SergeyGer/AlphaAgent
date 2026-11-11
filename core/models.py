@@ -39,10 +39,12 @@ __all__ = [
     "ClaimType",
     "DecidedVia",
     "DecisionAction",
+    "DecisionExecutionState",
     "DecisionOutcome",
     "DecisionRecord",
     "DecisionRun",
     "DecisionStatus",
+    "EventOutbox",
     "EvidenceItem",
     "EvidenceSourceType",
     "ExecutedBy",
@@ -58,6 +60,7 @@ __all__ = [
     "InstrumentClassification",
     "InstrumentClassificationSource",
     "MarketSentiment",
+    "OutboxStatus",
     "OutcomeMaturity",
     "OutcomeRecord",
     "PlanLegPriority",
@@ -345,6 +348,17 @@ class Transaction(models.Model):
         help_text="Fee charged on this fill. NULL means no fee was recorded; 0 means a zero fee was recorded.",
     )
     executed_by = models.CharField(max_length=10, choices=ExecutedBy.choices)
+    #: Stable identity of the decision this fill came from.
+    #:
+    #: Celery redelivery, a repeated approval click and a retried plan leg all
+    #: reach the execution service with the same intent. The unique constraint is
+    #: the database-level guarantee that the second attempt returns the first
+    #: row instead of adding another fill; the service checks it first so the
+    #: common case is a read rather than an IntegrityError.
+    execution_key = models.CharField(max_length=200, null=True, blank=True, unique=True)
+    #: Canonical hash of the execution request that produced this row. A key
+    #: reused with a different request is a conflict, not a duplicate.
+    execution_request_hash = models.CharField(max_length=64, blank=True, default="")
     timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:
@@ -722,6 +736,16 @@ class TradeRecommendation(models.Model):
         blank=True,
         related_name="recommendations",
     )
+    #: The Phase 1/2 decision run this proposal belongs to, when one was recorded.
+    #: Approval, rejection and expiry all update that run, so the advisory path
+    #: has one lifecycle rather than a proposal with no traceable analysis.
+    decision_run = models.ForeignKey(
+        "core.DecisionRun",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="recommendations",
+    )
     transaction = models.OneToOneField(
         Transaction,
         on_delete=models.SET_NULL,
@@ -844,6 +868,7 @@ from core.decision_models import (  # noqa: E402
     ClaimStance,
     ClaimType,
     DecisionAction,
+    DecisionExecutionState,
     DecisionRecord,
     DecisionRun,
     DecisionStatus,
@@ -869,6 +894,7 @@ from core.decision_models import (  # noqa: E402
 # Imported last for the same reason as the Phase 1 models: the Phase 0 schema and
 # its consumer contract stay untouched, and Django registers these tables through
 # this module. See core/measurement_models.py.
+from core.event_models import EventOutbox, OutboxStatus  # noqa: E402
 from core.measurement_models import (  # noqa: E402
     CashFlow,
     CashFlowType,

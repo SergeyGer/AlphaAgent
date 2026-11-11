@@ -25,6 +25,21 @@ SKIP   risk-intervention-aapl-2026-02-03 (already loaded as run <uuid>)
 Done: 0 created, 3 skipped, 3 fixture(s) in the manifest.
 ```
 
+## Offline viewer bundle
+
+The same manifest also drives the REP-02 static viewer. `npm --prefix frontend
+run build:viewer` converts it to a versioned, checksummed,
+`alphaagent.offline-viewer` bundle and emits a self-contained `docs/viewer/`.
+The conversion is mechanical: deterministic ids join event payloads to claims,
+evidence, rebuttals, guard and outcomes, and no narrative content is invented.
+All three runs remain `synthetic` and the viewer displays that label explicitly.
+See [`../../frontend/viewer/README.md`](../../frontend/viewer/README.md) and
+[`DEMO.md`](DEMO.md) §5.
+
+The viewer also accepts a redacted `GET /api/decision-runs/<id>/export/`
+(`alphaagent.decision-run`) file, so a reviewer can capture a real recorded run
+while the API is available and replay it later with no database or login.
+
 Options:
 
 | Flag | Meaning |

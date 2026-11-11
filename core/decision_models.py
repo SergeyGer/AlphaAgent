@@ -56,6 +56,7 @@ __all__ = [
     "ClaimStance",
     "ClaimType",
     "DecisionAction",
+    "DecisionExecutionState",
     "DecisionRecord",
     "DecisionRun",
     "DecisionStatus",
@@ -213,6 +214,29 @@ class GuardStatus(models.TextChoices):
     REJECTED = "rejected", "Rejected"
 
 
+class DecisionExecutionState(models.TextChoices):
+    """What happened to the proposal *after* it was validated.
+
+    ``DecisionStatus`` describes where the analysis is; this describes the
+    decision's execution outcome, which is a different question. A proposal that
+    is awaiting a human is not a fill, and a rejected execution is not a
+    completed decision with no trade: conflating those is exactly the defect
+    this field separates. The empty value is a historical run that predates the
+    distinction and is not relabelled.
+    """
+
+    VALIDATING = "validating", "Awaiting guard evaluation"
+    AWAITING_APPROVAL = "awaiting_approval", "Awaiting approval"
+    APPROVED = "approved", "Approved, execution pending"
+    REJECTED = "rejected", "Rejected"
+    EXPIRED = "expired", "Expired"
+    CANCELLED = "cancelled", "Cancelled"
+    EXECUTED = "executed", "Executed"
+    HELD = "held", "Hold, no trade"
+    BLOCKED = "blocked", "Blocked by the guard"
+    FAILED = "failed", "Execution failed"
+
+
 class EvidenceSourceType(models.TextChoices):
     """EVID-01 source classes.
 
@@ -263,6 +287,11 @@ class RunEventType:
     DECISION_PROPOSED = "decision.proposed"
     GUARD_EVALUATED = "guard.evaluated"
     APPROVAL_REQUESTED = "approval.requested"
+    APPROVAL_DECIDED = "approval.decided"
+    EXECUTION_RECORDED = "execution.recorded"
+    EXECUTION_REJECTED = "execution.rejected"
+    EXECUTION_FAILED = "execution.failed"
+    DECISION_COMPLETED = "decision.completed"
     OUTCOME_RECORDED = "outcome.recorded"
     LIMITATION_RECORDED = "limitation.recorded"
 
@@ -354,6 +383,17 @@ class DecisionRun(models.Model):
 
     error_code = models.CharField(max_length=64, blank=True, default="")
     error_detail = models.TextField(blank=True, default="")
+
+    #: The post-validation outcome. Kept separate from ``status`` so an
+    #: ``awaiting_approval`` proposal is never presented as a fill and a hold is
+    #: never presented as an execution. Empty for historical runs.
+    execution_state = models.CharField(
+        max_length=24,
+        choices=DecisionExecutionState.choices,
+        blank=True,
+        default="",
+        db_index=True,
+    )
 
     #: Phase 0 audit row this run explains, when one exists. One run per legacy
     #: log: two explanations of one decision would be two conflicting records.
@@ -464,6 +504,9 @@ class RunEvent(models.Model):
     #: Typed JSON payload. Values that are Decimal/datetime are stored as strings
     #: so a JSON round trip is lossless and a reviewer can read the numbers.
     payload = models.JSONField(default=dict)
+    #: Idempotency key for a completion handler. Two retries of the same handler
+    #: produce one event, not two. Empty means the event makes no such claim.
+    dedupe_key = models.CharField(max_length=160, blank=True, default="", db_index=True)
 
     class Meta:
         verbose_name = "Run event"
@@ -475,6 +518,11 @@ class RunEvent(models.Model):
         ]
         constraints = [
             models.UniqueConstraint(fields=["run", "sequence"], name="run_event_unique_sequence"),
+            models.UniqueConstraint(
+                fields=["run", "dedupe_key"],
+                condition=~Q(dedupe_key=""),
+                name="one_run_event_per_dedupe_key",
+            ),
             models.CheckConstraint(condition=Q(sequence__gt=0), name="run_event_sequence_positive"),
         ]
 
@@ -790,6 +838,10 @@ class GuardRecord(models.Model):
     status = models.CharField(max_length=10, choices=GuardStatus.choices, db_index=True)
     requested_quantity = models.DecimalField(max_digits=20, decimal_places=8)
     allowed_quantity = models.DecimalField(max_digits=20, decimal_places=8)
+    #: Stable identity of this evaluation. A retried completion handler
+    #: re-evaluates the same proposal against the same state and produces the
+    #: same key, so it updates/returns one row instead of appending a duplicate.
+    evaluation_key = models.CharField(max_length=200, null=True, blank=True, unique=True)
 
     reason_codes = models.JSONField(default=list)
     #: The single rule that produced the allowed quantity. Kept separate from the

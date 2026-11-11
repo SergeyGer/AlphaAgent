@@ -39,6 +39,8 @@ from django.db import models
 from django.db.models import Q
 
 __all__ = [
+    "EXECUTION_MODE_LIVE",
+    "EXECUTION_MODE_PAPER",
     "InstrumentClassification",
     "InstrumentClassificationSource",
     "PlanLegPriority",
@@ -48,6 +50,14 @@ __all__ = [
     "PortfolioPlan",
     "PortfolioPlanLeg",
 ]
+
+#: Is this plan allowed to execute at its own planned marks?
+#:
+#: ``paper`` is the only mode in which a missing quote may fall back to the
+#: price the plan was sized at, and a paper fill is labelled as such on the plan.
+#: ``live`` requires a current, timestamped mark for every material holding.
+EXECUTION_MODE_LIVE = "live"
+EXECUTION_MODE_PAPER = "paper"
 
 
 # ---------------------------------------------------------------------------
@@ -189,6 +199,11 @@ class PortfolioPlan(models.Model):
         related_name="allocation_plans",
     )
     submission_key = models.CharField(max_length=128, blank=True, default="", db_index=True)
+    #: Canonical hash of the request that created the plan. A submission key is
+    #: an idempotency claim about *one request*: reusing it with a different body
+    #: is a conflict, not a duplicate to be silently answered with the old plan.
+    submission_request_hash = models.CharField(max_length=64, blank=True, default="")
+    execution_mode = models.CharField(max_length=8, default=EXECUTION_MODE_LIVE)
     status = models.CharField(
         max_length=16, choices=PlanStatus.choices, default=PlanStatus.PROPOSED, db_index=True
     )
@@ -228,6 +243,19 @@ class PortfolioPlan(models.Model):
     brief_hash = models.CharField(max_length=64, blank=True, default="")
     cost_model = models.JSONField(default=dict)
     model_metadata = models.JSONField(default=dict)
+
+    #: What the plan was approved against: the limits, classifications, cost
+    #: assumptions and allocation that decide whether it is still permitted.
+    #: ``approval_hash`` is the canonical hash of ``approval_binding``; execution
+    #: recomputes it under the lock and refuses a plan whose permissions moved.
+    approval_binding = models.JSONField(default=dict)
+    approval_hash = models.CharField(max_length=64, blank=True, default="")
+
+    #: The weights actually achieved after application, with the per-leg reason.
+    #: Requested and projected weights were already stored; without this the plan
+    #: could not answer "what was really executed?" after a clamp or a rounding.
+    executed_target_weights = models.JSONField(default=dict)
+    execution_reasons = models.JSONField(default=list)
 
     equity_usd = models.DecimalField(max_digits=18, decimal_places=2, null=True, blank=True)
     cash_usd = models.DecimalField(max_digits=18, decimal_places=2, null=True, blank=True)

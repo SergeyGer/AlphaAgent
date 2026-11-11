@@ -43,6 +43,7 @@ from core.decision_views import (
     DecisionRunListView,
     DecisionRunMetadataView,
 )
+from core.event_views import EventCatchUpView, EventDeliveryMetricsView
 from core.experiment_views import ExperimentReportView
 from core.views import (
     AdvisorySweepView,
@@ -130,6 +131,9 @@ urlpatterns = [
         DecisionRunExportView.as_view(),
         name="decision-run-export",
     ),
+    # -- durable event delivery (FIX-06) ----------------------------------
+    path("events/catch-up/", EventCatchUpView.as_view(), name="event-catch-up"),
+    path("events/metrics/", EventDeliveryMetricsView.as_view(), name="event-metrics"),
     # -- experiments (Phase 3) -------------------------------------------
     path(
         "experiments/<str:experiment_id>/report/",

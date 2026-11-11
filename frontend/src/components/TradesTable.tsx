@@ -1,4 +1,5 @@
 import { useMemo, type ReactElement } from 'react';
+import { decisionRunHref, runLinkId } from '../lib/decisionRuns';
 import { formatCurrency, formatQuantity, formatRelativeTime } from '../lib/format';
 import { useNow } from '../hooks/useNow';
 import type { Transaction } from '../types';
@@ -63,7 +64,7 @@ export function TradesTable({
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[46rem] border-collapse">
+          <table className="w-full min-w-[50rem] border-collapse">
             <thead className="bg-slate-950/60">
               <tr className="border-b border-slate-800">
                 <th scope="col" className={HEAD_CELL}>
@@ -84,36 +85,60 @@ export function TradesTable({
                 <th scope="col" className={`${HEAD_CELL} text-right`}>
                   Notional
                 </th>
+                <th scope="col" className={HEAD_CELL}>
+                  Decision run
+                </th>
                 <th scope="col" className={`${HEAD_CELL} text-right`}>
                   Executor
                 </th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((transaction) => (
-                <tr
-                  key={transaction.id}
-                  className="border-b border-slate-800/50 transition-colors duration-200 last:border-0 hover:bg-slate-800/30"
-                >
-                  <td className={BODY_CELL} title={new Date(transaction.timestamp).toString()}>
-                    <span className="text-slate-400">{formatRelativeTime(transaction.timestamp, now)}</span>
-                  </td>
-                  <td className={`${BODY_CELL} font-semibold text-slate-100`}>{transaction.ticker}</td>
-                  <td className={BODY_CELL}>
-                    <SideBadge side={transaction.tx_type} />
-                  </td>
-                  <td className={`${BODY_CELL} text-right`}>{formatQuantity(transaction.amount)}</td>
-                  <td className={`${BODY_CELL} text-right`}>{formatCurrency(transaction.price)}</td>
-                  <td className={`${BODY_CELL} text-right text-slate-100`}>
-                    {formatCurrency(transaction.gross_value_usd)}
-                  </td>
-                  <td className={`${BODY_CELL} text-right`}>
-                    <span className="inline-flex justify-end">
-                      <ExecutorBadge executor={transaction.executed_by} />
-                    </span>
-                  </td>
-                </tr>
-              ))}
+              {rows.map((transaction) => {
+                const runHref = decisionRunHref(runLinkId(transaction));
+                return (
+                  <tr
+                    key={transaction.id}
+                    className="border-b border-slate-800/50 transition-colors duration-200 last:border-0 hover:bg-slate-800/30"
+                  >
+                    <td className={BODY_CELL} title={new Date(transaction.timestamp).toString()}>
+                      <span className="text-slate-400">
+                        {formatRelativeTime(transaction.timestamp, now)}
+                      </span>
+                    </td>
+                    <td className={`${BODY_CELL} font-semibold text-slate-100`}>
+                      {transaction.ticker}
+                    </td>
+                    <td className={BODY_CELL}>
+                      <SideBadge side={transaction.tx_type} />
+                    </td>
+                    <td className={`${BODY_CELL} text-right`}>{formatQuantity(transaction.amount)}</td>
+                    <td className={`${BODY_CELL} text-right`}>{formatCurrency(transaction.price)}</td>
+                    <td className={`${BODY_CELL} text-right text-slate-100`}>
+                      {formatCurrency(transaction.gross_value_usd)}
+                    </td>
+                    <td className={BODY_CELL}>
+                      {runHref ? (
+                        <a
+                          href={runHref}
+                          data-testid="transaction-run-link"
+                          aria-label={`Open decision run that executed ${transaction.ticker} ${transaction.tx_type}`}
+                          className="rounded text-cyan-300 underline decoration-cyan-500/40 underline-offset-2 transition-colors hover:text-cyan-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/70 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
+                        >
+                          Explain
+                        </a>
+                      ) : (
+                        <span className="text-slate-500">No mapping</span>
+                      )}
+                    </td>
+                    <td className={`${BODY_CELL} text-right`}>
+                      <span className="inline-flex justify-end">
+                        <ExecutorBadge executor={transaction.executed_by} />
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

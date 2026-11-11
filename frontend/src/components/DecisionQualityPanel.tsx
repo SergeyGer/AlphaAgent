@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import { cn } from '../lib/cn';
+import { decisionRunHref, runLinkId } from '../lib/decisionRuns';
 import { formatCurrency, formatDateTime, formatPercent, toNumber, toneTextClass } from '../lib/format';
 import type { AttributionResponse, AttributionScorecard, DecisionOutcomeRow } from '../types';
 import { Badge, SideBadge } from './Badge';
@@ -166,6 +167,7 @@ function OutcomeRow({ row, benchmark }: { row: DecisionOutcomeRow; benchmark: st
   const outcome = outcomeOf(row);
   const decisionReturn = toNumber(row?.decision_return_pct);
   const benchmarkReturn = toNumber(row?.benchmark_return_pct);
+  const runHref = decisionRunHref(runLinkId(row));
 
   const detail = [
     `decision #${row?.decision_id ?? DASH}`,
@@ -197,6 +199,16 @@ function OutcomeRow({ row, benchmark }: { row: DecisionOutcomeRow; benchmark: st
       <span className="shrink-0">
         <OutcomeBadge outcome={outcome} />
       </span>
+      {runHref ? (
+        <a
+          href={runHref}
+          data-testid="scorecard-run-link"
+          aria-label={`Open decision run for scored ${ticker} ${action || 'decision'}`}
+          className="shrink-0 rounded font-mono text-[10px] uppercase tracking-wider text-cyan-300 underline decoration-cyan-500/40 underline-offset-2 transition-colors hover:text-cyan-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/70 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
+        >
+          Run
+        </a>
+      ) : null}
     </li>
   );
 }

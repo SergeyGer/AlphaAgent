@@ -168,18 +168,45 @@ jobs:
 
       # Committed back so the README badge is live without a third-party service
       # such as Codecov. `[skip ci]` stops the badge commit re-triggering CI.
-      - name: Commit the badge if it changed
+      # WHY this pushes to a side branch instead of main:
+      #
+      # It used to `git push` the regenerated coverage.svg straight to main and
+      # failed every run with GH013 - main requires a pull request and five status
+      # checks, so the bot's direct push is refused by design. The badge step then
+      # failed *after* the tests passed, which made a green suite look like a red
+      # workflow and taught people to ignore the result.
+      #
+      # A dedicated `badges` branch is unprotected, so the commit succeeds, and the
+      # README points at its raw URL. Nothing about branch protection is weakened,
+      # the test job needs no write access to main, and the badge still reflects the
+      # current run.
+      - name: Publish the coverage badge
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           if git diff --quiet -- coverage.svg; then
-            echo "coverage.svg unchanged"
+            echo "coverage.svg unchanged; nothing to publish"
             exit 0
           fi
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add coverage.svg
           git commit -m "chore: update coverage badge [skip ci]"
-          git push
+          # Force-push a single-commit branch: the badge is derived state, its
+          # history has no value, and a growing branch would eventually need
+          # pruning for no reason.
+          git push --force origin "HEAD:refs/heads/badges"
+
+      - name: Summarise coverage in the job output
+        if: always()
+        run: |
+          if [ -f coverage.xml ]; then
+            python - <<'PY'
+          import xml.etree.ElementTree as ET
+          root = ET.parse("coverage.xml").getroot()
+          pct = root.get("line-rate")
+          print(f"## Coverage: {float(pct) * 100:.1f}%" if pct else "## Coverage: unknown")
+          PY
+          fi >> "$GITHUB_STEP_SUMMARY"
 
   frontend:
     name: Frontend tests

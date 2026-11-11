@@ -157,6 +157,14 @@ export interface Transaction {
   gross_value_usd: Decimal;
   executed_by: string;
   timestamp: string;
+  /**
+   * The decision run that caused this execution, when the API publishes the
+   * link. Optional on purpose: Phase 0 rows predate decision runs and no
+   * mapping can be invented for them.
+   */
+  run_id?: string | number | null;
+  decision_run_id?: string | number | null;
+  run?: { id?: string | number | null } | null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -193,6 +201,15 @@ export interface DecisionLog {
   /** Bearish argument from the risk assessor / short seller. `""` when absent. */
   bear_case: string | null;
   created_at: string;
+  /**
+   * The structured decision run that explains this legacy audit row, when one
+   * exists. `DecisionRun.legacy_log` is the join; the API may publish it as
+   * `run_id`, `decision_run_id` or a nested `run.id`. All three are accepted so
+   * the link appears whichever shape the producer settles on.
+   */
+  run_id?: string | number | null;
+  decision_run_id?: string | number | null;
+  run?: { id?: string | number | null } | null;
 }
 
 /** Unified row rendered by the AI thoughts feed (REST logs + live WS frames). */
@@ -212,6 +229,8 @@ export interface FeedItem {
   bearCase: string | null;
   stage: AgentStage | null;
   message: string | null;
+  /** Associated decision run, when the log row carries a mapping. */
+  runId?: string | null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -328,6 +347,10 @@ export interface DecisionOutcomeRow {
    */
   directional_hit: boolean | null;
   evaluated_at: string;
+  /** Associated decision run, when the scorecard row publishes the mapping. */
+  run_id?: string | number | null;
+  decision_run_id?: string | number | null;
+  run?: { id?: string | number | null } | null;
 }
 
 /** `GET /api/portfolio/attribution/` — the scorecard plus the rows behind it. */
@@ -433,6 +456,15 @@ export interface RunSummary {
   completed_at: string | null;
   latency_ms: number | null;
   error_code: string | null;
+  /**
+   * Provenance fields published by the detail/metadata serializer. Optional
+   * because the list endpoint and older deployments do not always include the
+   * richer metadata envelope.
+   */
+  is_synthetic?: boolean;
+  source?: string;
+  legacy_log_id?: number | string | null;
+  fixture_id?: string | null;
 }
 
 export type AgentRole = 'bull' | 'bear';
@@ -562,8 +594,21 @@ export interface RunListResponse {
 /** `GET /api/decision-runs/{id}/events/?after_seq=N` envelope. */
 export interface RunEventsResponse {
   events: RunEvent[];
+  /** URL of the next window, or null when this page reached the server tail. */
   next: string | null;
+  /**
+   * Last sequence *in this window*. It is not the server tail: a page can stop
+   * at 100 while the run has 340 persisted events. Kept required for older
+   * producers; `latest_sequence` is the authoritative tail.
+   */
   last_sequence: number;
+  /** Newest persisted sequence for the run (the server tail). */
+  latest_sequence?: number;
+  /** Echo of the requested cursor and page size, for diagnostics. */
+  after_seq?: number;
+  limit?: number;
+  count?: number;
+  run_id?: string;
 }
 
 /* ------------------------------------------------------------------ */

@@ -468,6 +468,13 @@ def build_run_metadata(run: DecisionRun, *, events=None) -> dict:
         "mode": run.mode,
         "is_synthetic": run.is_synthetic,
         "source": run.source,
+        "execution_state": run.execution_state or None,
+        "execution": {
+            "state": run.execution_state or None,
+            "executed": run.execution_state == "executed",
+            "awaiting_approval": run.execution_state == "awaiting_approval",
+            "no_trade": run.execution_state in {"held", "rejected", "expired", "blocked"},
+        },
         "provenance": {
             "mode": run.mode,
             "is_synthetic": run.is_synthetic,

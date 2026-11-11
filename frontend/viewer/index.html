@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="referrer" content="no-referrer" />
+    <!--
+      The viewer is offline by construction. Everything it may load is inline or
+      same-origin; `connect-src 'self'` allows only the relative fixture bundle.
+      There is no provider, API or execution endpoint in this policy.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+    />
+    <meta
+      name="description"
+      content="AlphaAgent offline decision viewer — a static read-only replay of a checksummed fixture bundle. No database, login, network or model key."
+    />
+    <title>AlphaAgent · Offline decision viewer</title>
+    <style>
+      html,
+      body,
+      #root {
+        min-height: 100%;
+        background-color: #0b1120;
+        color: #e2e8f0;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>This viewer needs JavaScript to replay the stored fixture bundle.</noscript>
+    <script type="module" src="/main.tsx"></script>
+  </body>
+</html>

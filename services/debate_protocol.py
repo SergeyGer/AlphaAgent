@@ -2662,14 +2662,24 @@ class DebateProtocol:
         return decision
 
     def _complete(self, state: _RunState, adjudication: Adjudication) -> DecisionRun | None:
+        """Finish the *analysis* and stop at ``validating``.
+
+        Analysis completion is not decision completion. The run used to jump to
+        ``completed`` here, before ``tasks.py`` had evaluated the guard, so a
+        proposal could read as a finished decision while approval or execution
+        was still outstanding. The execution lifecycle (``services.
+        decision_lifecycle``) owns the next transition, and it only makes it once
+        a real guard result exists.
+        """
         if state.run is None:
             return None
         self._transition(state, DecisionStatus.VALIDATING)
-        self._transition(state, DecisionStatus.COMPLETED)
         assert state.snapshot is not None
         metadata = update_protocol_metadata(
             state.run,
-            status=DecisionStatus.COMPLETED,
+            status=DecisionStatus.VALIDATING,
+            analysis_completed=True,
+            completion_owner="services.decision_lifecycle",
             snapshot_hash=state.snapshot.content_hash,
             usage=self._usage.as_dict(),
             attempts=self._attempts_items,
@@ -2696,7 +2706,7 @@ class DebateProtocol:
         )
         state.run.refresh_from_db()
         logger.info(
-            "Debate protocol run %s completed: %s (%s tokens)",
+            "Debate protocol run %s validated (analysis complete, awaiting guard): %s (%s tokens)",
             state.run.id,
             adjudication.action,
             self._usage.input_tokens + self._usage.output_tokens,
@@ -3182,8 +3192,9 @@ def record_heuristic_attempt(
             "no_debate": True,
         },
     )
+    # The fallback proposal is validated, not decided: the execution lifecycle
+    # completes it after the guard has actually evaluated it.
     transition_status(run, DecisionStatus.VALIDATING)
-    transition_status(run, DecisionStatus.COMPLETED)
 
     if failed_run is not None:
         append_event(

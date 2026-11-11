@@ -27,5 +27,5 @@
       "@/*": ["src/*"]
     }
   },
-  "include": ["src", "vite.config.ts"]
+  "include": ["src", "viewer", "vite.config.ts", "vite.viewer.config.ts"]
 }
