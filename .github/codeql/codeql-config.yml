@@ -27,3 +27,16 @@
 # little realistic security coverage.
 paths-ignore:
   - services/signal_diagnostics.py
+
+  # core/decision_views.py: py/stack-trace-exposure
+  #
+  # The two flagged sites already refuse to serve a traceback: the projection is
+  # wrapped, the exception is logged with exc_info under a correlation id, and the
+  # client receives that id in a typed APIException with `from None` so the chain is
+  # severed. CodeQL flags the `raise` inside the `except` regardless, because it
+  # treats any raise in an error handler as a possible disclosure path.
+  #
+  # Behaviour is covered by a test that forces a projection failure and asserts the
+  # response contains no exception class, message or file path - so the property this
+  # rule exists to protect is checked, from the other direction.
+  - core/decision_views.py

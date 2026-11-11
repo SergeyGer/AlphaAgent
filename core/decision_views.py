@@ -132,7 +132,9 @@ class DecisionRunMetadataView(APIView):
         try:
             payload = build_run_metadata(run, events=events)
         except Exception:
-            raise _projection_failed("metadata") from None
+            correlation = uuid4().hex[:12]
+            logger.exception("Decision run metadata projection failed [%s]", correlation)
+            raise _projection_failed(correlation) from None
         return Response(payload, status=status.HTTP_200_OK)
 
 
@@ -153,7 +155,9 @@ class DecisionRunDetailView(APIView):
         try:
             payload = build_run_detail(run, events=events)
         except Exception:
-            raise _projection_failed("detail") from None
+            correlation = uuid4().hex[:12]
+            logger.exception("Decision run detail projection failed [%s]", correlation)
+            raise _projection_failed(correlation) from None
         return Response(payload, status=status.HTTP_200_OK)
 
 
@@ -240,7 +244,7 @@ class DecisionRunExportView(APIView):
         return response
 
 
-def _projection_failed(what: str) -> APIException:
+def _projection_failed(correlation: str) -> APIException:
     """Build a typed 500 without an exception object anywhere near it.
 
     A serializer bug must not hand a client an exception class, a message or a file
@@ -248,8 +252,7 @@ def _projection_failed(what: str) -> APIException:
     and only that id reaches the response - so there is nothing for a future edit to
     accidentally start serialising.
     """
-    correlation = uuid4().hex[:12]
     return APIException(
-        f"The decision run {what} could not be produced. "
+        "The decision run could not be produced. "
         f"The cause was logged on the server with correlation id {correlation}."
     )
