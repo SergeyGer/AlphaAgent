@@ -73,11 +73,29 @@ Benchmark rules are declared in the manifest:
 * mixed portfolios must declare a `selection_rule` for an asset-appropriate
   benchmark.
 
-Stored `OutcomeRecord` rows carry a benchmark return but **not benchmark
-observation timestamps**. The report therefore declares the same-decision,
-same-horizon rule, sets `benchmark_interval_verified: false`, and displays the
-outcome's `method_version`. It does not claim an interval match it cannot
-re-derive.
+Benchmark provenance is stored, not assumed. Each scored row carries the
+benchmark prices, the session each was observed on, and the price source
+(`benchmark_price_at_decision`, `benchmark_price_at_horizon`,
+`benchmark_observed_at_decision`, `benchmark_price_observed_at`,
+`benchmark_price_source`); the instrument's own observation dates are stored
+beside them. The report then **verifies** the interval instead of only declaring
+the rule:
+
+* `benchmark_interval_verified` is true only when there is at least one matched
+  pair and **every** matched pair has all four observations and the benchmark's
+  decision and horizon observations fall on the same sessions as the
+  instrument's, with the horizon observation not before the target session.
+* precision is `session_date`: prices are daily closes, so the intraday
+  observation instant is **not** recorded and is not claimed
+  (`intraday_observation_instant_verified: false`).
+* a row without provenance (all rows written before this change, and any row
+  whose producer could not price the benchmark) keeps its benchmark return but
+  is counted in `benchmark_interval.unverified_pairs` with the missing field
+  named in `unverified_reasons`. It is never assumed matched.
+
+The declared rule (`benchmark_interval_rule`) and the verification rule
+(`benchmark_interval.verification_rule`) are published separately, so a reader
+can tell what was promised from what was checked.
 
 ### 1.4 Aggregation rules
 
@@ -217,8 +235,19 @@ Provider/API spend is **external money**, not portfolio cash. It is reported in
 * If any run in the experiment reported no cost, the net return is **null** with
   `net_return_reason`. A missing cost is not a zero cost, so the gross return
   remains computable but the net return is not established.
-* `DecisionRun.total_cost_usd` is the source; a failed run's reported cost stays
-  in the total.
+* `DecisionRun.total_cost_usd` is the **billed** charge and is nullable;
+  `DecisionRun.estimated_cost_usd` is the price-table arithmetic and
+  `cost_basis` names which is which. A run whose provider reported tokens but no
+  dollars has `total_cost_usd = NULL` and a labelled estimate beside it; it is
+  never written as a zero. The only measured zero is a run that made no model
+  call at all (`cost_basis: "deterministic_no_model_call"`), where zero is
+  exact by construction.
+* A failed or timed-out call's cost stays in the record when the client reported
+  usage for it (`failed_attempt_usage`, `timeout_reconciled`); a timed-out call
+  that could not be reconciled is counted in `unreconciled_timeout_calls` and
+  named as excluded, because the provider may still bill it. The monetary
+  ceiling is therefore **not** a strict billed-dollar cap (`strict_billed_ceiling:
+  false` on the usage block and on the run metadata).
 * If costs are incomplete, `net_return_pct` is null and
   `known_cost_only_return_pct` is the arithmetic from the costs that were
   reported, labelled as such. The net equity series remains visible so the
@@ -261,14 +290,61 @@ rejection alone.
 | --- | --- | --- | --- | --- |
 | `V0` | Deterministic baseline | deterministic | `heuristic_fallback.v1` producer, no LLM | yes |
 | `V1` | One analyst | `single_agent` | `single_agent_baseline.v1` | yes |
-| `V2` | Current pipeline | `debate` | `debate.v1` | yes |
+| `V2` | Current pipeline (no explicit response round) | `debate` | `debate.no_rebuttal.v1` | yes |
 | `V3` | Explicit rebuttal | `debate_with_rebuttal` | `debate.v1`, run must show a recorded rebuttal round | yes |
 | `V4` | Portfolio allocation | `portfolio_allocation` | — | **no**; declared, not measured |
 
-Phase 2 delivered rebuttals inside `debate.v1`, so V3 is identified by the
-recorded rebuttal round rather than a second producer. A manifest must declare
-all five variants; V4 cannot be marked implemented. A report publishes V4 as
-`unimplemented` with a null result — not a measured zero.
+V3 is the Phase 2 rebuttal protocol (`debate.v1`) and is identified by the
+recorded rebuttal round. V2 is the same producer with the rebuttal stage
+**omitted**: it records `debate.no_rebuttal.v1`, so the two arms have genuinely
+distinct protocol identities instead of being one run relabelled as two. A
+manifest must declare all five variants; V4 cannot be marked implemented. A
+report publishes V4 as `unimplemented` with a null result — not a measured zero.
+
+### 3.1a Execution path (`services/experiment_execution.py`)
+
+`build_experiment` measures; it never runs a model. The execution path is the
+separate producer:
+
+```bash
+python manage.py run_experiment --path docs/spec/fixtures/experiments/alphaagent-arms.v1.json
+python manage.py run_experiment --provider stub --output /tmp/comparison.json
+```
+
+It schedules V0-V3 against **one frozen opportunity set** and, per opportunity,
+**one `InputSnapshot` shared by every arm** (the report compares the content
+hashes across arms rather than asserting they match). Each arm records its own
+protocol id, decisions, simulated fills and equity trajectory:
+
+| Arm | Producer | Protocol id |
+| --- | --- | --- |
+| V0 | deterministic engine, no model call | `heuristic_fallback.v1` |
+| V1 | one analyst, no cases, no rebuttal | `single_agent_baseline.v1` |
+| V2 | Bull / Bear / CIO, no response round | `debate.no_rebuttal.v1` |
+| V3 | Bull / Bear / CIO + one rebuttal round | `debate.v1` |
+
+The per-arm trajectory is replayed from that arm's decisions through the same
+`evaluate_proposal` guard, the same
+`first_executable_mark_at_or_after_decision.v1` fill rule and the same
+`portfolio_accounting.v1` builder, against the same declared risk rules and
+marks. It is a **simulation**, labelled `synthetic: true` and
+`provenance.simulated_arm`, not realised history.
+
+When no provider is configured, V1-V3 stay `not_executed` with
+`provider_not_configured` and remain in the denominator. The scripted
+`--provider stub` client runs the real code through the real protocol but its
+replies are authored: those runs are `mode="simulated"`, their cohort is
+`simulated`, and the report says `engineering_validation_only` and
+`comparative_protocol_claim: false`. A scripted case is never presented as a
+completed model arm.
+
+The opportunity set must declare a pre-registration (`registered_at` at or
+before `declared_at` and before the first scheduled opportunity) containing the
+sample plan, primary metric, cost ceiling and acceptable drawdown. The report
+publishes the registration **and** whether it could be honoured. In particular,
+a pre-registered forward-return metric is `null` with
+`reason: "no_matured_outcomes"` when no outcome rows exist; it is not replaced
+by a different number.
 
 ### 3.2 Manifest (version 1, schema 1.0)
 
@@ -336,8 +412,20 @@ python manage.py build_experiment --username demo --force
 
 The command reads stored rows and the manifest. It imports no agent or protocol
 module, makes no model call and fetches no market data. Re-running it rebuilds
-the report from stored rows and increments `report_version`; it does not create
-a second experiment for the same `(portfolio, experiment_id)`.
+the report from stored rows and appends a new `report_version`; it does not
+create a second experiment for the same `(portfolio, experiment_id)`.
+
+Report versions are **immutable and addressable**. Each build appends an
+`ExperimentReportVersion` row containing the published document, its SHA-256, a
+dependency snapshot (the manifest and variants, portfolio limits, scheduled
+runs, decision runs with their cost basis, decisions, guards, outcomes including
+benchmark provenance, claims, rebuttals, ledger rows, cash flows and snapshots)
+and that snapshot's digest. `verify_report_version(experiment, version)` rebuilds
+the version from the current rows and compares it byte for byte, naming the
+dependency groups that drifted. A drift never edits the published version: the
+stored document remains the record of what was published, and the drift is the
+news. A manifest checksum alone cannot do this, because it does not cover
+later-maturing outcome rows or a changing ledger.
 
 ### 3.4 Fair comparison (EXP-02)
 
@@ -424,7 +512,9 @@ accounting.
 | `no_profitability_claim`, `profitability_threshold`, `engineering_validation_only` | The claim boundary |
 
 Decimals are JSON strings (DATA-02). Timestamps are UTC ISO-8601 with `Z`. Counts
-are integers.
+are integers. `dependency_digest` names the row snapshot the version was built
+from; the published versions themselves are addressable through
+`ExperimentReportVersion` (see §3.3), not through the latest-report endpoint.
 
 ### Null semantics
 
@@ -463,6 +553,12 @@ is true, `strict_historical_claims` is false, and every variant result says what
 it could and could not measure. A generated snapshot of the report is kept at
 [`fixtures/experiments/phase3-engineering.v1.report.json`](fixtures/experiments/phase3-engineering.v1.report.json);
 it is an example output, is not loaded by any command, and can be regenerated.
+
+The V0-V3 execution path has its own example output:
+[`fixtures/experiments/alphaagent-arms.v1.comparison.json`](fixtures/experiments/alphaagent-arms.v1.comparison.json).
+It is generated by `python manage.py run_experiment --provider stub` and, like
+the Phase 3 report, is labelled engineering validation. Its arm trajectories are
+simulations under authored marks; they are not the demo account's history.
 
 ## 6. Tests that hold the gate
 

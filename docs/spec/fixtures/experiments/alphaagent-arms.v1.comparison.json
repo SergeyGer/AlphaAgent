@@ -1,0 +1,3354 @@
+{
+  "report_schema_version": "1.0",
+  "generated_at": "2026-11-11T15:47:38.996687Z",
+  "opportunity_set_id": "alphaagent-arms.v1",
+  "label": "V0-V3 protocol execution on one frozen opportunity set (engineering validation)",
+  "provider_mode": "stub",
+  "pre_registration": {
+    "registered_at": "2026-02-02T10:00:00Z",
+    "registered_by": "engineering",
+    "declared_before_first_opportunity": true,
+    "sample_plan": {
+      "minimum_opportunities": 3,
+      "minimum_completed_arms": 4,
+      "minimum_observations": 3,
+      "note": "Below this the exercise is engineering validation only; the report says so and asserts no profitability threshold."
+    },
+    "primary_metric": {
+      "id": "mean_action_score_pct",
+      "family": "signal_diagnostics",
+      "horizon_days": 7,
+      "direction": "higher_is_better",
+      "description": "Mean signed action score at the 7-day horizon (BUY=forward, SELL=-forward, HOLD=0 by convention). Pre-registered before any arm ran; it needs matured outcomes and is null with that reason when they do not exist."
+    },
+    "cost_ceiling_usd": "1.00",
+    "acceptable_drawdown_pct": "10.00",
+    "honoured": {
+      "opportunities": true,
+      "completed_arms": true,
+      "primary_metric": {
+        "computed": false,
+        "reason": "The pre-registered primary metric is a forward-return signal metric. It needs matured OutcomeRecord rows, and this execution produced none: the opportunities are scheduled inside a historical window whose outcomes were not evaluated. The registration is published as written and the metric is null with this reason rather than replaced by a different number."
+      }
+    },
+    "sample_gate": {
+      "minimum_opportunities": 3,
+      "minimum_completed_arms": 4,
+      "opportunities": 3,
+      "completed_arms": 4,
+      "met": true
+    },
+    "primary_metric_result": {
+      "id": "mean_action_score_pct",
+      "value": null,
+      "unit": "percent",
+      "status": "not_computable",
+      "reason": "no_matured_outcomes",
+      "observations": 0
+    }
+  },
+  "frozen": {
+    "opportunity_set_hash": "2820d6eb66a3dfd2fcbefc653649db1b86dc5527b85b3c74589cb90bcc2f9131",
+    "source_path": "docs/spec/fixtures/experiments/alphaagent-arms.v1.json",
+    "declared_at": "2026-02-02T10:05:00Z",
+    "observation_window": {
+      "start": "2026-02-03T00:00:00Z",
+      "end": "2026-02-12T00:00:00Z"
+    },
+    "starting_state": {
+      "cash": "10000.00",
+      "positions": {}
+    },
+    "execution_assumptions": {
+      "guard_policy_version": "guard.v1",
+      "fill_rule": "first_executable_mark_at_or_after_decision.v1",
+      "slippage_bps": "0",
+      "fee_bps": "0",
+      "fee_model": "declared zero fee: no broker integration exists, and a declared zero is labelled as an assumption rather than a recorded charge"
+    },
+    "risk_rules": {
+      "max_trade_allocation_pct": "5.00",
+      "max_portfolio_exposure_pct": "90.00",
+      "max_ticker_concentration_pct": "30.00",
+      "max_sector_concentration_pct": "40.00",
+      "max_turnover_pct": "25.00",
+      "min_cash_buffer_pct": "10.00",
+      "daily_loss_limit_usd": "500.00"
+    },
+    "benchmark": {
+      "ticker": "SPY",
+      "asset_class": "equity",
+      "selection_rule": "declared_equity_benchmark"
+    },
+    "mark_count": 9,
+    "mark_sources": {
+      "declared_fixture_mark": 9
+    },
+    "mark_provenance": "Daily marks declared in the opportunity set. Their observation instants are recorded per mark; they are authored, not fetched, and are labelled synthetic."
+  },
+  "arms": [
+    {
+      "key": "V0",
+      "label": "Deterministic baseline",
+      "engine": "deterministic_baseline",
+      "implemented": true,
+      "status": "executed",
+      "reason": null,
+      "protocol_version": "heuristic_fallback.v1",
+      "expected_protocol_version": "heuristic_fallback.v1",
+      "protocol_matches_declaration": true,
+      "requires_rebuttals": false,
+      "provider": "deterministic",
+      "scheduled_runs": 3,
+      "completed_runs": 3,
+      "failed_runs": 0,
+      "not_executed_runs": 0,
+      "excluded_from_denominator": false,
+      "cost": {
+        "runs": 3,
+        "measured_tokens": {
+          "input": 0,
+          "output": 0
+        },
+        "estimated_tokens": {
+          "input": 0,
+          "output": 0
+        },
+        "price_table_cost_usd": "0.000000",
+        "price_table_cost_partial_usd": null,
+        "price_table_cost_unknown_runs": 0,
+        "billed_cost_usd": "0.000000",
+        "billed_cost_unknown_runs": 0,
+        "billed_cost_unknown_reasons": {},
+        "timed_out_calls": 0,
+        "unreconciled_timeout_calls": 0,
+        "strict_billed_ceiling": false,
+        "note": "Measured tokens, estimated tokens, price-table cost and billed cost are reported separately. A null billed total means at least one run's provider reported no charge; it is not a zero."
+      },
+      "runs": [
+        {
+          "opportunity": "aapl-2026-02-03",
+          "fixture_id": "alphaagent-arms.v1.v0.aapl-2026-02-03",
+          "status": "completed",
+          "failure_code": null,
+          "failure_detail": null,
+          "decision_run_id": "4033b6e1-a64a-4f19-aed4-28129c200abb",
+          "protocol_version": "heuristic_fallback.v1",
+          "snapshot_id": "08fac509-3cd6-4afb-8379-ebdf56d1fd68",
+          "snapshot_hash": "918c65e106c7061eaf142fc9fb513749b889034391a03c97bf2bb2e51015f7a8",
+          "cost": {
+            "measured_tokens": {
+              "input": 0,
+              "output": 0
+            },
+            "estimated_tokens": {
+              "input": 0,
+              "output": 0
+            },
+            "price_table_cost_usd": "0",
+            "price_table_cost_partial_usd": null,
+            "price_table_cost_unknown_reason": null,
+            "billed_cost_usd": "0",
+            "billed_cost_unknown_calls": 0,
+            "timed_out_calls": 0,
+            "unreconciled_timeout_calls": 0,
+            "basis": "deterministic_no_model_call",
+            "unknown_reason": "",
+            "strict_billed_ceiling": false
+          }
+        },
+        {
+          "opportunity": "msft-2026-02-04",
+          "fixture_id": "alphaagent-arms.v1.v0.msft-2026-02-04",
+          "status": "completed",
+          "failure_code": null,
+          "failure_detail": null,
+          "decision_run_id": "0263e7b1-ba1f-43b5-8eb8-34e06aef0d03",
+          "protocol_version": "heuristic_fallback.v1",
+          "snapshot_id": "3dfc4e0a-9834-4602-911b-5b933506d0d7",
+          "snapshot_hash": "c6a3491b6a3d49423fd0910408151ba06c0e7556f14ec9eb370965240e94979b",
+          "cost": {
+            "measured_tokens": {
+              "input": 0,
+              "output": 0
+            },
+            "estimated_tokens": {
+              "input": 0,
+              "output": 0
+            },
+            "price_table_cost_usd": "0",
+            "price_table_cost_partial_usd": null,
+            "price_table_cost_unknown_reason": null,
+            "billed_cost_usd": "0",
+            "billed_cost_unknown_calls": 0,
+            "timed_out_calls": 0,
+            "unreconciled_timeout_calls": 0,
+            "basis": "deterministic_no_model_call",
+            "unknown_reason": "",
+            "strict_billed_ceiling": false
+          }
+        },
+        {
+          "opportunity": "tsla-2026-02-05",
+          "fixture_id": "alphaagent-arms.v1.v0.tsla-2026-02-05",
+          "status": "completed",
+          "failure_code": null,
+          "failure_detail": null,
+          "decision_run_id": "29fc44e9-2159-4e15-ad4c-b5ca527bc11c",
+          "protocol_version": "heuristic_fallback.v1",
+          "snapshot_id": "94c6fc4e-c40d-4b65-b021-62a90c42b883",
+          "snapshot_hash": "d3b829991af710262ef259de271490918490262edaffe1b9534bb1c37ddbf458",
+          "cost": {
+            "measured_tokens": {
+              "input": 0,
+              "output": 0
+            },
+            "estimated_tokens": {
+              "input": 0,
+              "output": 0
+            },
+            "price_table_cost_usd": "0",
+            "price_table_cost_partial_usd": null,
+            "price_table_cost_unknown_reason": null,
+            "billed_cost_usd": "0",
+            "billed_cost_unknown_calls": 0,
+            "timed_out_calls": 0,
+            "unreconciled_timeout_calls": 0,
+            "basis": "deterministic_no_model_call",
+            "unknown_reason": "",
+            "strict_billed_ceiling": false
+          }
+        }
+      ],
+      "snapshots": [
+        {
+          "snapshot_id": "08fac509-3cd6-4afb-8379-ebdf56d1fd68",
+          "content_hash": "918c65e106c7061eaf142fc9fb513749b889034391a03c97bf2bb2e51015f7a8",
+          "opportunity": "aapl-2026-02-03"
+        },
+        {
+          "snapshot_id": "3dfc4e0a-9834-4602-911b-5b933506d0d7",
+          "content_hash": "c6a3491b6a3d49423fd0910408151ba06c0e7556f14ec9eb370965240e94979b",
+          "opportunity": "msft-2026-02-04"
+        },
+        {
+          "snapshot_id": "94c6fc4e-c40d-4b65-b021-62a90c42b883",
+          "content_hash": "d3b829991af710262ef259de271490918490262edaffe1b9534bb1c37ddbf458",
+          "opportunity": "tsla-2026-02-05"
+        }
+      ],
+      "trajectory": {
+        "metric_family": "portfolio_performance",
+        "method_version": "portfolio_accounting.v1",
+        "currency": "USD",
+        "synthetic": true,
+        "provenance": {
+          "synthetic": true,
+          "simulated_arm": "V0",
+          "price_source": [
+            [
+              "declared_fixture_mark",
+              9
+            ]
+          ],
+          "fill_rule": "first_executable_mark_at_or_after_decision.v1",
+          "fee_model": "declared_bps",
+          "guard_policy": "guard.v1",
+          "llm_cost_timing": "A known LLM cost is attributed at the decision instant (clamped to the window end) because it is external spend, not a portfolio flow.",
+          "note": "Simulated replay of this arm's recorded decisions under the frozen marks, the shared guard and the same accounting method. Not realised history."
+        },
+        "window": {
+          "start": "2026-02-02T23:59:59Z",
+          "end": "2026-02-12T00:00:00Z",
+          "timezone": "UTC"
+        },
+        "opening_equity_usd": "10000.00",
+        "closing_equity_usd": "10007.78",
+        "closing_cash_usd": "9750.00",
+        "closing_positions_value_usd": "257.78",
+        "cumulative_return_pct": "0.0778",
+        "time_weighted_return_pct": "0.0778",
+        "net_of_llm_return_pct": "0.0778",
+        "twr": {
+          "method": "flow_boundary_chain.v1",
+          "method_version": "portfolio_accounting.v1",
+          "return_pct": "0.0778",
+          "approximate": false,
+          "reasons": [],
+          "subperiod_returns_pct": [
+            "0.0778"
+          ],
+          "flow_boundary_count": 0,
+          "note": "Each sub-period ends at an external flow boundary; the flow changes the next base but is not itself a return."
+        },
+        "net_twr": {
+          "method": "flow_boundary_chain.v1",
+          "method_version": "portfolio_accounting.v1",
+          "return_pct": "0.0778",
+          "approximate": false,
+          "reasons": [],
+          "subperiod_returns_pct": [
+            "0.0778"
+          ],
+          "flow_boundary_count": 0,
+          "note": "Each sub-period ends at an external flow boundary; the flow changes the next base but is not itself a return."
+        },
+        "max_drawdown_pct": "0.0000",
+        "drawdown": {
+          "max_drawdown_pct": "0.0000",
+          "observations": 9,
+          "peak_equity_usd": "10000.00",
+          "peak_at": "2026-02-02T23:59:59Z",
+          "trough_equity_usd": "10000.00",
+          "trough_at": "2026-02-02T23:59:59Z",
+          "definition": "maximum decline from a prior equity peak over priced observations",
+          "sample_limited": false
+        },
+        "net_max_drawdown_pct": "0.0000",
+        "exposure": {
+          "average_gross_pct": "2.2421",
+          "end_gross_pct": "2.5758",
+          "formula": "sum(quantity * mark_price) / equity",
+          "observations": 9
+        },
+        "turnover": {
+          "traded_notional_usd": "250.00",
+          "average_equity_usd": "10003.89",
+          "average_equity_basis": "mean_of_opening_and_closing_equity",
+          "ratio": "0.0250",
+          "pct": "2.4990",
+          "formula": "sum(abs(quantity * fill_price)) / ((opening_equity + closing_equity) / 2)",
+          "trade_count": 1,
+          "fees_included_in_notional": false
+        },
+        "contribution_analysis": {
+          "rows": [
+            {
+              "ticker": "AAPL",
+              "opening_quantity": "0",
+              "closing_quantity": "1.11111111",
+              "net_quantity_change": "1.11111111",
+              "opening_price_usd": null,
+              "closing_price_usd": "232.00",
+              "buy_notional_usd": "250.00",
+              "sell_notional_usd": "0.00",
+              "fees_recorded_usd": "0.00",
+              "unknown_fee_fill_count": 0,
+              "realised_and_unrealised_pnl_usd": null,
+              "pnl_pct_of_opening_equity": null,
+              "average_capital_weight_pct": "2.5224",
+              "entries": [
+                {
+                  "at": "2026-02-03T14:30:00Z",
+                  "ticker": "AAPL",
+                  "side": "BUY",
+                  "quantity": "1.11111111",
+                  "price_usd": "225.00",
+                  "notional_usd": "250.00",
+                  "fee_usd": "0.00",
+                  "fee_recorded": true,
+                  "executed_by": "simulated",
+                  "source": "simulated_arm:V0",
+                  "capital_weight_pct": "2.5000"
+                }
+              ],
+              "exits": []
+            }
+          ],
+          "total_pnl_usd": null,
+          "equity_change_excluding_flows_usd": "7.78",
+          "reconciles_to_equity_change": null,
+          "reconciliation_tolerance_usd": "0.01",
+          "basis": "fills_and_marks.v1",
+          "note": "Contribution is additive within a position over this window: closing value minus opening value minus net invested cash minus recorded fees. It is computed from the ledger, not from per-decision scores. Unknown fees make the reconciliation optimistic and are counted."
+        },
+        "cash_reconciliation": {
+          "status": "matched",
+          "opening_cash_usd": "10000.00",
+          "deposits_usd": "0.00",
+          "withdrawals_usd": "0.00",
+          "buy_notional_usd": "250.00",
+          "sell_notional_usd": "0.00",
+          "fees_recorded_usd": "0.00",
+          "expected_closing_cash_usd": "9750.00",
+          "computed_closing_cash_usd": "9750.00",
+          "difference_usd": "0.00",
+          "unknown_fee_fill_count": 0,
+          "tolerance_usd": "0.01",
+          "formula": "opening_cash + deposits - withdrawals - buy_notional + sell_notional - recorded_fees",
+          "note": "Unknown fees are not guessed; they are counted. A matched result with an unknown fee means the known movements reconcile, not that the fee was zero."
+        },
+        "trade_count": 1,
+        "risk_adjusted": {
+          "sharpe": {
+            "included": false,
+            "value": null,
+            "reason": "The valuation frequency is event-driven, not a fixed daily series. A Sharpe ratio needs a declared frequency, annualisation and risk-free rate; this report does not fabricate them.",
+            "frequency": "event_driven",
+            "annualization": null,
+            "risk_free_rate": null,
+            "observations": 1,
+            "sample_limits": "1 sub-period return(s); fewer than the 30 a stable Sharpe would need, and the spacing is not uniform."
+          }
+        },
+        "fees": {
+          "recorded_fees_usd": "0.00",
+          "fees_complete": true,
+          "fill_count": 1,
+          "unknown_fee_fill_count": 0,
+          "unknown_fee_fill_sources": [],
+          "policy": "recorded_fees_only.v1",
+          "note": "NULL fee means no fee was recorded for that fill, not that the fee was zero. The equity series uses recorded fees only and is marked approximate when any fill in the window is unknown."
+        },
+        "llm_costs": {
+          "recorded_cost_usd": "0.000000",
+          "cost_events": [
+            {
+              "at": "2026-02-12T00:00:00Z",
+              "amount_usd": "0.000000",
+              "source": "deterministic_no_model_call",
+              "run_key": "alphaagent-arms.v1.v0.aapl-2026-02-03"
+            },
+            {
+              "at": "2026-02-12T00:00:00Z",
+              "amount_usd": "0.000000",
+              "source": "deterministic_no_model_call",
+              "run_key": "alphaagent-arms.v1.v0.msft-2026-02-04"
+            },
+            {
+              "at": "2026-02-12T00:00:00Z",
+              "amount_usd": "0.000000",
+              "source": "deterministic_no_model_call",
+              "run_key": "alphaagent-arms.v1.v0.tsla-2026-02-05"
+            }
+          ],
+          "cost_event_count": 3,
+          "missing_cost_run_count": 0,
+          "costs_complete": true,
+          "net_return_pct": "0.0778",
+          "known_cost_only_return_pct": "0.0778",
+          "net_return_established": true,
+          "net_return_reason": null,
+          "equity_series_net_of_llm": [
+            {
+              "at": "2026-02-02T23:59:59Z",
+              "equity_net_of_llm_usd": "10000.00"
+            },
+            {
+              "at": "2026-02-03T14:30:00Z",
+              "equity_net_of_llm_usd": "10000.00"
+            },
+            {
+              "at": "2026-02-03T14:35:00Z",
+              "equity_net_of_llm_usd": "10000.56"
+            },
+            {
+              "at": "2026-02-04T14:30:00Z",
+              "equity_net_of_llm_usd": "10000.56"
+            },
+            {
+              "at": "2026-02-04T14:35:00Z",
+              "equity_net_of_llm_usd": "10000.56"
+            },
+            {
+              "at": "2026-02-05T14:30:00Z",
+              "equity_net_of_llm_usd": "10000.56"
+            },
+            {
+              "at": "2026-02-05T14:35:00Z",
+              "equity_net_of_llm_usd": "10000.56"
+            },
+            {
+              "at": "2026-02-11T20:00:00Z",
+              "equity_net_of_llm_usd": "10007.78"
+            },
+            {
+              "at": "2026-02-12T00:00:00Z",
+              "equity_net_of_llm_usd": "10007.78"
+            }
+          ],
+          "funding": "external_provider_account",
+          "deducted_from_portfolio_cash": false,
+          "double_counted": false,
+          "method": "explicit_net_of_llm_equity_series.v1",
+          "note": "LLM/API costs are not portfolio cash flows. They are deducted only in the net series, so they are not also subtracted from the gross equity."
+        },
+        "external_flows": [],
+        "fills": [
+          {
+            "at": "2026-02-03T14:30:00Z",
+            "ticker": "AAPL",
+            "side": "BUY",
+            "quantity": "1.11111111",
+            "price_usd": "225.00",
+            "notional_usd": "250.00",
+            "fee_usd": "0.00",
+            "fee_recorded": true,
+            "executed_by": "simulated",
+            "source": "simulated_arm:V0"
+          }
+        ],
+        "equity_series": [
+          {
+            "at": "2026-02-02T23:59:59Z",
+            "cash_usd": "10000.00",
+            "positions_value_usd": "0.00",
+            "equity_usd": "10000.00",
+            "equity_net_of_llm_usd": "10000.00",
+            "gross_exposure_pct": "0.0000",
+            "position_values_usd": {},
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {},
+            "oldest_mark_age_days": null,
+            "events": []
+          },
+          {
+            "at": "2026-02-03T14:30:00Z",
+            "cash_usd": "9750.00",
+            "positions_value_usd": "250.00",
+            "equity_usd": "10000.00",
+            "equity_net_of_llm_usd": "10000.00",
+            "gross_exposure_pct": "2.5000",
+            "position_values_usd": {
+              "AAPL": "250.00"
+            },
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {
+              "AAPL": "declared_fixture_mark"
+            },
+            "oldest_mark_age_days": "0.0",
+            "events": [
+              "BUY 1.11111111 AAPL @ 225.00"
+            ]
+          },
+          {
+            "at": "2026-02-03T14:35:00Z",
+            "cash_usd": "9750.00",
+            "positions_value_usd": "250.56",
+            "equity_usd": "10000.56",
+            "equity_net_of_llm_usd": "10000.56",
+            "gross_exposure_pct": "2.5055",
+            "position_values_usd": {
+              "AAPL": "250.56"
+            },
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {
+              "AAPL": "declared_fixture_mark"
+            },
+            "oldest_mark_age_days": "0.0",
+            "events": []
+          },
+          {
+            "at": "2026-02-04T14:30:00Z",
+            "cash_usd": "9750.00",
+            "positions_value_usd": "250.56",
+            "equity_usd": "10000.56",
+            "equity_net_of_llm_usd": "10000.56",
+            "gross_exposure_pct": "2.5055",
+            "position_values_usd": {
+              "AAPL": "250.56"
+            },
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {
+              "AAPL": "declared_fixture_mark"
+            },
+            "oldest_mark_age_days": "1.0",
+            "events": []
+          },
+          {
+            "at": "2026-02-04T14:35:00Z",
+            "cash_usd": "9750.00",
+            "positions_value_usd": "250.56",
+            "equity_usd": "10000.56",
+            "equity_net_of_llm_usd": "10000.56",
+            "gross_exposure_pct": "2.5055",
+            "position_values_usd": {
+              "AAPL": "250.56"
+            },
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {
+              "AAPL": "declared_fixture_mark"
+            },
+            "oldest_mark_age_days": "1.0",
+            "events": []
+          },
+          {
+            "at": "2026-02-05T14:30:00Z",
+            "cash_usd": "9750.00",
+            "positions_value_usd": "250.56",
+            "equity_usd": "10000.56",
+            "equity_net_of_llm_usd": "10000.56",
+            "gross_exposure_pct": "2.5055",
+            "position_values_usd": {
+              "AAPL": "250.56"
+            },
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {
+              "AAPL": "declared_fixture_mark"
+            },
+            "oldest_mark_age_days": "2.0",
+            "events": []
+          },
+          {
+            "at": "2026-02-05T14:35:00Z",
+            "cash_usd": "9750.00",
+            "positions_value_usd": "250.56",
+            "equity_usd": "10000.56",
+            "equity_net_of_llm_usd": "10000.56",
+            "gross_exposure_pct": "2.5055",
+            "position_values_usd": {
+              "AAPL": "250.56"
+            },
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {
+              "AAPL": "declared_fixture_mark"
+            },
+            "oldest_mark_age_days": "2.0",
+            "events": []
+          },
+          {
+            "at": "2026-02-11T20:00:00Z",
+            "cash_usd": "9750.00",
+            "positions_value_usd": "257.78",
+            "equity_usd": "10007.78",
+            "equity_net_of_llm_usd": "10007.78",
+            "gross_exposure_pct": "2.5758",
+            "position_values_usd": {
+              "AAPL": "257.78"
+            },
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {
+              "AAPL": "declared_fixture_mark"
+            },
+            "oldest_mark_age_days": "0.0",
+            "events": []
+          },
+          {
+            "at": "2026-02-12T00:00:00Z",
+            "cash_usd": "9750.00",
+            "positions_value_usd": "257.78",
+            "equity_usd": "10007.78",
+            "equity_net_of_llm_usd": "10007.78",
+            "gross_exposure_pct": "2.5758",
+            "position_values_usd": {
+              "AAPL": "257.78"
+            },
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {
+              "AAPL": "declared_fixture_mark"
+            },
+            "oldest_mark_age_days": "0.2",
+            "events": []
+          }
+        ],
+        "net_equity_series": [
+          {
+            "at": "2026-02-02T23:59:59Z",
+            "equity_net_of_llm_usd": "10000.00"
+          },
+          {
+            "at": "2026-02-03T14:30:00Z",
+            "equity_net_of_llm_usd": "10000.00"
+          },
+          {
+            "at": "2026-02-03T14:35:00Z",
+            "equity_net_of_llm_usd": "10000.56"
+          },
+          {
+            "at": "2026-02-04T14:30:00Z",
+            "equity_net_of_llm_usd": "10000.56"
+          },
+          {
+            "at": "2026-02-04T14:35:00Z",
+            "equity_net_of_llm_usd": "10000.56"
+          },
+          {
+            "at": "2026-02-05T14:30:00Z",
+            "equity_net_of_llm_usd": "10000.56"
+          },
+          {
+            "at": "2026-02-05T14:35:00Z",
+            "equity_net_of_llm_usd": "10000.56"
+          },
+          {
+            "at": "2026-02-11T20:00:00Z",
+            "equity_net_of_llm_usd": "10007.78"
+          },
+          {
+            "at": "2026-02-12T00:00:00Z",
+            "equity_net_of_llm_usd": "10007.78"
+          }
+        ],
+        "flow_boundaries": [],
+        "reconciliation": {
+          "status": "no_snapshot",
+          "anchors": [],
+          "snapshot_detail": "aggregate_only",
+          "note": "A PortfolioSnapshot stores aggregate cash and positions value, not per-instrument quantities. It can reconcile a replay total; it cannot value a historical position on its own."
+        },
+        "methodology": {
+          "version": "portfolio_accounting.v1",
+          "equity_definition": "E(t) = cash(t) + sum(quantity(i,t) * price(i,t))",
+          "cash_basis": "declared_opportunity_set_starting_state",
+          "cash_basis_flags": [],
+          "opening_cash_usd": "10000.00",
+          "opening_positions": {},
+          "position_basis": "full_ledger_replay_from_portfolio_inception",
+          "short_policy": "A SELL may only close or reduce a long. An oversell is refused rather than silently treated as a short.",
+          "mark_policy": "latest_known_mark_at_or_before_valuation.v1",
+          "mark_sources": {
+            "declared_fixture_mark": 9,
+            "fill": 1
+          },
+          "mark_staleness_days": 7,
+          "valuation_timing": "End of timestamp: external flows are applied before fills at the same instant.",
+          "fill_rule": "first_executable_mark_at_or_after_decision.v1",
+          "twr_method": "flow_boundary_chain.v1",
+          "twr_note": "Each sub-period ends at an external flow boundary; the flow changes the next base but is not itself a return.",
+          "fee_policy": "recorded_fees_only.v1",
+          "llm_cost_policy": "explicit_net_of_llm_equity_series.v1",
+          "turnover_formula": "sum(abs(quantity * fill_price)) / ((opening_equity + closing_equity) / 2)",
+          "drawdown_definition": "maximum decline from a prior equity peak over priced observations",
+          "approximate": false,
+          "approximate_reasons": [],
+          "observations": 9,
+          "priced_observations": 9,
+          "unpriced_observations": 0,
+          "flow_count": 0,
+          "fill_count": 1
+        },
+        "flags": [],
+        "approximate": false,
+        "orders": [
+          {
+            "opportunity": "aapl-2026-02-03",
+            "decision_run_id": "4033b6e1-a64a-4f19-aed4-28129c200abb",
+            "decision_at": "2026-02-03T14:30:00Z",
+            "decision_recorded_at": "2026-11-11T15:47:39.424650Z",
+            "proposal_action": "BUY",
+            "requested_quantity": "1.11111111",
+            "price_at_decision_usd": "225.00",
+            "guard_status": "approved",
+            "guard_reason": "Approved BUY of 1.11111111 AAPL.",
+            "binding_rule": null,
+            "allowed_quantity": "1.11111111",
+            "fill": {
+              "at": "2026-02-03T14:30:00Z",
+              "ticker": "AAPL",
+              "side": "BUY",
+              "quantity": "1.11111111",
+              "price_usd": "225.00",
+              "notional_usd": "250.00",
+              "fee_usd": "0.00",
+              "fee_recorded": true,
+              "executed_by": "simulated",
+              "source": "simulated_arm:V0"
+            },
+            "equity_after_usd": "10000.00",
+            "reason": null,
+            "fee_bps": "0"
+          },
+          {
+            "opportunity": "msft-2026-02-04",
+            "decision_run_id": "0263e7b1-ba1f-43b5-8eb8-34e06aef0d03",
+            "decision_at": "2026-02-04T14:30:00Z",
+            "decision_recorded_at": "2026-11-11T15:47:39.724892Z",
+            "proposal_action": "HOLD",
+            "requested_quantity": null,
+            "price_at_decision_usd": "410.00",
+            "guard_status": "hold_no_trade",
+            "guard_reason": "HOLD - no execution required.",
+            "binding_rule": null,
+            "allowed_quantity": "0",
+            "fill": null,
+            "equity_after_usd": "10000.56",
+            "reason": null
+          },
+          {
+            "opportunity": "tsla-2026-02-05",
+            "decision_run_id": "29fc44e9-2159-4e15-ad4c-b5ca527bc11c",
+            "decision_at": "2026-02-05T14:30:00Z",
+            "decision_recorded_at": "2026-11-11T15:47:40.010672Z",
+            "proposal_action": "HOLD",
+            "requested_quantity": null,
+            "price_at_decision_usd": "250.00",
+            "guard_status": "hold_no_trade",
+            "guard_reason": "HOLD - no execution required.",
+            "binding_rule": null,
+            "allowed_quantity": "0",
+            "fill": null,
+            "equity_after_usd": "10000.56",
+            "reason": null
+          }
+        ],
+        "orders_count": 3,
+        "fill_count": 1,
+        "per_opportunity": [
+          {
+            "opportunity": "aapl-2026-02-03",
+            "ticker": "AAPL",
+            "scheduled_at": "2026-02-03T14:30:00Z"
+          },
+          {
+            "opportunity": "msft-2026-02-04",
+            "ticker": "MSFT",
+            "scheduled_at": "2026-02-04T14:30:00Z"
+          },
+          {
+            "opportunity": "tsla-2026-02-05",
+            "ticker": "TSLA",
+            "scheduled_at": "2026-02-05T14:30:00Z"
+          }
+        ]
+      }
+    },
+    {
+      "key": "V1",
+      "label": "One analyst",
+      "engine": "single_agent",
+      "implemented": true,
+      "status": "executed",
+      "reason": null,
+      "protocol_version": "single_agent_baseline.v1",
+      "expected_protocol_version": "single_agent_baseline.v1",
+      "protocol_matches_declaration": true,
+      "requires_rebuttals": false,
+      "provider": "stub",
+      "scheduled_runs": 3,
+      "completed_runs": 3,
+      "failed_runs": 0,
+      "not_executed_runs": 0,
+      "excluded_from_denominator": false,
+      "cost": {
+        "runs": 3,
+        "measured_tokens": {
+          "input": 0,
+          "output": 0
+        },
+        "estimated_tokens": {
+          "input": 2011,
+          "output": 351
+        },
+        "price_table_cost_usd": "0.001870",
+        "price_table_cost_partial_usd": null,
+        "price_table_cost_unknown_runs": 0,
+        "billed_cost_usd": null,
+        "billed_cost_unknown_runs": 3,
+        "billed_cost_unknown_reasons": {
+          "scripted_provider_made_no_charge": 3
+        },
+        "timed_out_calls": 0,
+        "unreconciled_timeout_calls": 0,
+        "strict_billed_ceiling": false,
+        "note": "Measured tokens, estimated tokens, price-table cost and billed cost are reported separately. A null billed total means at least one run's provider reported no charge; it is not a zero."
+      },
+      "runs": [
+        {
+          "opportunity": "aapl-2026-02-03",
+          "fixture_id": "alphaagent-arms.v1.v1.aapl-2026-02-03",
+          "status": "completed",
+          "failure_code": null,
+          "failure_detail": null,
+          "decision_run_id": "dec3ab9e-b387-4f68-80b2-358c5b8281d2",
+          "protocol_version": "single_agent_baseline.v1",
+          "snapshot_id": "08fac509-3cd6-4afb-8379-ebdf56d1fd68",
+          "snapshot_hash": "918c65e106c7061eaf142fc9fb513749b889034391a03c97bf2bb2e51015f7a8",
+          "cost": {
+            "measured_tokens": {
+              "input": 0,
+              "output": 0
+            },
+            "estimated_tokens": {
+              "input": 675,
+              "output": 117
+            },
+            "price_table_cost_usd": "0.000630",
+            "price_table_cost_partial_usd": null,
+            "price_table_cost_unknown_reason": null,
+            "billed_cost_usd": null,
+            "billed_cost_unknown_calls": 1,
+            "timed_out_calls": 0,
+            "unreconciled_timeout_calls": 0,
+            "basis": "price_table_estimate",
+            "unknown_reason": "scripted_provider_made_no_charge",
+            "strict_billed_ceiling": false
+          }
+        },
+        {
+          "opportunity": "msft-2026-02-04",
+          "fixture_id": "alphaagent-arms.v1.v1.msft-2026-02-04",
+          "status": "completed",
+          "failure_code": null,
+          "failure_detail": null,
+          "decision_run_id": "4311328d-b3ff-4658-a26d-e503ad8d4ca8",
+          "protocol_version": "single_agent_baseline.v1",
+          "snapshot_id": "3dfc4e0a-9834-4602-911b-5b933506d0d7",
+          "snapshot_hash": "c6a3491b6a3d49423fd0910408151ba06c0e7556f14ec9eb370965240e94979b",
+          "cost": {
+            "measured_tokens": {
+              "input": 0,
+              "output": 0
+            },
+            "estimated_tokens": {
+              "input": 670,
+              "output": 117
+            },
+            "price_table_cost_usd": "0.000620",
+            "price_table_cost_partial_usd": null,
+            "price_table_cost_unknown_reason": null,
+            "billed_cost_usd": null,
+            "billed_cost_unknown_calls": 1,
+            "timed_out_calls": 0,
+            "unreconciled_timeout_calls": 0,
+            "basis": "price_table_estimate",
+            "unknown_reason": "scripted_provider_made_no_charge",
+            "strict_billed_ceiling": false
+          }
+        },
+        {
+          "opportunity": "tsla-2026-02-05",
+          "fixture_id": "alphaagent-arms.v1.v1.tsla-2026-02-05",
+          "status": "completed",
+          "failure_code": null,
+          "failure_detail": null,
+          "decision_run_id": "bbd1b68b-97a1-4e01-aa28-069240ccaf0b",
+          "protocol_version": "single_agent_baseline.v1",
+          "snapshot_id": "94c6fc4e-c40d-4b65-b021-62a90c42b883",
+          "snapshot_hash": "d3b829991af710262ef259de271490918490262edaffe1b9534bb1c37ddbf458",
+          "cost": {
+            "measured_tokens": {
+              "input": 0,
+              "output": 0
+            },
+            "estimated_tokens": {
+              "input": 666,
+              "output": 117
+            },
+            "price_table_cost_usd": "0.000620",
+            "price_table_cost_partial_usd": null,
+            "price_table_cost_unknown_reason": null,
+            "billed_cost_usd": null,
+            "billed_cost_unknown_calls": 1,
+            "timed_out_calls": 0,
+            "unreconciled_timeout_calls": 0,
+            "basis": "price_table_estimate",
+            "unknown_reason": "scripted_provider_made_no_charge",
+            "strict_billed_ceiling": false
+          }
+        }
+      ],
+      "snapshots": [
+        {
+          "snapshot_id": "08fac509-3cd6-4afb-8379-ebdf56d1fd68",
+          "content_hash": "918c65e106c7061eaf142fc9fb513749b889034391a03c97bf2bb2e51015f7a8",
+          "opportunity": "aapl-2026-02-03"
+        },
+        {
+          "snapshot_id": "3dfc4e0a-9834-4602-911b-5b933506d0d7",
+          "content_hash": "c6a3491b6a3d49423fd0910408151ba06c0e7556f14ec9eb370965240e94979b",
+          "opportunity": "msft-2026-02-04"
+        },
+        {
+          "snapshot_id": "94c6fc4e-c40d-4b65-b021-62a90c42b883",
+          "content_hash": "d3b829991af710262ef259de271490918490262edaffe1b9534bb1c37ddbf458",
+          "opportunity": "tsla-2026-02-05"
+        }
+      ],
+      "trajectory": {
+        "metric_family": "portfolio_performance",
+        "method_version": "portfolio_accounting.v1",
+        "currency": "USD",
+        "synthetic": true,
+        "provenance": {
+          "synthetic": true,
+          "simulated_arm": "V1",
+          "price_source": [
+            [
+              "declared_fixture_mark",
+              9
+            ]
+          ],
+          "fill_rule": "first_executable_mark_at_or_after_decision.v1",
+          "fee_model": "declared_bps",
+          "guard_policy": "guard.v1",
+          "llm_cost_timing": "A known LLM cost is attributed at the decision instant (clamped to the window end) because it is external spend, not a portfolio flow.",
+          "note": "Simulated replay of this arm's recorded decisions under the frozen marks, the shared guard and the same accounting method. Not realised history."
+        },
+        "window": {
+          "start": "2026-02-02T23:59:59Z",
+          "end": "2026-02-12T00:00:00Z",
+          "timezone": "UTC"
+        },
+        "opening_equity_usd": "10000.00",
+        "closing_equity_usd": "10000.00",
+        "closing_cash_usd": "10000.00",
+        "closing_positions_value_usd": "0.00",
+        "cumulative_return_pct": "0.0000",
+        "time_weighted_return_pct": "0.0000",
+        "net_of_llm_return_pct": null,
+        "twr": {
+          "method": "flow_boundary_chain.v1",
+          "method_version": "portfolio_accounting.v1",
+          "return_pct": "0.0000",
+          "approximate": false,
+          "reasons": [],
+          "subperiod_returns_pct": [
+            "0.0000"
+          ],
+          "flow_boundary_count": 0,
+          "note": "Each sub-period ends at an external flow boundary; the flow changes the next base but is not itself a return."
+        },
+        "net_twr": {
+          "method": "flow_boundary_chain.v1",
+          "method_version": "portfolio_accounting.v1",
+          "return_pct": null,
+          "approximate": true,
+          "reasons": [
+            "llm_costs_incomplete"
+          ],
+          "subperiod_returns_pct": [
+            "0.0000"
+          ],
+          "flow_boundary_count": 0,
+          "note": "Each sub-period ends at an external flow boundary; the flow changes the next base but is not itself a return.",
+          "known_cost_only_return_pct": "0.0000"
+        },
+        "max_drawdown_pct": "0.0000",
+        "drawdown": {
+          "max_drawdown_pct": "0.0000",
+          "observations": 9,
+          "peak_equity_usd": "10000.00",
+          "peak_at": "2026-02-02T23:59:59Z",
+          "trough_equity_usd": "10000.00",
+          "trough_at": "2026-02-02T23:59:59Z",
+          "definition": "maximum decline from a prior equity peak over priced observations",
+          "sample_limited": false
+        },
+        "net_max_drawdown_pct": "0.0000",
+        "exposure": {
+          "average_gross_pct": "0.0000",
+          "end_gross_pct": "0.0000",
+          "formula": "sum(quantity * mark_price) / equity",
+          "observations": 9
+        },
+        "turnover": {
+          "traded_notional_usd": "0.00",
+          "average_equity_usd": "10000.00",
+          "average_equity_basis": "mean_of_opening_and_closing_equity",
+          "ratio": "0.0000",
+          "pct": "0.0000",
+          "formula": "sum(abs(quantity * fill_price)) / ((opening_equity + closing_equity) / 2)",
+          "trade_count": 0,
+          "fees_included_in_notional": false
+        },
+        "contribution_analysis": {
+          "rows": [],
+          "total_pnl_usd": "0.00",
+          "equity_change_excluding_flows_usd": "0.00",
+          "reconciles_to_equity_change": true,
+          "reconciliation_tolerance_usd": "0.01",
+          "basis": "fills_and_marks.v1",
+          "note": "Contribution is additive within a position over this window: closing value minus opening value minus net invested cash minus recorded fees. It is computed from the ledger, not from per-decision scores. Unknown fees make the reconciliation optimistic and are counted."
+        },
+        "cash_reconciliation": {
+          "status": "matched",
+          "opening_cash_usd": "10000.00",
+          "deposits_usd": "0.00",
+          "withdrawals_usd": "0.00",
+          "buy_notional_usd": "0.00",
+          "sell_notional_usd": "0.00",
+          "fees_recorded_usd": "0.00",
+          "expected_closing_cash_usd": "10000.00",
+          "computed_closing_cash_usd": "10000.00",
+          "difference_usd": "0.00",
+          "unknown_fee_fill_count": 0,
+          "tolerance_usd": "0.01",
+          "formula": "opening_cash + deposits - withdrawals - buy_notional + sell_notional - recorded_fees",
+          "note": "Unknown fees are not guessed; they are counted. A matched result with an unknown fee means the known movements reconcile, not that the fee was zero."
+        },
+        "trade_count": 0,
+        "risk_adjusted": {
+          "sharpe": {
+            "included": false,
+            "value": null,
+            "reason": "The valuation frequency is event-driven, not a fixed daily series. A Sharpe ratio needs a declared frequency, annualisation and risk-free rate; this report does not fabricate them.",
+            "frequency": "event_driven",
+            "annualization": null,
+            "risk_free_rate": null,
+            "observations": 1,
+            "sample_limits": "1 sub-period return(s); fewer than the 30 a stable Sharpe would need, and the spacing is not uniform."
+          }
+        },
+        "fees": {
+          "recorded_fees_usd": "0.00",
+          "fees_complete": true,
+          "fill_count": 0,
+          "unknown_fee_fill_count": 0,
+          "unknown_fee_fill_sources": [],
+          "policy": "recorded_fees_only.v1",
+          "note": "NULL fee means no fee was recorded for that fill, not that the fee was zero. The equity series uses recorded fees only and is marked approximate when any fill in the window is unknown."
+        },
+        "llm_costs": {
+          "recorded_cost_usd": null,
+          "cost_events": [],
+          "cost_event_count": 0,
+          "missing_cost_run_count": 3,
+          "costs_complete": false,
+          "net_return_pct": null,
+          "known_cost_only_return_pct": "0.0000",
+          "net_return_established": false,
+          "net_return_reason": "3 run(s) reported no cost. A missing cost is not treated as zero, so the net-of-LLM return cannot be established.",
+          "equity_series_net_of_llm": [
+            {
+              "at": "2026-02-02T23:59:59Z",
+              "equity_net_of_llm_usd": "10000.00"
+            },
+            {
+              "at": "2026-02-03T14:30:00Z",
+              "equity_net_of_llm_usd": "10000.00"
+            },
+            {
+              "at": "2026-02-03T14:35:00Z",
+              "equity_net_of_llm_usd": "10000.00"
+            },
+            {
+              "at": "2026-02-04T14:30:00Z",
+              "equity_net_of_llm_usd": "10000.00"
+            },
+            {
+              "at": "2026-02-04T14:35:00Z",
+              "equity_net_of_llm_usd": "10000.00"
+            },
+            {
+              "at": "2026-02-05T14:30:00Z",
+              "equity_net_of_llm_usd": "10000.00"
+            },
+            {
+              "at": "2026-02-05T14:35:00Z",
+              "equity_net_of_llm_usd": "10000.00"
+            },
+            {
+              "at": "2026-02-11T20:00:00Z",
+              "equity_net_of_llm_usd": "10000.00"
+            },
+            {
+              "at": "2026-02-12T00:00:00Z",
+              "equity_net_of_llm_usd": "10000.00"
+            }
+          ],
+          "funding": "external_provider_account",
+          "deducted_from_portfolio_cash": false,
+          "double_counted": false,
+          "method": "explicit_net_of_llm_equity_series.v1",
+          "note": "LLM/API costs are not portfolio cash flows. They are deducted only in the net series, so they are not also subtracted from the gross equity."
+        },
+        "external_flows": [],
+        "fills": [],
+        "equity_series": [
+          {
+            "at": "2026-02-02T23:59:59Z",
+            "cash_usd": "10000.00",
+            "positions_value_usd": "0.00",
+            "equity_usd": "10000.00",
+            "equity_net_of_llm_usd": "10000.00",
+            "gross_exposure_pct": "0.0000",
+            "position_values_usd": {},
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {},
+            "oldest_mark_age_days": null,
+            "events": []
+          },
+          {
+            "at": "2026-02-03T14:30:00Z",
+            "cash_usd": "10000.00",
+            "positions_value_usd": "0.00",
+            "equity_usd": "10000.00",
+            "equity_net_of_llm_usd": "10000.00",
+            "gross_exposure_pct": "0.0000",
+            "position_values_usd": {},
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {},
+            "oldest_mark_age_days": null,
+            "events": []
+          },
+          {
+            "at": "2026-02-03T14:35:00Z",
+            "cash_usd": "10000.00",
+            "positions_value_usd": "0.00",
+            "equity_usd": "10000.00",
+            "equity_net_of_llm_usd": "10000.00",
+            "gross_exposure_pct": "0.0000",
+            "position_values_usd": {},
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {},
+            "oldest_mark_age_days": null,
+            "events": []
+          },
+          {
+            "at": "2026-02-04T14:30:00Z",
+            "cash_usd": "10000.00",
+            "positions_value_usd": "0.00",
+            "equity_usd": "10000.00",
+            "equity_net_of_llm_usd": "10000.00",
+            "gross_exposure_pct": "0.0000",
+            "position_values_usd": {},
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {},
+            "oldest_mark_age_days": null,
+            "events": []
+          },
+          {
+            "at": "2026-02-04T14:35:00Z",
+            "cash_usd": "10000.00",
+            "positions_value_usd": "0.00",
+            "equity_usd": "10000.00",
+            "equity_net_of_llm_usd": "10000.00",
+            "gross_exposure_pct": "0.0000",
+            "position_values_usd": {},
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {},
+            "oldest_mark_age_days": null,
+            "events": []
+          },
+          {
+            "at": "2026-02-05T14:30:00Z",
+            "cash_usd": "10000.00",
+            "positions_value_usd": "0.00",
+            "equity_usd": "10000.00",
+            "equity_net_of_llm_usd": "10000.00",
+            "gross_exposure_pct": "0.0000",
+            "position_values_usd": {},
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {},
+            "oldest_mark_age_days": null,
+            "events": []
+          },
+          {
+            "at": "2026-02-05T14:35:00Z",
+            "cash_usd": "10000.00",
+            "positions_value_usd": "0.00",
+            "equity_usd": "10000.00",
+            "equity_net_of_llm_usd": "10000.00",
+            "gross_exposure_pct": "0.0000",
+            "position_values_usd": {},
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {},
+            "oldest_mark_age_days": null,
+            "events": []
+          },
+          {
+            "at": "2026-02-11T20:00:00Z",
+            "cash_usd": "10000.00",
+            "positions_value_usd": "0.00",
+            "equity_usd": "10000.00",
+            "equity_net_of_llm_usd": "10000.00",
+            "gross_exposure_pct": "0.0000",
+            "position_values_usd": {},
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {},
+            "oldest_mark_age_days": null,
+            "events": []
+          },
+          {
+            "at": "2026-02-12T00:00:00Z",
+            "cash_usd": "10000.00",
+            "positions_value_usd": "0.00",
+            "equity_usd": "10000.00",
+            "equity_net_of_llm_usd": "10000.00",
+            "gross_exposure_pct": "0.0000",
+            "position_values_usd": {},
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {},
+            "oldest_mark_age_days": null,
+            "events": []
+          }
+        ],
+        "net_equity_series": [
+          {
+            "at": "2026-02-02T23:59:59Z",
+            "equity_net_of_llm_usd": "10000.00"
+          },
+          {
+            "at": "2026-02-03T14:30:00Z",
+            "equity_net_of_llm_usd": "10000.00"
+          },
+          {
+            "at": "2026-02-03T14:35:00Z",
+            "equity_net_of_llm_usd": "10000.00"
+          },
+          {
+            "at": "2026-02-04T14:30:00Z",
+            "equity_net_of_llm_usd": "10000.00"
+          },
+          {
+            "at": "2026-02-04T14:35:00Z",
+            "equity_net_of_llm_usd": "10000.00"
+          },
+          {
+            "at": "2026-02-05T14:30:00Z",
+            "equity_net_of_llm_usd": "10000.00"
+          },
+          {
+            "at": "2026-02-05T14:35:00Z",
+            "equity_net_of_llm_usd": "10000.00"
+          },
+          {
+            "at": "2026-02-11T20:00:00Z",
+            "equity_net_of_llm_usd": "10000.00"
+          },
+          {
+            "at": "2026-02-12T00:00:00Z",
+            "equity_net_of_llm_usd": "10000.00"
+          }
+        ],
+        "flow_boundaries": [],
+        "reconciliation": {
+          "status": "no_snapshot",
+          "anchors": [],
+          "snapshot_detail": "aggregate_only",
+          "note": "A PortfolioSnapshot stores aggregate cash and positions value, not per-instrument quantities. It can reconcile a replay total; it cannot value a historical position on its own."
+        },
+        "methodology": {
+          "version": "portfolio_accounting.v1",
+          "equity_definition": "E(t) = cash(t) + sum(quantity(i,t) * price(i,t))",
+          "cash_basis": "declared_opportunity_set_starting_state",
+          "cash_basis_flags": [],
+          "opening_cash_usd": "10000.00",
+          "opening_positions": {},
+          "position_basis": "full_ledger_replay_from_portfolio_inception",
+          "short_policy": "A SELL may only close or reduce a long. An oversell is refused rather than silently treated as a short.",
+          "mark_policy": "latest_known_mark_at_or_before_valuation.v1",
+          "mark_sources": {
+            "declared_fixture_mark": 9
+          },
+          "mark_staleness_days": 7,
+          "valuation_timing": "End of timestamp: external flows are applied before fills at the same instant.",
+          "fill_rule": "first_executable_mark_at_or_after_decision.v1",
+          "twr_method": "flow_boundary_chain.v1",
+          "twr_note": "Each sub-period ends at an external flow boundary; the flow changes the next base but is not itself a return.",
+          "fee_policy": "recorded_fees_only.v1",
+          "llm_cost_policy": "explicit_net_of_llm_equity_series.v1",
+          "turnover_formula": "sum(abs(quantity * fill_price)) / ((opening_equity + closing_equity) / 2)",
+          "drawdown_definition": "maximum decline from a prior equity peak over priced observations",
+          "approximate": false,
+          "approximate_reasons": [],
+          "observations": 9,
+          "priced_observations": 9,
+          "unpriced_observations": 0,
+          "flow_count": 0,
+          "fill_count": 0
+        },
+        "flags": [
+          "llm_costs_incomplete",
+          "llm_cost_not_reported"
+        ],
+        "approximate": false,
+        "orders": [
+          {
+            "opportunity": "aapl-2026-02-03",
+            "decision_run_id": "dec3ab9e-b387-4f68-80b2-358c5b8281d2",
+            "decision_at": "2026-02-03T14:30:00Z",
+            "decision_recorded_at": "2026-11-11T15:47:40.494795Z",
+            "proposal_action": "HOLD",
+            "requested_quantity": null,
+            "price_at_decision_usd": "225.00",
+            "guard_status": "hold_no_trade",
+            "guard_reason": "HOLD - no execution required.",
+            "binding_rule": null,
+            "allowed_quantity": "0",
+            "fill": null,
+            "equity_after_usd": "10000.00",
+            "reason": null
+          },
+          {
+            "opportunity": "msft-2026-02-04",
+            "decision_run_id": "4311328d-b3ff-4658-a26d-e503ad8d4ca8",
+            "decision_at": "2026-02-04T14:30:00Z",
+            "decision_recorded_at": "2026-11-11T15:47:41.057961Z",
+            "proposal_action": "HOLD",
+            "requested_quantity": null,
+            "price_at_decision_usd": "410.00",
+            "guard_status": "hold_no_trade",
+            "guard_reason": "HOLD - no execution required.",
+            "binding_rule": null,
+            "allowed_quantity": "0",
+            "fill": null,
+            "equity_after_usd": "10000.00",
+            "reason": null
+          },
+          {
+            "opportunity": "tsla-2026-02-05",
+            "decision_run_id": "bbd1b68b-97a1-4e01-aa28-069240ccaf0b",
+            "decision_at": "2026-02-05T14:30:00Z",
+            "decision_recorded_at": "2026-11-11T15:47:41.627093Z",
+            "proposal_action": "HOLD",
+            "requested_quantity": null,
+            "price_at_decision_usd": "250.00",
+            "guard_status": "hold_no_trade",
+            "guard_reason": "HOLD - no execution required.",
+            "binding_rule": null,
+            "allowed_quantity": "0",
+            "fill": null,
+            "equity_after_usd": "10000.00",
+            "reason": null
+          }
+        ],
+        "orders_count": 3,
+        "fill_count": 0,
+        "per_opportunity": [
+          {
+            "opportunity": "aapl-2026-02-03",
+            "ticker": "AAPL",
+            "scheduled_at": "2026-02-03T14:30:00Z"
+          },
+          {
+            "opportunity": "msft-2026-02-04",
+            "ticker": "MSFT",
+            "scheduled_at": "2026-02-04T14:30:00Z"
+          },
+          {
+            "opportunity": "tsla-2026-02-05",
+            "ticker": "TSLA",
+            "scheduled_at": "2026-02-05T14:30:00Z"
+          }
+        ]
+      }
+    },
+    {
+      "key": "V2",
+      "label": "Current pipeline (no rebuttal round)",
+      "engine": "debate",
+      "implemented": true,
+      "status": "executed",
+      "reason": null,
+      "protocol_version": "debate.no_rebuttal.v1",
+      "expected_protocol_version": "debate.no_rebuttal.v1",
+      "protocol_matches_declaration": true,
+      "requires_rebuttals": false,
+      "provider": "stub",
+      "scheduled_runs": 3,
+      "completed_runs": 3,
+      "failed_runs": 0,
+      "not_executed_runs": 0,
+      "excluded_from_denominator": false,
+      "cost": {
+        "runs": 3,
+        "measured_tokens": {
+          "input": 0,
+          "output": 0
+        },
+        "estimated_tokens": {
+          "input": 6655,
+          "output": 1005
+        },
+        "price_table_cost_usd": "0.005860",
+        "price_table_cost_partial_usd": null,
+        "price_table_cost_unknown_runs": 0,
+        "billed_cost_usd": null,
+        "billed_cost_unknown_runs": 3,
+        "billed_cost_unknown_reasons": {
+          "scripted_provider_made_no_charge": 3
+        },
+        "timed_out_calls": 0,
+        "unreconciled_timeout_calls": 0,
+        "strict_billed_ceiling": false,
+        "note": "Measured tokens, estimated tokens, price-table cost and billed cost are reported separately. A null billed total means at least one run's provider reported no charge; it is not a zero."
+      },
+      "runs": [
+        {
+          "opportunity": "aapl-2026-02-03",
+          "fixture_id": "alphaagent-arms.v1.v2.aapl-2026-02-03",
+          "status": "completed",
+          "failure_code": null,
+          "failure_detail": null,
+          "decision_run_id": "986bfe51-de01-4f63-aadc-f06747912525",
+          "protocol_version": "debate.no_rebuttal.v1",
+          "snapshot_id": "08fac509-3cd6-4afb-8379-ebdf56d1fd68",
+          "snapshot_hash": "918c65e106c7061eaf142fc9fb513749b889034391a03c97bf2bb2e51015f7a8",
+          "cost": {
+            "measured_tokens": {
+              "input": 0,
+              "output": 0
+            },
+            "estimated_tokens": {
+              "input": 2227,
+              "output": 335
+            },
+            "price_table_cost_usd": "0.001960",
+            "price_table_cost_partial_usd": null,
+            "price_table_cost_unknown_reason": null,
+            "billed_cost_usd": null,
+            "billed_cost_unknown_calls": 3,
+            "timed_out_calls": 0,
+            "unreconciled_timeout_calls": 0,
+            "basis": "price_table_estimate",
+            "unknown_reason": "scripted_provider_made_no_charge",
+            "strict_billed_ceiling": false
+          }
+        },
+        {
+          "opportunity": "msft-2026-02-04",
+          "fixture_id": "alphaagent-arms.v1.v2.msft-2026-02-04",
+          "status": "completed",
+          "failure_code": null,
+          "failure_detail": null,
+          "decision_run_id": "b400afd7-1625-4bd3-9b93-c317325ddb2f",
+          "protocol_version": "debate.no_rebuttal.v1",
+          "snapshot_id": "3dfc4e0a-9834-4602-911b-5b933506d0d7",
+          "snapshot_hash": "c6a3491b6a3d49423fd0910408151ba06c0e7556f14ec9eb370965240e94979b",
+          "cost": {
+            "measured_tokens": {
+              "input": 0,
+              "output": 0
+            },
+            "estimated_tokens": {
+              "input": 2217,
+              "output": 335
+            },
+            "price_table_cost_usd": "0.001950",
+            "price_table_cost_partial_usd": null,
+            "price_table_cost_unknown_reason": null,
+            "billed_cost_usd": null,
+            "billed_cost_unknown_calls": 3,
+            "timed_out_calls": 0,
+            "unreconciled_timeout_calls": 0,
+            "basis": "price_table_estimate",
+            "unknown_reason": "scripted_provider_made_no_charge",
+            "strict_billed_ceiling": false
+          }
+        },
+        {
+          "opportunity": "tsla-2026-02-05",
+          "fixture_id": "alphaagent-arms.v1.v2.tsla-2026-02-05",
+          "status": "completed",
+          "failure_code": null,
+          "failure_detail": null,
+          "decision_run_id": "39b5d7a7-3272-4dcc-9cfc-c6452d6cff47",
+          "protocol_version": "debate.no_rebuttal.v1",
+          "snapshot_id": "94c6fc4e-c40d-4b65-b021-62a90c42b883",
+          "snapshot_hash": "d3b829991af710262ef259de271490918490262edaffe1b9534bb1c37ddbf458",
+          "cost": {
+            "measured_tokens": {
+              "input": 0,
+              "output": 0
+            },
+            "estimated_tokens": {
+              "input": 2211,
+              "output": 335
+            },
+            "price_table_cost_usd": "0.001950",
+            "price_table_cost_partial_usd": null,
+            "price_table_cost_unknown_reason": null,
+            "billed_cost_usd": null,
+            "billed_cost_unknown_calls": 3,
+            "timed_out_calls": 0,
+            "unreconciled_timeout_calls": 0,
+            "basis": "price_table_estimate",
+            "unknown_reason": "scripted_provider_made_no_charge",
+            "strict_billed_ceiling": false
+          }
+        }
+      ],
+      "snapshots": [
+        {
+          "snapshot_id": "08fac509-3cd6-4afb-8379-ebdf56d1fd68",
+          "content_hash": "918c65e106c7061eaf142fc9fb513749b889034391a03c97bf2bb2e51015f7a8",
+          "opportunity": "aapl-2026-02-03"
+        },
+        {
+          "snapshot_id": "3dfc4e0a-9834-4602-911b-5b933506d0d7",
+          "content_hash": "c6a3491b6a3d49423fd0910408151ba06c0e7556f14ec9eb370965240e94979b",
+          "opportunity": "msft-2026-02-04"
+        },
+        {
+          "snapshot_id": "94c6fc4e-c40d-4b65-b021-62a90c42b883",
+          "content_hash": "d3b829991af710262ef259de271490918490262edaffe1b9534bb1c37ddbf458",
+          "opportunity": "tsla-2026-02-05"
+        }
+      ],
+      "trajectory": {
+        "metric_family": "portfolio_performance",
+        "method_version": "portfolio_accounting.v1",
+        "currency": "USD",
+        "synthetic": true,
+        "provenance": {
+          "synthetic": true,
+          "simulated_arm": "V2",
+          "price_source": [
+            [
+              "declared_fixture_mark",
+              9
+            ]
+          ],
+          "fill_rule": "first_executable_mark_at_or_after_decision.v1",
+          "fee_model": "declared_bps",
+          "guard_policy": "guard.v1",
+          "llm_cost_timing": "A known LLM cost is attributed at the decision instant (clamped to the window end) because it is external spend, not a portfolio flow.",
+          "note": "Simulated replay of this arm's recorded decisions under the frozen marks, the shared guard and the same accounting method. Not realised history."
+        },
+        "window": {
+          "start": "2026-02-02T23:59:59Z",
+          "end": "2026-02-12T00:00:00Z",
+          "timezone": "UTC"
+        },
+        "opening_equity_usd": "10000.00",
+        "closing_equity_usd": "10007.00",
+        "closing_cash_usd": "9115.00",
+        "closing_positions_value_usd": "892.00",
+        "cumulative_return_pct": "0.0700",
+        "time_weighted_return_pct": "0.0700",
+        "net_of_llm_return_pct": null,
+        "twr": {
+          "method": "flow_boundary_chain.v1",
+          "method_version": "portfolio_accounting.v1",
+          "return_pct": "0.0700",
+          "approximate": false,
+          "reasons": [],
+          "subperiod_returns_pct": [
+            "0.0700"
+          ],
+          "flow_boundary_count": 0,
+          "note": "Each sub-period ends at an external flow boundary; the flow changes the next base but is not itself a return."
+        },
+        "net_twr": {
+          "method": "flow_boundary_chain.v1",
+          "method_version": "portfolio_accounting.v1",
+          "return_pct": null,
+          "approximate": true,
+          "reasons": [
+            "llm_costs_incomplete"
+          ],
+          "subperiod_returns_pct": [
+            "0.0700"
+          ],
+          "flow_boundary_count": 0,
+          "note": "Each sub-period ends at an external flow boundary; the flow changes the next base but is not itself a return.",
+          "known_cost_only_return_pct": "0.0700"
+        },
+        "max_drawdown_pct": "-0.0050",
+        "drawdown": {
+          "max_drawdown_pct": "-0.0050",
+          "observations": 9,
+          "peak_equity_usd": "10001.50",
+          "peak_at": "2026-02-04T14:35:00Z",
+          "trough_equity_usd": "10001.00",
+          "trough_at": "2026-02-05T14:35:00Z",
+          "definition": "maximum decline from a prior equity peak over priced observations",
+          "sample_limited": false
+        },
+        "net_max_drawdown_pct": "-0.0050",
+        "exposure": {
+          "average_gross_pct": "5.8638",
+          "end_gross_pct": "8.9138",
+          "formula": "sum(quantity * mark_price) / equity",
+          "observations": 9
+        },
+        "turnover": {
+          "traded_notional_usd": "885.00",
+          "average_equity_usd": "10003.50",
+          "average_equity_basis": "mean_of_opening_and_closing_equity",
+          "ratio": "0.0885",
+          "pct": "8.8469",
+          "formula": "sum(abs(quantity * fill_price)) / ((opening_equity + closing_equity) / 2)",
+          "trade_count": 3,
+          "fees_included_in_notional": false
+        },
+        "contribution_analysis": {
+          "rows": [
+            {
+              "ticker": "AAPL",
+              "opening_quantity": "0",
+              "closing_quantity": "1.00000000",
+              "net_quantity_change": "1.00000000",
+              "opening_price_usd": null,
+              "closing_price_usd": "232.00",
+              "buy_notional_usd": "225.00",
+              "sell_notional_usd": "0.00",
+              "fees_recorded_usd": "0.00",
+              "unknown_fee_fill_count": 0,
+              "realised_and_unrealised_pnl_usd": null,
+              "pnl_pct_of_opening_equity": null,
+              "average_capital_weight_pct": "2.2701",
+              "entries": [
+                {
+                  "at": "2026-02-03T14:30:00Z",
+                  "ticker": "AAPL",
+                  "side": "BUY",
+                  "quantity": "1.00000000",
+                  "price_usd": "225.00",
+                  "notional_usd": "225.00",
+                  "fee_usd": "0.00",
+                  "fee_recorded": true,
+                  "executed_by": "simulated",
+                  "source": "simulated_arm:V2",
+                  "capital_weight_pct": "2.2500"
+                }
+              ],
+              "exits": []
+            },
+            {
+              "ticker": "MSFT",
+              "opening_quantity": "0",
+              "closing_quantity": "1.00000000",
+              "net_quantity_change": "1.00000000",
+              "opening_price_usd": null,
+              "closing_price_usd": "400.00",
+              "buy_notional_usd": "410.00",
+              "sell_notional_usd": "0.00",
+              "fees_recorded_usd": "0.00",
+              "unknown_fee_fill_count": 0,
+              "realised_and_unrealised_pnl_usd": null,
+              "pnl_pct_of_opening_equity": null,
+              "average_capital_weight_pct": "4.0704",
+              "entries": [
+                {
+                  "at": "2026-02-04T14:30:00Z",
+                  "ticker": "MSFT",
+                  "side": "BUY",
+                  "quantity": "1.00000000",
+                  "price_usd": "410.00",
+                  "notional_usd": "410.00",
+                  "fee_usd": "0.00",
+                  "fee_recorded": true,
+                  "executed_by": "simulated",
+                  "source": "simulated_arm:V2",
+                  "capital_weight_pct": "4.0998"
+                }
+              ],
+              "exits": []
+            },
+            {
+              "ticker": "TSLA",
+              "opening_quantity": "0",
+              "closing_quantity": "1.00000000",
+              "net_quantity_change": "1.00000000",
+              "opening_price_usd": null,
+              "closing_price_usd": "260.00",
+              "buy_notional_usd": "250.00",
+              "sell_notional_usd": "0.00",
+              "fees_recorded_usd": "0.00",
+              "unknown_fee_fill_count": 0,
+              "realised_and_unrealised_pnl_usd": null,
+              "pnl_pct_of_opening_equity": null,
+              "average_capital_weight_pct": "2.5477",
+              "entries": [
+                {
+                  "at": "2026-02-05T14:30:00Z",
+                  "ticker": "TSLA",
+                  "side": "BUY",
+                  "quantity": "1.00000000",
+                  "price_usd": "250.00",
+                  "notional_usd": "250.00",
+                  "fee_usd": "0.00",
+                  "fee_recorded": true,
+                  "executed_by": "simulated",
+                  "source": "simulated_arm:V2",
+                  "capital_weight_pct": "2.4996"
+                }
+              ],
+              "exits": []
+            }
+          ],
+          "total_pnl_usd": null,
+          "equity_change_excluding_flows_usd": "7.00",
+          "reconciles_to_equity_change": null,
+          "reconciliation_tolerance_usd": "0.01",
+          "basis": "fills_and_marks.v1",
+          "note": "Contribution is additive within a position over this window: closing value minus opening value minus net invested cash minus recorded fees. It is computed from the ledger, not from per-decision scores. Unknown fees make the reconciliation optimistic and are counted."
+        },
+        "cash_reconciliation": {
+          "status": "matched",
+          "opening_cash_usd": "10000.00",
+          "deposits_usd": "0.00",
+          "withdrawals_usd": "0.00",
+          "buy_notional_usd": "885.00",
+          "sell_notional_usd": "0.00",
+          "fees_recorded_usd": "0.00",
+          "expected_closing_cash_usd": "9115.00",
+          "computed_closing_cash_usd": "9115.00",
+          "difference_usd": "0.00",
+          "unknown_fee_fill_count": 0,
+          "tolerance_usd": "0.01",
+          "formula": "opening_cash + deposits - withdrawals - buy_notional + sell_notional - recorded_fees",
+          "note": "Unknown fees are not guessed; they are counted. A matched result with an unknown fee means the known movements reconcile, not that the fee was zero."
+        },
+        "trade_count": 3,
+        "risk_adjusted": {
+          "sharpe": {
+            "included": false,
+            "value": null,
+            "reason": "The valuation frequency is event-driven, not a fixed daily series. A Sharpe ratio needs a declared frequency, annualisation and risk-free rate; this report does not fabricate them.",
+            "frequency": "event_driven",
+            "annualization": null,
+            "risk_free_rate": null,
+            "observations": 1,
+            "sample_limits": "1 sub-period return(s); fewer than the 30 a stable Sharpe would need, and the spacing is not uniform."
+          }
+        },
+        "fees": {
+          "recorded_fees_usd": "0.00",
+          "fees_complete": true,
+          "fill_count": 3,
+          "unknown_fee_fill_count": 0,
+          "unknown_fee_fill_sources": [],
+          "policy": "recorded_fees_only.v1",
+          "note": "NULL fee means no fee was recorded for that fill, not that the fee was zero. The equity series uses recorded fees only and is marked approximate when any fill in the window is unknown."
+        },
+        "llm_costs": {
+          "recorded_cost_usd": null,
+          "cost_events": [],
+          "cost_event_count": 0,
+          "missing_cost_run_count": 3,
+          "costs_complete": false,
+          "net_return_pct": null,
+          "known_cost_only_return_pct": "0.0700",
+          "net_return_established": false,
+          "net_return_reason": "3 run(s) reported no cost. A missing cost is not treated as zero, so the net-of-LLM return cannot be established.",
+          "equity_series_net_of_llm": [
+            {
+              "at": "2026-02-02T23:59:59Z",
+              "equity_net_of_llm_usd": "10000.00"
+            },
+            {
+              "at": "2026-02-03T14:30:00Z",
+              "equity_net_of_llm_usd": "10000.00"
+            },
+            {
+              "at": "2026-02-03T14:35:00Z",
+              "equity_net_of_llm_usd": "10000.50"
+            },
+            {
+              "at": "2026-02-04T14:30:00Z",
+              "equity_net_of_llm_usd": "10000.50"
+            },
+            {
+              "at": "2026-02-04T14:35:00Z",
+              "equity_net_of_llm_usd": "10001.50"
+            },
+            {
+              "at": "2026-02-05T14:30:00Z",
+              "equity_net_of_llm_usd": "10001.50"
+            },
+            {
+              "at": "2026-02-05T14:35:00Z",
+              "equity_net_of_llm_usd": "10001.00"
+            },
+            {
+              "at": "2026-02-11T20:00:00Z",
+              "equity_net_of_llm_usd": "10007.00"
+            },
+            {
+              "at": "2026-02-12T00:00:00Z",
+              "equity_net_of_llm_usd": "10007.00"
+            }
+          ],
+          "funding": "external_provider_account",
+          "deducted_from_portfolio_cash": false,
+          "double_counted": false,
+          "method": "explicit_net_of_llm_equity_series.v1",
+          "note": "LLM/API costs are not portfolio cash flows. They are deducted only in the net series, so they are not also subtracted from the gross equity."
+        },
+        "external_flows": [],
+        "fills": [
+          {
+            "at": "2026-02-03T14:30:00Z",
+            "ticker": "AAPL",
+            "side": "BUY",
+            "quantity": "1.00000000",
+            "price_usd": "225.00",
+            "notional_usd": "225.00",
+            "fee_usd": "0.00",
+            "fee_recorded": true,
+            "executed_by": "simulated",
+            "source": "simulated_arm:V2"
+          },
+          {
+            "at": "2026-02-04T14:30:00Z",
+            "ticker": "MSFT",
+            "side": "BUY",
+            "quantity": "1.00000000",
+            "price_usd": "410.00",
+            "notional_usd": "410.00",
+            "fee_usd": "0.00",
+            "fee_recorded": true,
+            "executed_by": "simulated",
+            "source": "simulated_arm:V2"
+          },
+          {
+            "at": "2026-02-05T14:30:00Z",
+            "ticker": "TSLA",
+            "side": "BUY",
+            "quantity": "1.00000000",
+            "price_usd": "250.00",
+            "notional_usd": "250.00",
+            "fee_usd": "0.00",
+            "fee_recorded": true,
+            "executed_by": "simulated",
+            "source": "simulated_arm:V2"
+          }
+        ],
+        "equity_series": [
+          {
+            "at": "2026-02-02T23:59:59Z",
+            "cash_usd": "10000.00",
+            "positions_value_usd": "0.00",
+            "equity_usd": "10000.00",
+            "equity_net_of_llm_usd": "10000.00",
+            "gross_exposure_pct": "0.0000",
+            "position_values_usd": {},
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {},
+            "oldest_mark_age_days": null,
+            "events": []
+          },
+          {
+            "at": "2026-02-03T14:30:00Z",
+            "cash_usd": "9775.00",
+            "positions_value_usd": "225.00",
+            "equity_usd": "10000.00",
+            "equity_net_of_llm_usd": "10000.00",
+            "gross_exposure_pct": "2.2500",
+            "position_values_usd": {
+              "AAPL": "225.00"
+            },
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {
+              "AAPL": "declared_fixture_mark"
+            },
+            "oldest_mark_age_days": "0.0",
+            "events": [
+              "BUY 1.00000000 AAPL @ 225.00"
+            ]
+          },
+          {
+            "at": "2026-02-03T14:35:00Z",
+            "cash_usd": "9775.00",
+            "positions_value_usd": "225.50",
+            "equity_usd": "10000.50",
+            "equity_net_of_llm_usd": "10000.50",
+            "gross_exposure_pct": "2.2549",
+            "position_values_usd": {
+              "AAPL": "225.50"
+            },
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {
+              "AAPL": "declared_fixture_mark"
+            },
+            "oldest_mark_age_days": "0.0",
+            "events": []
+          },
+          {
+            "at": "2026-02-04T14:30:00Z",
+            "cash_usd": "9365.00",
+            "positions_value_usd": "635.50",
+            "equity_usd": "10000.50",
+            "equity_net_of_llm_usd": "10000.50",
+            "gross_exposure_pct": "6.3547",
+            "position_values_usd": {
+              "AAPL": "225.50",
+              "MSFT": "410.00"
+            },
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {
+              "AAPL": "declared_fixture_mark",
+              "MSFT": "declared_fixture_mark"
+            },
+            "oldest_mark_age_days": "1.0",
+            "events": [
+              "BUY 1.00000000 MSFT @ 410.00"
+            ]
+          },
+          {
+            "at": "2026-02-04T14:35:00Z",
+            "cash_usd": "9365.00",
+            "positions_value_usd": "636.50",
+            "equity_usd": "10001.50",
+            "equity_net_of_llm_usd": "10001.50",
+            "gross_exposure_pct": "6.3640",
+            "position_values_usd": {
+              "AAPL": "225.50",
+              "MSFT": "411.00"
+            },
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {
+              "AAPL": "declared_fixture_mark",
+              "MSFT": "declared_fixture_mark"
+            },
+            "oldest_mark_age_days": "1.0",
+            "events": []
+          },
+          {
+            "at": "2026-02-05T14:30:00Z",
+            "cash_usd": "9115.00",
+            "positions_value_usd": "886.50",
+            "equity_usd": "10001.50",
+            "equity_net_of_llm_usd": "10001.50",
+            "gross_exposure_pct": "8.8637",
+            "position_values_usd": {
+              "AAPL": "225.50",
+              "MSFT": "411.00",
+              "TSLA": "250.00"
+            },
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {
+              "AAPL": "declared_fixture_mark",
+              "MSFT": "declared_fixture_mark",
+              "TSLA": "declared_fixture_mark"
+            },
+            "oldest_mark_age_days": "2.0",
+            "events": [
+              "BUY 1.00000000 TSLA @ 250.00"
+            ]
+          },
+          {
+            "at": "2026-02-05T14:35:00Z",
+            "cash_usd": "9115.00",
+            "positions_value_usd": "886.00",
+            "equity_usd": "10001.00",
+            "equity_net_of_llm_usd": "10001.00",
+            "gross_exposure_pct": "8.8591",
+            "position_values_usd": {
+              "AAPL": "225.50",
+              "MSFT": "411.00",
+              "TSLA": "249.50"
+            },
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {
+              "AAPL": "declared_fixture_mark",
+              "MSFT": "declared_fixture_mark",
+              "TSLA": "declared_fixture_mark"
+            },
+            "oldest_mark_age_days": "2.0",
+            "events": []
+          },
+          {
+            "at": "2026-02-11T20:00:00Z",
+            "cash_usd": "9115.00",
+            "positions_value_usd": "892.00",
+            "equity_usd": "10007.00",
+            "equity_net_of_llm_usd": "10007.00",
+            "gross_exposure_pct": "8.9138",
+            "position_values_usd": {
+              "AAPL": "232.00",
+              "MSFT": "400.00",
+              "TSLA": "260.00"
+            },
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {
+              "AAPL": "declared_fixture_mark",
+              "MSFT": "declared_fixture_mark",
+              "TSLA": "declared_fixture_mark"
+            },
+            "oldest_mark_age_days": "0.0",
+            "events": []
+          },
+          {
+            "at": "2026-02-12T00:00:00Z",
+            "cash_usd": "9115.00",
+            "positions_value_usd": "892.00",
+            "equity_usd": "10007.00",
+            "equity_net_of_llm_usd": "10007.00",
+            "gross_exposure_pct": "8.9138",
+            "position_values_usd": {
+              "AAPL": "232.00",
+              "MSFT": "400.00",
+              "TSLA": "260.00"
+            },
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {
+              "AAPL": "declared_fixture_mark",
+              "MSFT": "declared_fixture_mark",
+              "TSLA": "declared_fixture_mark"
+            },
+            "oldest_mark_age_days": "0.2",
+            "events": []
+          }
+        ],
+        "net_equity_series": [
+          {
+            "at": "2026-02-02T23:59:59Z",
+            "equity_net_of_llm_usd": "10000.00"
+          },
+          {
+            "at": "2026-02-03T14:30:00Z",
+            "equity_net_of_llm_usd": "10000.00"
+          },
+          {
+            "at": "2026-02-03T14:35:00Z",
+            "equity_net_of_llm_usd": "10000.50"
+          },
+          {
+            "at": "2026-02-04T14:30:00Z",
+            "equity_net_of_llm_usd": "10000.50"
+          },
+          {
+            "at": "2026-02-04T14:35:00Z",
+            "equity_net_of_llm_usd": "10001.50"
+          },
+          {
+            "at": "2026-02-05T14:30:00Z",
+            "equity_net_of_llm_usd": "10001.50"
+          },
+          {
+            "at": "2026-02-05T14:35:00Z",
+            "equity_net_of_llm_usd": "10001.00"
+          },
+          {
+            "at": "2026-02-11T20:00:00Z",
+            "equity_net_of_llm_usd": "10007.00"
+          },
+          {
+            "at": "2026-02-12T00:00:00Z",
+            "equity_net_of_llm_usd": "10007.00"
+          }
+        ],
+        "flow_boundaries": [],
+        "reconciliation": {
+          "status": "no_snapshot",
+          "anchors": [],
+          "snapshot_detail": "aggregate_only",
+          "note": "A PortfolioSnapshot stores aggregate cash and positions value, not per-instrument quantities. It can reconcile a replay total; it cannot value a historical position on its own."
+        },
+        "methodology": {
+          "version": "portfolio_accounting.v1",
+          "equity_definition": "E(t) = cash(t) + sum(quantity(i,t) * price(i,t))",
+          "cash_basis": "declared_opportunity_set_starting_state",
+          "cash_basis_flags": [],
+          "opening_cash_usd": "10000.00",
+          "opening_positions": {},
+          "position_basis": "full_ledger_replay_from_portfolio_inception",
+          "short_policy": "A SELL may only close or reduce a long. An oversell is refused rather than silently treated as a short.",
+          "mark_policy": "latest_known_mark_at_or_before_valuation.v1",
+          "mark_sources": {
+            "declared_fixture_mark": 9,
+            "fill": 3
+          },
+          "mark_staleness_days": 7,
+          "valuation_timing": "End of timestamp: external flows are applied before fills at the same instant.",
+          "fill_rule": "first_executable_mark_at_or_after_decision.v1",
+          "twr_method": "flow_boundary_chain.v1",
+          "twr_note": "Each sub-period ends at an external flow boundary; the flow changes the next base but is not itself a return.",
+          "fee_policy": "recorded_fees_only.v1",
+          "llm_cost_policy": "explicit_net_of_llm_equity_series.v1",
+          "turnover_formula": "sum(abs(quantity * fill_price)) / ((opening_equity + closing_equity) / 2)",
+          "drawdown_definition": "maximum decline from a prior equity peak over priced observations",
+          "approximate": false,
+          "approximate_reasons": [],
+          "observations": 9,
+          "priced_observations": 9,
+          "unpriced_observations": 0,
+          "flow_count": 0,
+          "fill_count": 3
+        },
+        "flags": [
+          "llm_costs_incomplete",
+          "llm_cost_not_reported"
+        ],
+        "approximate": false,
+        "orders": [
+          {
+            "opportunity": "aapl-2026-02-03",
+            "decision_run_id": "986bfe51-de01-4f63-aadc-f06747912525",
+            "decision_at": "2026-02-03T14:30:00Z",
+            "decision_recorded_at": "2026-11-11T15:47:42.335015Z",
+            "proposal_action": "BUY",
+            "requested_quantity": "1.00000000",
+            "price_at_decision_usd": "225.00",
+            "guard_status": "approved",
+            "guard_reason": "Approved BUY of 1.00000000 AAPL.",
+            "binding_rule": null,
+            "allowed_quantity": "1.00000000",
+            "fill": {
+              "at": "2026-02-03T14:30:00Z",
+              "ticker": "AAPL",
+              "side": "BUY",
+              "quantity": "1.00000000",
+              "price_usd": "225.00",
+              "notional_usd": "225.00",
+              "fee_usd": "0.00",
+              "fee_recorded": true,
+              "executed_by": "simulated",
+              "source": "simulated_arm:V2"
+            },
+            "equity_after_usd": "10000.00",
+            "reason": null,
+            "fee_bps": "0"
+          },
+          {
+            "opportunity": "msft-2026-02-04",
+            "decision_run_id": "b400afd7-1625-4bd3-9b93-c317325ddb2f",
+            "decision_at": "2026-02-04T14:30:00Z",
+            "decision_recorded_at": "2026-11-11T15:47:43.117159Z",
+            "proposal_action": "BUY",
+            "requested_quantity": "1.00000000",
+            "price_at_decision_usd": "410.00",
+            "guard_status": "approved",
+            "guard_reason": "Approved BUY of 1.00000000 MSFT.",
+            "binding_rule": null,
+            "allowed_quantity": "1.00000000",
+            "fill": {
+              "at": "2026-02-04T14:30:00Z",
+              "ticker": "MSFT",
+              "side": "BUY",
+              "quantity": "1.00000000",
+              "price_usd": "410.00",
+              "notional_usd": "410.00",
+              "fee_usd": "0.00",
+              "fee_recorded": true,
+              "executed_by": "simulated",
+              "source": "simulated_arm:V2"
+            },
+            "equity_after_usd": "10000.50",
+            "reason": null,
+            "fee_bps": "0"
+          },
+          {
+            "opportunity": "tsla-2026-02-05",
+            "decision_run_id": "39b5d7a7-3272-4dcc-9cfc-c6452d6cff47",
+            "decision_at": "2026-02-05T14:30:00Z",
+            "decision_recorded_at": "2026-11-11T15:47:43.848627Z",
+            "proposal_action": "BUY",
+            "requested_quantity": "1.00000000",
+            "price_at_decision_usd": "250.00",
+            "guard_status": "approved",
+            "guard_reason": "Approved BUY of 1.00000000 TSLA.",
+            "binding_rule": null,
+            "allowed_quantity": "1.00000000",
+            "fill": {
+              "at": "2026-02-05T14:30:00Z",
+              "ticker": "TSLA",
+              "side": "BUY",
+              "quantity": "1.00000000",
+              "price_usd": "250.00",
+              "notional_usd": "250.00",
+              "fee_usd": "0.00",
+              "fee_recorded": true,
+              "executed_by": "simulated",
+              "source": "simulated_arm:V2"
+            },
+            "equity_after_usd": "10001.50",
+            "reason": null,
+            "fee_bps": "0"
+          }
+        ],
+        "orders_count": 3,
+        "fill_count": 3,
+        "per_opportunity": [
+          {
+            "opportunity": "aapl-2026-02-03",
+            "ticker": "AAPL",
+            "scheduled_at": "2026-02-03T14:30:00Z"
+          },
+          {
+            "opportunity": "msft-2026-02-04",
+            "ticker": "MSFT",
+            "scheduled_at": "2026-02-04T14:30:00Z"
+          },
+          {
+            "opportunity": "tsla-2026-02-05",
+            "ticker": "TSLA",
+            "scheduled_at": "2026-02-05T14:30:00Z"
+          }
+        ]
+      }
+    },
+    {
+      "key": "V3",
+      "label": "Explicit rebuttal",
+      "engine": "debate_with_rebuttal",
+      "implemented": true,
+      "status": "executed",
+      "reason": null,
+      "protocol_version": "debate.v1",
+      "expected_protocol_version": "debate.v1",
+      "protocol_matches_declaration": true,
+      "requires_rebuttals": true,
+      "provider": "stub",
+      "scheduled_runs": 3,
+      "completed_runs": 3,
+      "failed_runs": 0,
+      "not_executed_runs": 0,
+      "excluded_from_denominator": false,
+      "cost": {
+        "runs": 3,
+        "measured_tokens": {
+          "input": 0,
+          "output": 0
+        },
+        "estimated_tokens": {
+          "input": 12728,
+          "output": 1581
+        },
+        "price_table_cost_usd": "0.010460",
+        "price_table_cost_partial_usd": null,
+        "price_table_cost_unknown_runs": 0,
+        "billed_cost_usd": null,
+        "billed_cost_unknown_runs": 3,
+        "billed_cost_unknown_reasons": {
+          "scripted_provider_made_no_charge": 3
+        },
+        "timed_out_calls": 0,
+        "unreconciled_timeout_calls": 0,
+        "strict_billed_ceiling": false,
+        "note": "Measured tokens, estimated tokens, price-table cost and billed cost are reported separately. A null billed total means at least one run's provider reported no charge; it is not a zero."
+      },
+      "runs": [
+        {
+          "opportunity": "aapl-2026-02-03",
+          "fixture_id": "alphaagent-arms.v1.v3.aapl-2026-02-03",
+          "status": "completed",
+          "failure_code": null,
+          "failure_detail": null,
+          "decision_run_id": "522dd707-8a29-4f5c-b1d2-b5ba543b8f03",
+          "protocol_version": "debate.v1",
+          "snapshot_id": "08fac509-3cd6-4afb-8379-ebdf56d1fd68",
+          "snapshot_hash": "918c65e106c7061eaf142fc9fb513749b889034391a03c97bf2bb2e51015f7a8",
+          "cost": {
+            "measured_tokens": {
+              "input": 0,
+              "output": 0
+            },
+            "estimated_tokens": {
+              "input": 4265,
+              "output": 527
+            },
+            "price_table_cost_usd": "0.003500",
+            "price_table_cost_partial_usd": null,
+            "price_table_cost_unknown_reason": null,
+            "billed_cost_usd": null,
+            "billed_cost_unknown_calls": 5,
+            "timed_out_calls": 0,
+            "unreconciled_timeout_calls": 0,
+            "basis": "price_table_estimate",
+            "unknown_reason": "scripted_provider_made_no_charge",
+            "strict_billed_ceiling": false
+          }
+        },
+        {
+          "opportunity": "msft-2026-02-04",
+          "fixture_id": "alphaagent-arms.v1.v3.msft-2026-02-04",
+          "status": "completed",
+          "failure_code": null,
+          "failure_detail": null,
+          "decision_run_id": "7f84a800-6892-4a47-95cd-bc22694746c5",
+          "protocol_version": "debate.v1",
+          "snapshot_id": "3dfc4e0a-9834-4602-911b-5b933506d0d7",
+          "snapshot_hash": "c6a3491b6a3d49423fd0910408151ba06c0e7556f14ec9eb370965240e94979b",
+          "cost": {
+            "measured_tokens": {
+              "input": 0,
+              "output": 0
+            },
+            "estimated_tokens": {
+              "input": 4240,
+              "output": 527
+            },
+            "price_table_cost_usd": "0.003480",
+            "price_table_cost_partial_usd": null,
+            "price_table_cost_unknown_reason": null,
+            "billed_cost_usd": null,
+            "billed_cost_unknown_calls": 5,
+            "timed_out_calls": 0,
+            "unreconciled_timeout_calls": 0,
+            "basis": "price_table_estimate",
+            "unknown_reason": "scripted_provider_made_no_charge",
+            "strict_billed_ceiling": false
+          }
+        },
+        {
+          "opportunity": "tsla-2026-02-05",
+          "fixture_id": "alphaagent-arms.v1.v3.tsla-2026-02-05",
+          "status": "completed",
+          "failure_code": null,
+          "failure_detail": null,
+          "decision_run_id": "892a6e54-90da-45e0-9b37-cd5616297b6d",
+          "protocol_version": "debate.v1",
+          "snapshot_id": "94c6fc4e-c40d-4b65-b021-62a90c42b883",
+          "snapshot_hash": "d3b829991af710262ef259de271490918490262edaffe1b9534bb1c37ddbf458",
+          "cost": {
+            "measured_tokens": {
+              "input": 0,
+              "output": 0
+            },
+            "estimated_tokens": {
+              "input": 4223,
+              "output": 527
+            },
+            "price_table_cost_usd": "0.003480",
+            "price_table_cost_partial_usd": null,
+            "price_table_cost_unknown_reason": null,
+            "billed_cost_usd": null,
+            "billed_cost_unknown_calls": 5,
+            "timed_out_calls": 0,
+            "unreconciled_timeout_calls": 0,
+            "basis": "price_table_estimate",
+            "unknown_reason": "scripted_provider_made_no_charge",
+            "strict_billed_ceiling": false
+          }
+        }
+      ],
+      "snapshots": [
+        {
+          "snapshot_id": "08fac509-3cd6-4afb-8379-ebdf56d1fd68",
+          "content_hash": "918c65e106c7061eaf142fc9fb513749b889034391a03c97bf2bb2e51015f7a8",
+          "opportunity": "aapl-2026-02-03"
+        },
+        {
+          "snapshot_id": "3dfc4e0a-9834-4602-911b-5b933506d0d7",
+          "content_hash": "c6a3491b6a3d49423fd0910408151ba06c0e7556f14ec9eb370965240e94979b",
+          "opportunity": "msft-2026-02-04"
+        },
+        {
+          "snapshot_id": "94c6fc4e-c40d-4b65-b021-62a90c42b883",
+          "content_hash": "d3b829991af710262ef259de271490918490262edaffe1b9534bb1c37ddbf458",
+          "opportunity": "tsla-2026-02-05"
+        }
+      ],
+      "trajectory": {
+        "metric_family": "portfolio_performance",
+        "method_version": "portfolio_accounting.v1",
+        "currency": "USD",
+        "synthetic": true,
+        "provenance": {
+          "synthetic": true,
+          "simulated_arm": "V3",
+          "price_source": [
+            [
+              "declared_fixture_mark",
+              9
+            ]
+          ],
+          "fill_rule": "first_executable_mark_at_or_after_decision.v1",
+          "fee_model": "declared_bps",
+          "guard_policy": "guard.v1",
+          "llm_cost_timing": "A known LLM cost is attributed at the decision instant (clamped to the window end) because it is external spend, not a portfolio flow.",
+          "note": "Simulated replay of this arm's recorded decisions under the frozen marks, the shared guard and the same accounting method. Not realised history."
+        },
+        "window": {
+          "start": "2026-02-02T23:59:59Z",
+          "end": "2026-02-12T00:00:00Z",
+          "timezone": "UTC"
+        },
+        "opening_equity_usd": "10000.00",
+        "closing_equity_usd": "10000.00",
+        "closing_cash_usd": "10000.00",
+        "closing_positions_value_usd": "0.00",
+        "cumulative_return_pct": "0.0000",
+        "time_weighted_return_pct": "0.0000",
+        "net_of_llm_return_pct": null,
+        "twr": {
+          "method": "flow_boundary_chain.v1",
+          "method_version": "portfolio_accounting.v1",
+          "return_pct": "0.0000",
+          "approximate": false,
+          "reasons": [],
+          "subperiod_returns_pct": [
+            "0.0000"
+          ],
+          "flow_boundary_count": 0,
+          "note": "Each sub-period ends at an external flow boundary; the flow changes the next base but is not itself a return."
+        },
+        "net_twr": {
+          "method": "flow_boundary_chain.v1",
+          "method_version": "portfolio_accounting.v1",
+          "return_pct": null,
+          "approximate": true,
+          "reasons": [
+            "llm_costs_incomplete"
+          ],
+          "subperiod_returns_pct": [
+            "0.0000"
+          ],
+          "flow_boundary_count": 0,
+          "note": "Each sub-period ends at an external flow boundary; the flow changes the next base but is not itself a return.",
+          "known_cost_only_return_pct": "0.0000"
+        },
+        "max_drawdown_pct": "0.0000",
+        "drawdown": {
+          "max_drawdown_pct": "0.0000",
+          "observations": 9,
+          "peak_equity_usd": "10000.00",
+          "peak_at": "2026-02-02T23:59:59Z",
+          "trough_equity_usd": "10000.00",
+          "trough_at": "2026-02-02T23:59:59Z",
+          "definition": "maximum decline from a prior equity peak over priced observations",
+          "sample_limited": false
+        },
+        "net_max_drawdown_pct": "0.0000",
+        "exposure": {
+          "average_gross_pct": "0.0000",
+          "end_gross_pct": "0.0000",
+          "formula": "sum(quantity * mark_price) / equity",
+          "observations": 9
+        },
+        "turnover": {
+          "traded_notional_usd": "0.00",
+          "average_equity_usd": "10000.00",
+          "average_equity_basis": "mean_of_opening_and_closing_equity",
+          "ratio": "0.0000",
+          "pct": "0.0000",
+          "formula": "sum(abs(quantity * fill_price)) / ((opening_equity + closing_equity) / 2)",
+          "trade_count": 0,
+          "fees_included_in_notional": false
+        },
+        "contribution_analysis": {
+          "rows": [],
+          "total_pnl_usd": "0.00",
+          "equity_change_excluding_flows_usd": "0.00",
+          "reconciles_to_equity_change": true,
+          "reconciliation_tolerance_usd": "0.01",
+          "basis": "fills_and_marks.v1",
+          "note": "Contribution is additive within a position over this window: closing value minus opening value minus net invested cash minus recorded fees. It is computed from the ledger, not from per-decision scores. Unknown fees make the reconciliation optimistic and are counted."
+        },
+        "cash_reconciliation": {
+          "status": "matched",
+          "opening_cash_usd": "10000.00",
+          "deposits_usd": "0.00",
+          "withdrawals_usd": "0.00",
+          "buy_notional_usd": "0.00",
+          "sell_notional_usd": "0.00",
+          "fees_recorded_usd": "0.00",
+          "expected_closing_cash_usd": "10000.00",
+          "computed_closing_cash_usd": "10000.00",
+          "difference_usd": "0.00",
+          "unknown_fee_fill_count": 0,
+          "tolerance_usd": "0.01",
+          "formula": "opening_cash + deposits - withdrawals - buy_notional + sell_notional - recorded_fees",
+          "note": "Unknown fees are not guessed; they are counted. A matched result with an unknown fee means the known movements reconcile, not that the fee was zero."
+        },
+        "trade_count": 0,
+        "risk_adjusted": {
+          "sharpe": {
+            "included": false,
+            "value": null,
+            "reason": "The valuation frequency is event-driven, not a fixed daily series. A Sharpe ratio needs a declared frequency, annualisation and risk-free rate; this report does not fabricate them.",
+            "frequency": "event_driven",
+            "annualization": null,
+            "risk_free_rate": null,
+            "observations": 1,
+            "sample_limits": "1 sub-period return(s); fewer than the 30 a stable Sharpe would need, and the spacing is not uniform."
+          }
+        },
+        "fees": {
+          "recorded_fees_usd": "0.00",
+          "fees_complete": true,
+          "fill_count": 0,
+          "unknown_fee_fill_count": 0,
+          "unknown_fee_fill_sources": [],
+          "policy": "recorded_fees_only.v1",
+          "note": "NULL fee means no fee was recorded for that fill, not that the fee was zero. The equity series uses recorded fees only and is marked approximate when any fill in the window is unknown."
+        },
+        "llm_costs": {
+          "recorded_cost_usd": null,
+          "cost_events": [],
+          "cost_event_count": 0,
+          "missing_cost_run_count": 3,
+          "costs_complete": false,
+          "net_return_pct": null,
+          "known_cost_only_return_pct": "0.0000",
+          "net_return_established": false,
+          "net_return_reason": "3 run(s) reported no cost. A missing cost is not treated as zero, so the net-of-LLM return cannot be established.",
+          "equity_series_net_of_llm": [
+            {
+              "at": "2026-02-02T23:59:59Z",
+              "equity_net_of_llm_usd": "10000.00"
+            },
+            {
+              "at": "2026-02-03T14:30:00Z",
+              "equity_net_of_llm_usd": "10000.00"
+            },
+            {
+              "at": "2026-02-03T14:35:00Z",
+              "equity_net_of_llm_usd": "10000.00"
+            },
+            {
+              "at": "2026-02-04T14:30:00Z",
+              "equity_net_of_llm_usd": "10000.00"
+            },
+            {
+              "at": "2026-02-04T14:35:00Z",
+              "equity_net_of_llm_usd": "10000.00"
+            },
+            {
+              "at": "2026-02-05T14:30:00Z",
+              "equity_net_of_llm_usd": "10000.00"
+            },
+            {
+              "at": "2026-02-05T14:35:00Z",
+              "equity_net_of_llm_usd": "10000.00"
+            },
+            {
+              "at": "2026-02-11T20:00:00Z",
+              "equity_net_of_llm_usd": "10000.00"
+            },
+            {
+              "at": "2026-02-12T00:00:00Z",
+              "equity_net_of_llm_usd": "10000.00"
+            }
+          ],
+          "funding": "external_provider_account",
+          "deducted_from_portfolio_cash": false,
+          "double_counted": false,
+          "method": "explicit_net_of_llm_equity_series.v1",
+          "note": "LLM/API costs are not portfolio cash flows. They are deducted only in the net series, so they are not also subtracted from the gross equity."
+        },
+        "external_flows": [],
+        "fills": [],
+        "equity_series": [
+          {
+            "at": "2026-02-02T23:59:59Z",
+            "cash_usd": "10000.00",
+            "positions_value_usd": "0.00",
+            "equity_usd": "10000.00",
+            "equity_net_of_llm_usd": "10000.00",
+            "gross_exposure_pct": "0.0000",
+            "position_values_usd": {},
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {},
+            "oldest_mark_age_days": null,
+            "events": []
+          },
+          {
+            "at": "2026-02-03T14:30:00Z",
+            "cash_usd": "10000.00",
+            "positions_value_usd": "0.00",
+            "equity_usd": "10000.00",
+            "equity_net_of_llm_usd": "10000.00",
+            "gross_exposure_pct": "0.0000",
+            "position_values_usd": {},
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {},
+            "oldest_mark_age_days": null,
+            "events": []
+          },
+          {
+            "at": "2026-02-03T14:35:00Z",
+            "cash_usd": "10000.00",
+            "positions_value_usd": "0.00",
+            "equity_usd": "10000.00",
+            "equity_net_of_llm_usd": "10000.00",
+            "gross_exposure_pct": "0.0000",
+            "position_values_usd": {},
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {},
+            "oldest_mark_age_days": null,
+            "events": []
+          },
+          {
+            "at": "2026-02-04T14:30:00Z",
+            "cash_usd": "10000.00",
+            "positions_value_usd": "0.00",
+            "equity_usd": "10000.00",
+            "equity_net_of_llm_usd": "10000.00",
+            "gross_exposure_pct": "0.0000",
+            "position_values_usd": {},
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {},
+            "oldest_mark_age_days": null,
+            "events": []
+          },
+          {
+            "at": "2026-02-04T14:35:00Z",
+            "cash_usd": "10000.00",
+            "positions_value_usd": "0.00",
+            "equity_usd": "10000.00",
+            "equity_net_of_llm_usd": "10000.00",
+            "gross_exposure_pct": "0.0000",
+            "position_values_usd": {},
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {},
+            "oldest_mark_age_days": null,
+            "events": []
+          },
+          {
+            "at": "2026-02-05T14:30:00Z",
+            "cash_usd": "10000.00",
+            "positions_value_usd": "0.00",
+            "equity_usd": "10000.00",
+            "equity_net_of_llm_usd": "10000.00",
+            "gross_exposure_pct": "0.0000",
+            "position_values_usd": {},
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {},
+            "oldest_mark_age_days": null,
+            "events": []
+          },
+          {
+            "at": "2026-02-05T14:35:00Z",
+            "cash_usd": "10000.00",
+            "positions_value_usd": "0.00",
+            "equity_usd": "10000.00",
+            "equity_net_of_llm_usd": "10000.00",
+            "gross_exposure_pct": "0.0000",
+            "position_values_usd": {},
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {},
+            "oldest_mark_age_days": null,
+            "events": []
+          },
+          {
+            "at": "2026-02-11T20:00:00Z",
+            "cash_usd": "10000.00",
+            "positions_value_usd": "0.00",
+            "equity_usd": "10000.00",
+            "equity_net_of_llm_usd": "10000.00",
+            "gross_exposure_pct": "0.0000",
+            "position_values_usd": {},
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {},
+            "oldest_mark_age_days": null,
+            "events": []
+          },
+          {
+            "at": "2026-02-12T00:00:00Z",
+            "cash_usd": "10000.00",
+            "positions_value_usd": "0.00",
+            "equity_usd": "10000.00",
+            "equity_net_of_llm_usd": "10000.00",
+            "gross_exposure_pct": "0.0000",
+            "position_values_usd": {},
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {},
+            "oldest_mark_age_days": null,
+            "events": []
+          }
+        ],
+        "net_equity_series": [
+          {
+            "at": "2026-02-02T23:59:59Z",
+            "equity_net_of_llm_usd": "10000.00"
+          },
+          {
+            "at": "2026-02-03T14:30:00Z",
+            "equity_net_of_llm_usd": "10000.00"
+          },
+          {
+            "at": "2026-02-03T14:35:00Z",
+            "equity_net_of_llm_usd": "10000.00"
+          },
+          {
+            "at": "2026-02-04T14:30:00Z",
+            "equity_net_of_llm_usd": "10000.00"
+          },
+          {
+            "at": "2026-02-04T14:35:00Z",
+            "equity_net_of_llm_usd": "10000.00"
+          },
+          {
+            "at": "2026-02-05T14:30:00Z",
+            "equity_net_of_llm_usd": "10000.00"
+          },
+          {
+            "at": "2026-02-05T14:35:00Z",
+            "equity_net_of_llm_usd": "10000.00"
+          },
+          {
+            "at": "2026-02-11T20:00:00Z",
+            "equity_net_of_llm_usd": "10000.00"
+          },
+          {
+            "at": "2026-02-12T00:00:00Z",
+            "equity_net_of_llm_usd": "10000.00"
+          }
+        ],
+        "flow_boundaries": [],
+        "reconciliation": {
+          "status": "no_snapshot",
+          "anchors": [],
+          "snapshot_detail": "aggregate_only",
+          "note": "A PortfolioSnapshot stores aggregate cash and positions value, not per-instrument quantities. It can reconcile a replay total; it cannot value a historical position on its own."
+        },
+        "methodology": {
+          "version": "portfolio_accounting.v1",
+          "equity_definition": "E(t) = cash(t) + sum(quantity(i,t) * price(i,t))",
+          "cash_basis": "declared_opportunity_set_starting_state",
+          "cash_basis_flags": [],
+          "opening_cash_usd": "10000.00",
+          "opening_positions": {},
+          "position_basis": "full_ledger_replay_from_portfolio_inception",
+          "short_policy": "A SELL may only close or reduce a long. An oversell is refused rather than silently treated as a short.",
+          "mark_policy": "latest_known_mark_at_or_before_valuation.v1",
+          "mark_sources": {
+            "declared_fixture_mark": 9
+          },
+          "mark_staleness_days": 7,
+          "valuation_timing": "End of timestamp: external flows are applied before fills at the same instant.",
+          "fill_rule": "first_executable_mark_at_or_after_decision.v1",
+          "twr_method": "flow_boundary_chain.v1",
+          "twr_note": "Each sub-period ends at an external flow boundary; the flow changes the next base but is not itself a return.",
+          "fee_policy": "recorded_fees_only.v1",
+          "llm_cost_policy": "explicit_net_of_llm_equity_series.v1",
+          "turnover_formula": "sum(abs(quantity * fill_price)) / ((opening_equity + closing_equity) / 2)",
+          "drawdown_definition": "maximum decline from a prior equity peak over priced observations",
+          "approximate": false,
+          "approximate_reasons": [],
+          "observations": 9,
+          "priced_observations": 9,
+          "unpriced_observations": 0,
+          "flow_count": 0,
+          "fill_count": 0
+        },
+        "flags": [
+          "llm_costs_incomplete",
+          "llm_cost_not_reported"
+        ],
+        "approximate": false,
+        "orders": [
+          {
+            "opportunity": "aapl-2026-02-03",
+            "decision_run_id": "522dd707-8a29-4f5c-b1d2-b5ba543b8f03",
+            "decision_at": "2026-02-03T14:30:00Z",
+            "decision_recorded_at": "2026-11-11T15:47:44.763081Z",
+            "proposal_action": "HOLD",
+            "requested_quantity": null,
+            "price_at_decision_usd": "225.00",
+            "guard_status": "hold_no_trade",
+            "guard_reason": "HOLD - no execution required.",
+            "binding_rule": null,
+            "allowed_quantity": "0",
+            "fill": null,
+            "equity_after_usd": "10000.00",
+            "reason": null
+          },
+          {
+            "opportunity": "msft-2026-02-04",
+            "decision_run_id": "7f84a800-6892-4a47-95cd-bc22694746c5",
+            "decision_at": "2026-02-04T14:30:00Z",
+            "decision_recorded_at": "2026-11-11T15:47:45.607392Z",
+            "proposal_action": "HOLD",
+            "requested_quantity": null,
+            "price_at_decision_usd": "410.00",
+            "guard_status": "hold_no_trade",
+            "guard_reason": "HOLD - no execution required.",
+            "binding_rule": null,
+            "allowed_quantity": "0",
+            "fill": null,
+            "equity_after_usd": "10000.00",
+            "reason": null
+          },
+          {
+            "opportunity": "tsla-2026-02-05",
+            "decision_run_id": "892a6e54-90da-45e0-9b37-cd5616297b6d",
+            "decision_at": "2026-02-05T14:30:00Z",
+            "decision_recorded_at": "2026-11-11T15:47:46.593318Z",
+            "proposal_action": "HOLD",
+            "requested_quantity": null,
+            "price_at_decision_usd": "250.00",
+            "guard_status": "hold_no_trade",
+            "guard_reason": "HOLD - no execution required.",
+            "binding_rule": null,
+            "allowed_quantity": "0",
+            "fill": null,
+            "equity_after_usd": "10000.00",
+            "reason": null
+          }
+        ],
+        "orders_count": 3,
+        "fill_count": 0,
+        "per_opportunity": [
+          {
+            "opportunity": "aapl-2026-02-03",
+            "ticker": "AAPL",
+            "scheduled_at": "2026-02-03T14:30:00Z"
+          },
+          {
+            "opportunity": "msft-2026-02-04",
+            "ticker": "MSFT",
+            "scheduled_at": "2026-02-04T14:30:00Z"
+          },
+          {
+            "opportunity": "tsla-2026-02-05",
+            "ticker": "TSLA",
+            "scheduled_at": "2026-02-05T14:30:00Z"
+          }
+        ]
+      }
+    },
+    {
+      "key": "V4",
+      "label": "Portfolio allocation",
+      "engine": "portfolio_allocation",
+      "implemented": false,
+      "status": "not_executed",
+      "reason": "V4 (portfolio allocation) is declared and not implemented: its dependency FIX-08 is not done. It is excluded from the equal-opportunity denominator rather than measured as a zero.",
+      "protocol_version": "",
+      "expected_protocol_version": "",
+      "protocol_matches_declaration": null,
+      "requires_rebuttals": false,
+      "provider": "stub",
+      "scheduled_runs": 0,
+      "completed_runs": 0,
+      "failed_runs": 0,
+      "not_executed_runs": 3,
+      "excluded_from_denominator": true,
+      "cost": {
+        "runs": 3,
+        "measured_tokens": {
+          "input": 0,
+          "output": 0
+        },
+        "estimated_tokens": {
+          "input": 0,
+          "output": 0
+        },
+        "price_table_cost_usd": null,
+        "price_table_cost_partial_usd": null,
+        "price_table_cost_unknown_runs": 3,
+        "billed_cost_usd": null,
+        "billed_cost_unknown_runs": 3,
+        "billed_cost_unknown_reasons": {
+          "run_not_recorded": 3
+        },
+        "timed_out_calls": 0,
+        "unreconciled_timeout_calls": 0,
+        "strict_billed_ceiling": false,
+        "note": "Measured tokens, estimated tokens, price-table cost and billed cost are reported separately. A null billed total means at least one run's provider reported no charge; it is not a zero."
+      },
+      "runs": [
+        {
+          "opportunity": "aapl-2026-02-03",
+          "fixture_id": "alphaagent-arms.v1.v4.aapl-2026-02-03",
+          "status": "not_executed",
+          "failure_code": "unimplemented",
+          "failure_detail": "V4 (portfolio allocation) is declared and not implemented: its dependency FIX-08 is not done. It is excluded from the equal-opportunity denominator rather than measured as a zero.",
+          "decision_run_id": null,
+          "protocol_version": null,
+          "snapshot_id": null,
+          "snapshot_hash": null,
+          "cost": {
+            "measured_tokens": {
+              "input": 0,
+              "output": 0
+            },
+            "estimated_tokens": {
+              "input": 0,
+              "output": 0
+            },
+            "price_table_cost_usd": null,
+            "billed_cost_usd": null,
+            "billed_cost_unknown_calls": 1,
+            "basis": "",
+            "unknown_reason": "run_not_recorded"
+          }
+        },
+        {
+          "opportunity": "msft-2026-02-04",
+          "fixture_id": "alphaagent-arms.v1.v4.msft-2026-02-04",
+          "status": "not_executed",
+          "failure_code": "unimplemented",
+          "failure_detail": "V4 (portfolio allocation) is declared and not implemented: its dependency FIX-08 is not done. It is excluded from the equal-opportunity denominator rather than measured as a zero.",
+          "decision_run_id": null,
+          "protocol_version": null,
+          "snapshot_id": null,
+          "snapshot_hash": null,
+          "cost": {
+            "measured_tokens": {
+              "input": 0,
+              "output": 0
+            },
+            "estimated_tokens": {
+              "input": 0,
+              "output": 0
+            },
+            "price_table_cost_usd": null,
+            "billed_cost_usd": null,
+            "billed_cost_unknown_calls": 1,
+            "basis": "",
+            "unknown_reason": "run_not_recorded"
+          }
+        },
+        {
+          "opportunity": "tsla-2026-02-05",
+          "fixture_id": "alphaagent-arms.v1.v4.tsla-2026-02-05",
+          "status": "not_executed",
+          "failure_code": "unimplemented",
+          "failure_detail": "V4 (portfolio allocation) is declared and not implemented: its dependency FIX-08 is not done. It is excluded from the equal-opportunity denominator rather than measured as a zero.",
+          "decision_run_id": null,
+          "protocol_version": null,
+          "snapshot_id": null,
+          "snapshot_hash": null,
+          "cost": {
+            "measured_tokens": {
+              "input": 0,
+              "output": 0
+            },
+            "estimated_tokens": {
+              "input": 0,
+              "output": 0
+            },
+            "price_table_cost_usd": null,
+            "billed_cost_usd": null,
+            "billed_cost_unknown_calls": 1,
+            "basis": "",
+            "unknown_reason": "run_not_recorded"
+          }
+        }
+      ],
+      "snapshots": [],
+      "trajectory": null
+    }
+  ],
+  "verification": {
+    "distinct_protocol_ids": true,
+    "protocol_ids": {
+      "V0": "heuristic_fallback.v1",
+      "V1": "single_agent_baseline.v1",
+      "V2": "debate.no_rebuttal.v1",
+      "V3": "debate.v1",
+      "V4": ""
+    },
+    "identical_snapshots_across_arms": true,
+    "reference_snapshots": {
+      "aapl-2026-02-03": "918c65e106c7061eaf142fc9fb513749b889034391a03c97bf2bb2e51015f7a8",
+      "msft-2026-02-04": "c6a3491b6a3d49423fd0910408151ba06c0e7556f14ec9eb370965240e94979b",
+      "tsla-2026-02-05": "d3b829991af710262ef259de271490918490262edaffe1b9534bb1c37ddbf458"
+    },
+    "snapshot_sets": {
+      "V0": {
+        "aapl-2026-02-03": {
+          "snapshot_id": "08fac509-3cd6-4afb-8379-ebdf56d1fd68",
+          "content_hash": "918c65e106c7061eaf142fc9fb513749b889034391a03c97bf2bb2e51015f7a8",
+          "opportunity": "aapl-2026-02-03"
+        },
+        "msft-2026-02-04": {
+          "snapshot_id": "3dfc4e0a-9834-4602-911b-5b933506d0d7",
+          "content_hash": "c6a3491b6a3d49423fd0910408151ba06c0e7556f14ec9eb370965240e94979b",
+          "opportunity": "msft-2026-02-04"
+        },
+        "tsla-2026-02-05": {
+          "snapshot_id": "94c6fc4e-c40d-4b65-b021-62a90c42b883",
+          "content_hash": "d3b829991af710262ef259de271490918490262edaffe1b9534bb1c37ddbf458",
+          "opportunity": "tsla-2026-02-05"
+        }
+      },
+      "V1": {
+        "aapl-2026-02-03": {
+          "snapshot_id": "08fac509-3cd6-4afb-8379-ebdf56d1fd68",
+          "content_hash": "918c65e106c7061eaf142fc9fb513749b889034391a03c97bf2bb2e51015f7a8",
+          "opportunity": "aapl-2026-02-03"
+        },
+        "msft-2026-02-04": {
+          "snapshot_id": "3dfc4e0a-9834-4602-911b-5b933506d0d7",
+          "content_hash": "c6a3491b6a3d49423fd0910408151ba06c0e7556f14ec9eb370965240e94979b",
+          "opportunity": "msft-2026-02-04"
+        },
+        "tsla-2026-02-05": {
+          "snapshot_id": "94c6fc4e-c40d-4b65-b021-62a90c42b883",
+          "content_hash": "d3b829991af710262ef259de271490918490262edaffe1b9534bb1c37ddbf458",
+          "opportunity": "tsla-2026-02-05"
+        }
+      },
+      "V2": {
+        "aapl-2026-02-03": {
+          "snapshot_id": "08fac509-3cd6-4afb-8379-ebdf56d1fd68",
+          "content_hash": "918c65e106c7061eaf142fc9fb513749b889034391a03c97bf2bb2e51015f7a8",
+          "opportunity": "aapl-2026-02-03"
+        },
+        "msft-2026-02-04": {
+          "snapshot_id": "3dfc4e0a-9834-4602-911b-5b933506d0d7",
+          "content_hash": "c6a3491b6a3d49423fd0910408151ba06c0e7556f14ec9eb370965240e94979b",
+          "opportunity": "msft-2026-02-04"
+        },
+        "tsla-2026-02-05": {
+          "snapshot_id": "94c6fc4e-c40d-4b65-b021-62a90c42b883",
+          "content_hash": "d3b829991af710262ef259de271490918490262edaffe1b9534bb1c37ddbf458",
+          "opportunity": "tsla-2026-02-05"
+        }
+      },
+      "V3": {
+        "aapl-2026-02-03": {
+          "snapshot_id": "08fac509-3cd6-4afb-8379-ebdf56d1fd68",
+          "content_hash": "918c65e106c7061eaf142fc9fb513749b889034391a03c97bf2bb2e51015f7a8",
+          "opportunity": "aapl-2026-02-03"
+        },
+        "msft-2026-02-04": {
+          "snapshot_id": "3dfc4e0a-9834-4602-911b-5b933506d0d7",
+          "content_hash": "c6a3491b6a3d49423fd0910408151ba06c0e7556f14ec9eb370965240e94979b",
+          "opportunity": "msft-2026-02-04"
+        },
+        "tsla-2026-02-05": {
+          "snapshot_id": "94c6fc4e-c40d-4b65-b021-62a90c42b883",
+          "content_hash": "d3b829991af710262ef259de271490918490262edaffe1b9534bb1c37ddbf458",
+          "opportunity": "tsla-2026-02-05"
+        }
+      }
+    },
+    "same_opportunity_set": true,
+    "note": "Protocol ids are read from the runs, not copied from the declaration. Snapshot identity is compared by content hash per opportunity across arms."
+  },
+  "denominators": {
+    "rule": "all_scheduled_runs_of_implemented_arms",
+    "implemented_arms": [
+      "V0",
+      "V1",
+      "V2",
+      "V3"
+    ],
+    "excluded_unimplemented_arms": [
+      "V4"
+    ],
+    "opportunities": 3,
+    "scheduled": 12,
+    "completed": 12,
+    "failed": 0,
+    "not_executed": 0,
+    "completion_rate_pct": "100.0000",
+    "note": "A missing or failed run is counted in the denominator. Dropping it would make an arm look complete by omission."
+  },
+  "fairness": {
+    "equal_opportunity": {
+      "opportunities_per_implemented_arm": 3,
+      "implemented_arms": [
+        "V0",
+        "V1",
+        "V2",
+        "V3"
+      ],
+      "v4_excluded": true
+    },
+    "same_snapshots": true,
+    "same_risk_rules": {
+      "status": "match",
+      "checks": {
+        "max_trade_allocation_pct": {
+          "declared": "5.00",
+          "portfolio_current": "5.00",
+          "status": "match"
+        },
+        "max_portfolio_exposure_pct": {
+          "declared": "90.00",
+          "portfolio_current": "90.00",
+          "status": "match"
+        },
+        "max_ticker_concentration_pct": {
+          "declared": "30.00",
+          "portfolio_current": "30.00",
+          "status": "match"
+        },
+        "max_sector_concentration_pct": {
+          "declared": "40.00",
+          "portfolio_current": "40.00",
+          "status": "match"
+        },
+        "max_turnover_pct": {
+          "declared": "25.00",
+          "portfolio_current": "25.00",
+          "status": "match"
+        },
+        "min_cash_buffer_pct": {
+          "declared": "10.00",
+          "portfolio_current": "10.00",
+          "status": "match"
+        },
+        "daily_loss_limit_usd": {
+          "declared": "500.00",
+          "portfolio_current": "500.00",
+          "status": "match"
+        }
+      },
+      "note": "The declared rules are what each arm's guard evaluated. They are compared with the portfolio's current configuration because historical risk configuration is not versioned; a match is necessary, not sufficient."
+    },
+    "same_execution_assumptions": {
+      "declared": {
+        "guard_policy_version": "guard.v1",
+        "fill_rule": "first_executable_mark_at_or_after_decision.v1",
+        "slippage_bps": "0",
+        "fee_bps": "0",
+        "fee_model": "declared zero fee: no broker integration exists, and a declared zero is labelled as an assumption rather than a recorded charge"
+      },
+      "applied_by_all_arms": true,
+      "fill_rule": "first_executable_mark_at_or_after_decision.v1"
+    },
+    "same_accounting_method": "portfolio_accounting.v1",
+    "note": "The arms share the opportunity set, snapshots, risk rules, execution assumptions and accounting method. They differ only in protocol and in the decisions that follow from it."
+  },
+  "cost_breakdown": {
+    "measured_tokens": {
+      "input": 0,
+      "output": 0
+    },
+    "estimated_tokens": {
+      "input": 21394,
+      "output": 2937
+    },
+    "price_table_cost_usd": "0.018190",
+    "billed_cost_usd": null,
+    "billed_cost_unknown_runs": 9,
+    "billed_cost_unknown_reasons": {
+      "scripted_provider_made_no_charge": 9
+    },
+    "timed_out_calls": 0,
+    "unreconciled_timeout_calls": 0,
+    "strict_billed_ceiling": false,
+    "note": "A null total means at least one arm's cost was not reported. The report never substitutes the price-table estimate for a billed figure, and never zero for unknown."
+  },
+  "drawdown_gate": {
+    "acceptable_drawdown_pct": "10.00",
+    "per_arm": {
+      "V0": {
+        "max_drawdown_pct": "0.0000",
+        "within_acceptable": true
+      },
+      "V1": {
+        "max_drawdown_pct": "0.0000",
+        "within_acceptable": true
+      },
+      "V2": {
+        "max_drawdown_pct": "-0.0050",
+        "within_acceptable": true
+      },
+      "V3": {
+        "max_drawdown_pct": "0.0000",
+        "within_acceptable": true
+      }
+    },
+    "note": "Drawdowns are from each arm's simulated trajectory under the frozen marks, not from realised account history. They are an engineering check, not evidence of risk control."
+  },
+  "honesty": {
+    "engineering_validation_only": true,
+    "no_profitability_claim": true,
+    "profitability_threshold": null,
+    "simulated_provider": true,
+    "simulated_content": true,
+    "comparative_protocol_claim": false,
+    "reason": "The opportunity set, marks and arm trajectories are authored/simulated. With the scripted provider the model outputs are not LLM samples, and even with a live provider a single opportunity set is engineering validation, not a comparative result.",
+    "what_is_real": "The protocol code paths, the shared snapshots and their hashes, the guard evaluation, the fill rule, the accounting method and the cost separation.",
+    "what_is_not_real": "The prices, the model outputs (with the scripted provider), and therefore any return, drawdown or protocol ranking derived from them."
+  },
+  "manifest": {
+    "experiment_id": "alphaagent-arms.v1",
+    "declared_at": "2026-02-02T10:05:00Z",
+    "observation_window": {
+      "start": "2026-02-03T00:00:00Z",
+      "end": "2026-02-12T00:00:00Z"
+    },
+    "primary_metric": {
+      "id": "mean_action_score_pct",
+      "family": "signal_diagnostics",
+      "horizon_days": 7,
+      "direction": "higher_is_better",
+      "description": "Mean signed action score at the 7-day horizon (BUY=forward, SELL=-forward, HOLD=0 by convention). Pre-registered before any arm ran; it needs matured outcomes and is null with that reason when they do not exist."
+    },
+    "sample_requirements": {
+      "minimum_opportunities": 3,
+      "minimum_completed_arms": 4,
+      "minimum_observations": 3,
+      "note": "Below this the exercise is engineering validation only; the report says so and asserts no profitability threshold."
+    },
+    "cost_ceiling_usd": "1.00",
+    "acceptable_drawdown_pct": "10.00",
+    "checksum": "2820d6eb66a3dfd2fcbefc653649db1b86dc5527b85b3c74589cb90bcc2f9131"
+  },
+  "contents_hash": "be8221bbb3d9b517ec1d890c1fd52fd8ccc70d7dd56c4b9d0eddee6670e4ff6d",
+  "execution": {
+    "started_at": "2026-11-11T15:47:38.996687Z",
+    "snapshots_used": {
+      "aapl-2026-02-03": {
+        "snapshot_id": "08fac509-3cd6-4afb-8379-ebdf56d1fd68",
+        "content_hash": "918c65e106c7061eaf142fc9fb513749b889034391a03c97bf2bb2e51015f7a8"
+      },
+      "msft-2026-02-04": {
+        "snapshot_id": "3dfc4e0a-9834-4602-911b-5b933506d0d7",
+        "content_hash": "c6a3491b6a3d49423fd0910408151ba06c0e7556f14ec9eb370965240e94979b"
+      },
+      "tsla-2026-02-05": {
+        "snapshot_id": "94c6fc4e-c40d-4b65-b021-62a90c42b883",
+        "content_hash": "d3b829991af710262ef259de271490918490262edaffe1b9534bb1c37ddbf458"
+      }
+    },
+    "evidence": {
+      "aapl-2026-02-03": {
+        "created": 0,
+        "declared": 2
+      },
+      "msft-2026-02-04": {
+        "created": 0,
+        "declared": 2
+      },
+      "tsla-2026-02-05": {
+        "created": 0,
+        "declared": 2
+      }
+    },
+    "client_modes": {
+      "V0": "deterministic",
+      "V1": "stub",
+      "V2": "stub",
+      "V3": "stub"
+    },
+    "idempotent": true,
+    "note": "Re-running reuses a run whose stable fixture id exists. It does not re-call a provider for an arm/opportunity already recorded."
+  }
+}

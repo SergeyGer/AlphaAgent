@@ -1,0 +1,316 @@
+{
+  "schema_version": "1.0",
+  "opportunity_set_id": "alphaagent-arms.v1",
+  "label": "V0-V3 protocol execution on one frozen opportunity set (engineering validation)",
+  "description": "Three scheduled decisions (AAPL, MSFT, TSLA) over one frozen window. Every implemented arm runs against the same snapshot per opportunity, the same marks, the same risk rules and the same accounting method. The prices, the quotes and any scripted model reply are authored; this is not realised history and it makes no comparative protocol claim.",
+  "declared_at": "2026-02-02T10:05:00Z",
+  "observation_window": {
+    "start": "2026-02-03T00:00:00Z",
+    "end": "2026-02-12T00:00:00Z"
+  },
+  "as_of": "2026-02-12T00:00:00Z",
+  "pre_registration": {
+    "registered_at": "2026-02-02T10:00:00Z",
+    "registered_by": "engineering",
+    "sample_plan": {
+      "minimum_opportunities": 3,
+      "minimum_completed_arms": 4,
+      "minimum_observations": 3,
+      "note": "Below this the exercise is engineering validation only; the report says so and asserts no profitability threshold."
+    },
+    "primary_metric": {
+      "id": "mean_action_score_pct",
+      "family": "signal_diagnostics",
+      "horizon_days": 7,
+      "direction": "higher_is_better",
+      "description": "Mean signed action score at the 7-day horizon (BUY=forward, SELL=-forward, HOLD=0 by convention). Pre-registered before any arm ran; it needs matured outcomes and is null with that reason when they do not exist."
+    },
+    "cost_ceiling_usd": "1.00",
+    "acceptable_drawdown_pct": "10.00"
+  },
+  "starting_state": {
+    "cash": "10000.00",
+    "positions": {}
+  },
+  "execution_assumptions": {
+    "guard_policy_version": "guard.v1",
+    "fill_rule": "first_executable_mark_at_or_after_decision.v1",
+    "slippage_bps": "0",
+    "fee_bps": "0",
+    "fee_model": "declared zero fee: no broker integration exists, and a declared zero is labelled as an assumption rather than a recorded charge"
+  },
+  "risk_rules": {
+    "max_trade_allocation_pct": "5.00",
+    "max_portfolio_exposure_pct": "90.00",
+    "max_ticker_concentration_pct": "30.00",
+    "max_sector_concentration_pct": "40.00",
+    "max_turnover_pct": "25.00",
+    "min_cash_buffer_pct": "10.00",
+    "daily_loss_limit_usd": "500.00"
+  },
+  "benchmark": {
+    "ticker": "SPY",
+    "asset_class": "equity",
+    "selection_rule": "declared_equity_benchmark"
+  },
+  "marks": [
+    {
+      "ticker": "AAPL",
+      "at": "2026-02-03T14:30:00Z",
+      "observed_at": "2026-02-03T14:30:00Z",
+      "price": "225.00",
+      "source": "declared_fixture_mark",
+      "provenance": "authored opportunity-set mark, not a fetched close"
+    },
+    {
+      "ticker": "AAPL",
+      "at": "2026-02-03T14:35:00Z",
+      "observed_at": "2026-02-03T14:35:00Z",
+      "price": "225.50",
+      "source": "declared_fixture_mark",
+      "provenance": "authored fill mark"
+    },
+    {
+      "ticker": "AAPL",
+      "at": "2026-02-11T20:00:00Z",
+      "observed_at": "2026-02-11T20:00:00Z",
+      "price": "232.00",
+      "source": "declared_fixture_mark",
+      "provenance": "authored closing mark"
+    },
+    {
+      "ticker": "MSFT",
+      "at": "2026-02-04T14:30:00Z",
+      "observed_at": "2026-02-04T14:30:00Z",
+      "price": "410.00",
+      "source": "declared_fixture_mark",
+      "provenance": "authored opportunity-set mark, not a fetched close"
+    },
+    {
+      "ticker": "MSFT",
+      "at": "2026-02-04T14:35:00Z",
+      "observed_at": "2026-02-04T14:35:00Z",
+      "price": "411.00",
+      "source": "declared_fixture_mark",
+      "provenance": "authored fill mark"
+    },
+    {
+      "ticker": "MSFT",
+      "at": "2026-02-11T20:00:00Z",
+      "observed_at": "2026-02-11T20:00:00Z",
+      "price": "400.00",
+      "source": "declared_fixture_mark",
+      "provenance": "authored closing mark"
+    },
+    {
+      "ticker": "TSLA",
+      "at": "2026-02-05T14:30:00Z",
+      "observed_at": "2026-02-05T14:30:00Z",
+      "price": "250.00",
+      "source": "declared_fixture_mark",
+      "provenance": "authored opportunity-set mark, not a fetched close"
+    },
+    {
+      "ticker": "TSLA",
+      "at": "2026-02-05T14:35:00Z",
+      "observed_at": "2026-02-05T14:35:00Z",
+      "price": "249.50",
+      "source": "declared_fixture_mark",
+      "provenance": "authored fill mark"
+    },
+    {
+      "ticker": "TSLA",
+      "at": "2026-02-11T20:00:00Z",
+      "observed_at": "2026-02-11T20:00:00Z",
+      "price": "260.00",
+      "source": "declared_fixture_mark",
+      "provenance": "authored closing mark"
+    }
+  ],
+  "opportunities": [
+    {
+      "key": "aapl-2026-02-03",
+      "ticker": "AAPL",
+      "scheduled_at": "2026-02-03T14:30:00Z",
+      "snapshot": {
+        "portfolio_version": "alphaagent-arms.v1/aapl-2026-02-03",
+        "analysis_cutoff": "2026-02-03T14:30:00Z",
+        "captured_at": "2026-02-03T14:29:55Z",
+        "holdings": [],
+        "cash": {
+          "balance_usd": "10000.00",
+          "currency": "USD",
+          "as_of": "2026-02-03T14:29:55Z"
+        },
+        "quotes": {
+          "AAPL": {
+            "price_usd": "225.00",
+            "change_pct": "2.50",
+            "currency": "USD",
+            "as_of": "2026-02-03T14:29:55Z",
+            "source": "declared_fixture_quote"
+          }
+        }
+      },
+      "evidence": [
+        {
+          "source_type": "news_article",
+          "publisher": "declared fixture wire",
+          "published_at": "2026-02-03T12:00:00Z",
+          "available_at": "2026-02-03T12:05:00Z",
+          "retrieved_at": "2026-02-03T14:29:55Z",
+          "excerpt": "Declared fixture: services revenue grew faster than the hardware segment, and the installed base expanded.",
+          "observation": {
+            "polarity": "positive",
+            "scope": "declared_fixture"
+          }
+        },
+        {
+          "source_type": "news_article",
+          "publisher": "declared fixture wire",
+          "published_at": "2026-02-03T11:00:00Z",
+          "available_at": "2026-02-03T11:05:00Z",
+          "retrieved_at": "2026-02-03T14:29:55Z",
+          "excerpt": "Declared fixture: a supplier cut its outlook, pointing to a softer hardware cycle.",
+          "observation": {
+            "polarity": "negative",
+            "scope": "declared_fixture"
+          }
+        }
+      ]
+    },
+    {
+      "key": "msft-2026-02-04",
+      "ticker": "MSFT",
+      "scheduled_at": "2026-02-04T14:30:00Z",
+      "snapshot": {
+        "portfolio_version": "alphaagent-arms.v1/msft-2026-02-04",
+        "analysis_cutoff": "2026-02-04T14:30:00Z",
+        "captured_at": "2026-02-04T14:29:55Z",
+        "holdings": [],
+        "cash": {
+          "balance_usd": "10000.00",
+          "currency": "USD",
+          "as_of": "2026-02-04T14:29:55Z"
+        },
+        "quotes": {
+          "MSFT": {
+            "price_usd": "410.00",
+            "change_pct": "-3.00",
+            "currency": "USD",
+            "as_of": "2026-02-04T14:29:55Z",
+            "source": "declared_fixture_quote"
+          }
+        }
+      },
+      "evidence": [
+        {
+          "source_type": "fundamentals",
+          "publisher": "declared fixture filing",
+          "published_at": "2026-02-04T10:00:00Z",
+          "available_at": "2026-02-04T10:05:00Z",
+          "retrieved_at": "2026-02-04T14:29:55Z",
+          "excerpt": "Declared fixture: cloud backlog rose, while capital expenditure guidance increased.",
+          "observation": {
+            "scope": "declared_fixture"
+          }
+        },
+        {
+          "source_type": "news_article",
+          "publisher": "declared fixture wire",
+          "published_at": "2026-02-04T09:30:00Z",
+          "available_at": "2026-02-04T09:35:00Z",
+          "retrieved_at": "2026-02-04T14:29:55Z",
+          "excerpt": "Declared fixture: a licensing review added uncertainty to the enterprise pipeline.",
+          "observation": {
+            "polarity": "negative",
+            "scope": "declared_fixture"
+          }
+        }
+      ]
+    },
+    {
+      "key": "tsla-2026-02-05",
+      "ticker": "TSLA",
+      "scheduled_at": "2026-02-05T14:30:00Z",
+      "snapshot": {
+        "portfolio_version": "alphaagent-arms.v1/tsla-2026-02-05",
+        "analysis_cutoff": "2026-02-05T14:30:00Z",
+        "captured_at": "2026-02-05T14:29:55Z",
+        "holdings": [],
+        "cash": {
+          "balance_usd": "10000.00",
+          "currency": "USD",
+          "as_of": "2026-02-05T14:29:55Z"
+        },
+        "quotes": {
+          "TSLA": {
+            "price_usd": "250.00",
+            "change_pct": "1.00",
+            "currency": "USD",
+            "as_of": "2026-02-05T14:29:55Z",
+            "source": "declared_fixture_quote"
+          }
+        }
+      },
+      "evidence": [
+        {
+          "source_type": "news_article",
+          "publisher": "declared fixture wire",
+          "published_at": "2026-02-05T11:00:00Z",
+          "available_at": "2026-02-05T11:05:00Z",
+          "retrieved_at": "2026-02-05T14:29:55Z",
+          "excerpt": "Declared fixture: deliveries met the guidance range and margins were stable.",
+          "observation": {
+            "polarity": "neutral",
+            "scope": "declared_fixture"
+          }
+        },
+        {
+          "source_type": "price_quote",
+          "publisher": "declared fixture quote feed",
+          "published_at": "2026-02-05T14:25:00Z",
+          "available_at": "2026-02-05T14:25:00Z",
+          "retrieved_at": "2026-02-05T14:29:55Z",
+          "excerpt": "Declared fixture: session momentum was mildly positive into the decision.",
+          "observation": {
+            "scope": "declared_fixture"
+          }
+        }
+      ]
+    }
+  ],
+  "arms": {
+    "V0": {
+      "label": "Deterministic baseline",
+      "engine": "deterministic_baseline",
+      "protocol_version": "heuristic_fallback.v1",
+      "implemented": true
+    },
+    "V1": {
+      "label": "One analyst",
+      "engine": "single_agent",
+      "protocol_version": "single_agent_baseline.v1",
+      "implemented": true
+    },
+    "V2": {
+      "label": "Current pipeline (no explicit response round)",
+      "engine": "debate",
+      "protocol_version": "debate.no_rebuttal.v1",
+      "implemented": true
+    },
+    "V3": {
+      "label": "Explicit rebuttal",
+      "engine": "debate_with_rebuttal",
+      "protocol_version": "debate.v1",
+      "implemented": true
+    },
+    "V4": {
+      "label": "Portfolio allocation",
+      "engine": "portfolio_allocation",
+      "protocol_version": "",
+      "implemented": false,
+      "unimplemented_reason": "Declared and not implemented: its dependency FIX-08 is not done."
+    }
+  }
+}

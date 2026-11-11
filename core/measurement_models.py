@@ -42,10 +42,12 @@ __all__ = [
     "CashFlowType",
     "Experiment",
     "ExperimentEvaluationMode",
+    "ExperimentReportVersion",
     "ExperimentRun",
     "ExperimentRunStatus",
     "ExperimentStatus",
     "ExperimentVariant",
+    "ImmutableReportError",
     "PrimaryMetricFamily",
 ]
 
@@ -113,6 +115,15 @@ class CashFlow(models.Model):
 # ---------------------------------------------------------------------------
 # Experiments
 # ---------------------------------------------------------------------------
+class ImmutableReportError(Exception):
+    """A published report version was about to be modified.
+
+    A report is evidence. Changing it after publication would make every number
+    in it unfalsifiable, which is why the overwrite this table replaced was a
+    defect and not a storage choice.
+    """
+
+
 class ExperimentStatus(models.TextChoices):
     """Whether a manifest has been resolved and a report built from it."""
 
@@ -234,6 +245,71 @@ class Experiment(models.Model):
     @property
     def has_report(self) -> bool:
         return bool(self.report) and self.report_version > 0
+
+
+class ExperimentReportVersion(models.Model):
+    """One immutable, addressable report version (FIX-07C).
+
+    ``Experiment.report`` / ``report_version`` remain the latest view for existing
+    consumers, but every version ever built is retained here. A replay appends a
+    version; it never rewrites an earlier one.
+
+    Each row stores both the published document and a **dependency snapshot**: the
+    rows the report actually read (decision runs, outcomes, guards, transactions,
+    flows, snapshots and portfolio configuration) with a canonical digest. The
+    digest is what lets a later reader check whether the live data still matches
+    what a version was built from. When it no longer matches, the earlier version
+    is still readable and byte-identical - that is the point of archiving it -
+    while the drift is reported rather than silently changing a published number.
+    """
+
+    id = models.BigAutoField(primary_key=True)
+    experiment = models.ForeignKey(
+        Experiment,
+        on_delete=models.CASCADE,
+        related_name="report_versions",
+    )
+    version = models.PositiveIntegerField()
+    generated_at = models.DateTimeField()
+    build_reason = models.CharField(max_length=64, blank=True, default="")
+    #: The published document, exactly as served.
+    report = models.JSONField(default=dict)
+    #: SHA-256 of the canonical JSON encoding of ``report``.
+    report_hash = models.CharField(max_length=64)
+    #: SHA-256 of the canonical dependency snapshot below.
+    dependency_digest = models.CharField(max_length=64)
+    #: The inputs the version was built from, so drift can be named.
+    dependencies = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Experiment report version"
+        verbose_name_plural = "Experiment report versions"
+        ordering = ["experiment", "version"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["experiment", "version"], name="report_version_unique_per_experiment"
+            ),
+            models.CheckConstraint(condition=Q(version__gt=0), name="report_version_positive"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.experiment.experiment_key} v{self.version}"
+
+    def save(self, *args, **kwargs):
+        """Append-only: a stored version may not be edited or deleted."""
+        if not self._state.adding:
+            raise ImmutableReportError(
+                f"Report version {self.version} of {self.experiment_id} is immutable; "
+                "build a new version instead of editing a published one."
+            )
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):  # pragma: no cover - guard, asserted in tests
+        raise ImmutableReportError(
+            f"Report version {self.version} of {self.experiment_id} is immutable; it "
+            "cannot be deleted."
+        )
 
 
 class ExperimentVariant(models.Model):

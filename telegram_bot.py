@@ -331,7 +331,9 @@ def build_thoughts_message(portfolio, limit: int = 3) -> str:
         stamp = timezone.localtime(log.created_at).strftime("%d %b %H:%M")
         lines.append(
             f"{emoji_for_sentiment(log.market_sentiment)} <b>{esc(log.action_taken)}</b>\n"
-            f"<i>{stamp} · {log.tokens_used:,} tokens · ${log.api_cost_usd}</i>\n"
+            f"<i>{stamp} · {log.tokens_used:,} tokens · "
+            f"{'$' + str(log.api_cost_usd) if log.api_cost_usd is not None else 'cost unknown'}"
+            "</i>\n"
             f"{esc(log.reasoning[:600])}"
         )
         lines.append("─" * 18)

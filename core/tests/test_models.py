@@ -121,7 +121,10 @@ class AgentDecisionLogTests(TestCase):
             market_sentiment=MarketSentiment.BULLISH,
         )
         self.assertEqual(log.tokens_used, 0)
-        self.assertEqual(log.api_cost_usd, Decimal("0.00000"))
+        # A log created without a measured charge has an **unknown** cost, not a
+        # measured zero. A zero here would read as a measurement nobody made.
+        self.assertIsNone(log.api_cost_usd)
+        self.assertEqual(log.cost_basis, "")
         self.assertEqual(tx.decision_log, log)
 
     def test_transaction_delete_sets_log_transaction_null(self):

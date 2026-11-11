@@ -440,6 +440,8 @@ def run_alpha_agent_task(
             cached_input_tokens=run_result.cached_input_tokens,
             cache_write_tokens=run_result.cache_write_tokens,
             api_cost_usd=run_result.api_cost_usd,
+            estimated_cost_usd=run_result.estimated_cost_usd,
+            cost_basis=run_result.cost_basis,
         )
         emit_decision(user_id, decision_log)
         # Re-read rather than adding this run's cost locally: the figure must

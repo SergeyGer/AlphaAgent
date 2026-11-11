@@ -251,6 +251,95 @@ class CostAccountingTests(TestCase):
         self.assertGreater(estimate_cost(10_000, "some-future-model"), Decimal("0"))
 
 
+class StageClientCostAccountingTests(TestCase):
+    """FIX-07A: a usage-summary failure must not become a measured zero."""
+
+    def _client_with_llm(self, llm):
+        from ai_agent import CrewAIStageClient
+
+        orchestrator = AlphaAgentOrchestrator(CREW_CONFIG)
+        orchestrator.build_llm = lambda: llm
+        return CrewAIStageClient(orchestrator)
+
+    def test_usage_summary_failure_leaves_billed_cost_null_with_a_reason(self):
+        class FailingUsageLLM:
+            def call(self, prompt):
+                return '{"ok": true}'
+
+            def get_token_usage_summary(self):
+                raise RuntimeError("usage endpoint unavailable")
+
+        client = self._client_with_llm(FailingUsageLLM())
+        reply = client.complete("bull_case", "a prompt of known length")
+
+        self.assertEqual(reply, '{"ok": true}')
+        usage = client.last_usage
+        self.assertIsNotNone(usage)
+        # The reply happened, so the cost is unknown - not zero, and not "no
+        # usage". The token counts fall back to a labelled character estimate.
+        self.assertIsNone(usage.cost_usd)
+        self.assertFalse(usage.measured_tokens)
+        self.assertTrue(usage.cost_unknown_reason)
+        self.assertIn("provider_token_usage_unavailable", usage.cost_unknown_reason)
+        self.assertGreater(usage.input_tokens, 0)
+        # deepseek-reasoner is priced, so a price-table estimate exists - kept in
+        # its own field, never in cost_usd.
+        self.assertIsNotNone(usage.price_table_cost_usd)
+
+    def test_a_reported_charge_is_never_confused_with_a_price_table_estimate(self):
+        class PricingLLM:
+            def __init__(self):
+                self.prompt = 0
+                self.completion = 0
+
+            def call(self, prompt):
+                self.prompt += 1000
+                self.completion += 200
+                return '{"ok": true}'
+
+            def get_token_usage_summary(self):
+                return {
+                    "prompt_tokens": self.prompt,
+                    "completion_tokens": self.completion,
+                }
+
+        client = self._client_with_llm(PricingLLM())
+        client.complete("bull_case", "another prompt")
+        usage = client.last_usage
+        self.assertTrue(usage.measured_tokens)
+        self.assertEqual(usage.input_tokens, 1000)
+        self.assertEqual(usage.output_tokens, 200)
+        # CrewAI reports tokens, not dollars. The billed cost stays unknown; the
+        # price-table figure is present but explicitly an estimate.
+        self.assertIsNone(usage.cost_usd)
+        self.assertIsNotNone(usage.price_table_cost_usd)
+        self.assertEqual(usage.cost_unknown_reason, "provider_reported_cost_unavailable")
+
+    def test_a_timed_out_call_is_reconciled_only_when_the_counters_moved(self):
+        class MovableLLM:
+            def __init__(self):
+                self.prompt = 1000
+                self.completion = 200
+
+            def call(self, prompt):
+                return '{"ok": true}'
+
+            def get_token_usage_summary(self):
+                return {
+                    "prompt_tokens": self.prompt,
+                    "completion_tokens": self.completion,
+                }
+
+        llm = MovableLLM()
+        client = self._client_with_llm(llm)
+        self.assertIsNone(client.reconcile_timed_out_call(stage="bull_case"))
+        llm.prompt += 500
+        usage = client.reconcile_timed_out_call(stage="bull_case")
+        self.assertIsNotNone(usage)
+        self.assertEqual(usage.input_tokens, 500)
+        self.assertIsNone(usage.cost_usd)
+
+
 class CrewBuildTests(TestCase):
     """Regression cover for the *configured-LLM* path.
 
@@ -364,7 +453,11 @@ class CrewBuildTests(TestCase):
         self.assertEqual(result.source, "crewai")
         self.assertFalse(result.used_fallback)
         self.assertEqual(result.tokens_used, 4321)
-        self.assertGreater(result.api_cost_usd, Decimal("0"))
+        # The legacy crew reports tokens but no charge. The billed cost is
+        # unknown (null), and the price-table figure is an explicitly labelled
+        # estimate rather than being presented as the billed amount.
+        self.assertIsNone(result.api_cost_usd)
+        self.assertGreater(result.estimated_cost_usd, Decimal("0"))
         self.assertEqual(result.proposal.action, "BUY")
         self.assertEqual(result.reasoning, "crew says buy")
 

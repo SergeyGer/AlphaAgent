@@ -126,6 +126,12 @@ class RunMode(models.TextChoices):
     HEURISTIC = "heuristic", "Heuristic fallback"
     LEGACY = "legacy", "Legacy import"
     SYNTHETIC = "synthetic", "Synthetic fixture"
+    #: A real protocol execution through the injectable model seam with a
+    #: *scripted* provider. The code path, snapshot, budgets, accounting and
+    #: event log are real; the model output is not a sample from an LLM. It is
+    #: labelled separately from both "live" and "synthetic" because calling it
+    #: either would overstate what was measured.
+    SIMULATED = "simulated", "Simulated (scripted provider)"
 
 
 class RunSource(models.TextChoices):
@@ -135,6 +141,7 @@ class RunSource(models.TextChoices):
     HEURISTIC_FALLBACK = "heuristic_fallback", "Heuristic fallback"
     FIXTURE = "fixture", "Fixture manifest"
     HISTORICAL_IMPORT = "historical_import", "Historical import"
+    STUB = "stub", "Scripted stub provider"
 
 
 class RunStage(models.TextChoices):
@@ -377,6 +384,14 @@ class DecisionRun(models.Model):
     #: money, but it also has no measured cost, and reporting 0.000000 would read
     #: like a measurement. Live runs record the real figures.
     total_cost_usd = models.DecimalField(max_digits=12, decimal_places=6, null=True, blank=True)
+    #: The price-table arithmetic over tokens, kept in its own column. It is an
+    #: estimate even when the tokens were provider-reported, and it is never
+    #: written into ``total_cost_usd``.
+    estimated_cost_usd = models.DecimalField(max_digits=12, decimal_places=6, null=True, blank=True)
+    #: ``billed_provider_reported`` | ``price_table_estimate`` | ``unknown``.
+    #: Blank on runs written before the distinction existed; blank means the
+    #: basis was not recorded, not that a measurement exists.
+    cost_basis = models.CharField(max_length=32, blank=True, default="")
     input_tokens = models.IntegerField(null=True, blank=True)
     output_tokens = models.IntegerField(null=True, blank=True)
     cached_input_tokens = models.IntegerField(null=True, blank=True)
@@ -910,6 +925,10 @@ class OutcomeRecord(models.Model):
 
     price_at_decision = models.DecimalField(max_digits=18, decimal_places=8, null=True, blank=True)
     price_at_horizon = models.DecimalField(max_digits=18, decimal_places=8, null=True, blank=True)
+    #: Market observation instants (session-date precision), separate from
+    #: ``evaluated_at``. Comparing a benchmark window against an *evaluation*
+    #: timestamp would be a false interval check.
+    price_observed_at_decision = models.DateTimeField(null=True, blank=True)
     price_observed_at = models.DateTimeField(null=True, blank=True)
     price_source = models.CharField(max_length=64, blank=True, default="")
 
@@ -922,6 +941,20 @@ class OutcomeRecord(models.Model):
     benchmark_return_pct = models.DecimalField(
         max_digits=12, decimal_places=4, null=True, blank=True
     )
+    #: Benchmark provenance. A return without the observations behind it cannot be
+    #: interval-checked against the instrument's window; these columns make the
+    #: interval verifiable at session-date precision for rows written after the
+    #: provenance change. Null means the row predates it (or the producer could
+    #: not price the benchmark), and the report says so rather than assuming.
+    benchmark_price_at_decision = models.DecimalField(
+        max_digits=18, decimal_places=8, null=True, blank=True
+    )
+    benchmark_price_at_horizon = models.DecimalField(
+        max_digits=18, decimal_places=8, null=True, blank=True
+    )
+    benchmark_observed_at_decision = models.DateTimeField(null=True, blank=True)
+    benchmark_price_observed_at = models.DateTimeField(null=True, blank=True)
+    benchmark_price_source = models.CharField(max_length=64, blank=True, default="")
 
     #: Signal diagnostics (volatility, drawdown, sample size) as typed JSON. The
     #: point is to stop a single return number from looking more certain than it

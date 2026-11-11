@@ -813,7 +813,7 @@ class CostEstimationTests(TestCase):
     def test_an_unpriced_model_warns_instead_of_guessing_silently(self):
         from ai_agent import estimate_cost
 
-        with self.assertLogs("alphaagent.ai", level="WARNING") as captured:
+        with self.assertLogs("alphaagent.cost_accounting", level="WARNING") as captured:
             estimate_cost(1000, "totally-unknown-model")
 
         self.assertTrue(any("No price entry" in line for line in captured.output))

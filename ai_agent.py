@@ -59,6 +59,20 @@ from django.conf import settings  # noqa: E402
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator  # noqa: E402
 
 from core.models import Portfolio  # noqa: E402
+from services.cost_accounting import (  # noqa: E402
+    UNKNOWN_MODEL_PRICING,
+    UNKNOWN_PROVIDER_COST,
+    UNKNOWN_PROVIDER_TOKEN_USAGE,
+)
+from services.cost_accounting import (  # noqa: E402
+    TokenUsage as TokenUsage,
+)
+from services.cost_accounting import (  # noqa: E402
+    estimate_cost as estimate_cost,
+)
+from services.cost_accounting import (  # noqa: E402
+    price_table_cost as price_table_cost,
+)
 from services.debate_protocol import (  # noqa: E402
     HEURISTIC_PROTOCOL_VERSION,
     DebateProtocol,
@@ -319,7 +333,17 @@ class AgentRunResult:
     output_tokens: int = 0
     cached_input_tokens: int = 0
     cache_write_tokens: int = 0
-    api_cost_usd: Decimal = Decimal("0.00000")
+    #: The **billed** charge, when a provider reported one. ``None`` means the
+    #: charge is unknown - not zero. Nothing in this module may fill it with a
+    #: price-table estimate; that value belongs in ``estimated_cost_usd``.
+    api_cost_usd: Decimal | None = None
+    #: Price-table arithmetic over the tokens above. Always an estimate, even
+    #: when the tokens themselves were provider-reported.
+    estimated_cost_usd: Decimal | None = None
+    #: ``billed_provider_reported`` | ``price_table_estimate`` |
+    #: ``unknown_pricing`` | ``unknown``.
+    cost_basis: str = ""
+    cost_unknown_reason: str = ""
     source: str = "crewai"  # crewai | heuristic_fallback
     error: str | None = None
     latency_ms: int = 0
@@ -1059,6 +1083,10 @@ class AlphaAgentOrchestrator:
             )
 
         usage = _extract_usage(result)
+        # Price-table arithmetic over the reported tokens. It is an estimate, and
+        # it is kept in its own field: the legacy crew path reports no charge, so
+        # the billed cost is unknown rather than this number.
+        priced_cost = price_table_cost(usage, str(self.config.get("MODEL", "")))
         # A response that consumed the entire allowance was truncated. That is not a
         # short answer, it is a missing one, and before this it was invisible: the
         # run either crashed inside CrewAI or returned a proposal built from a
@@ -1083,7 +1111,15 @@ class AlphaAgentOrchestrator:
             output_tokens=usage.output_tokens,
             cached_input_tokens=usage.cached_read_tokens,
             cache_write_tokens=usage.cache_write_tokens,
-            api_cost_usd=estimate_cost(usage, str(self.config.get("MODEL", ""))),
+            # The legacy crew path never reports a provider charge, so the billed
+            # figure stays null. The price-table number is published beside it and
+            # labelled; presenting it as ``api_cost_usd`` was the defect.
+            api_cost_usd=None,
+            estimated_cost_usd=priced_cost,
+            cost_basis=("price_table_estimate" if priced_cost is not None else "unknown_pricing"),
+            cost_unknown_reason=(
+                UNKNOWN_PROVIDER_COST if priced_cost is not None else UNKNOWN_MODEL_PRICING
+            ),
             source="crewai",
             latency_ms=int((time.monotonic() - started) * 1000),
         )
@@ -1290,9 +1326,16 @@ class CrewAIStageClient:
     """One-shot model calls through CrewAI's ``LLM`` (the protocol's seam).
 
     The protocol does not import CrewAI: it asks for ``complete(stage, prompt)``
-    and this class supplies it. Usage is read as the delta of CrewAI's cumulative
-    counters, and cost is priced with the project's table, so the monetary budget
-    is enforced against measured usage rather than a guess.
+    and this class supplies it. Token counts are read as the delta of CrewAI's
+    cumulative counters. **Cost is not read from the provider at all** - CrewAI
+    reports tokens, not dollars - so ``billed_cost`` is ``None`` with a typed
+    reason, and the price-table figure is published separately as an estimate.
+
+    A failure of the usage summary is *unknown usage*, not zero usage: the call
+    still happened (the reply is returned), but its tokens are the character
+    estimate and its billed cost is ``None``. Returning ``(0, 0)`` from
+    ``_read_totals`` and pricing that zero was the defect this method used to
+    have: an unknown charge appeared on the run as a measured ``0``.
     """
 
     def __init__(self, orchestrator: AlphaAgentOrchestrator) -> None:
@@ -1308,15 +1351,62 @@ class CrewAIStageClient:
         self._llm = orchestrator.build_llm()
         self._totals = self._read_totals()
 
-    def _read_totals(self) -> tuple[int, int]:
+    def _read_totals(self) -> tuple[int, int] | None:
+        """Cumulative provider counters, or ``None`` when they are unavailable.
+
+        ``None`` is the whole point: an unreadable summary is *unknown usage*.
+        Substituting ``(0, 0)`` makes the call's tokens and cost look measured at
+        zero, which is the one value a missing measurement must never become.
+        """
         try:
             summary = self._llm.get_token_usage_summary()
         except Exception as exc:  # pragma: no cover - provider-specific accounting
-            logger.debug("Token usage summary unavailable: %s", exc)
-            return 0, 0
+            logger.warning("Token usage summary unavailable; usage is estimated: %s", exc)
+            return None
+        if summary is None:
+            return None
         return (
             _read_number(summary, "prompt_tokens", "input_tokens", "prompt_token_count"),
             _read_number(summary, "completion_tokens", "output_tokens"),
+        )
+
+    def _usage_for(
+        self,
+        previous: tuple[int, int] | None,
+        current: tuple[int, int] | None,
+        prompt: str,
+        reply: str,
+    ) -> ModelUsage:
+        measured = previous is not None and current is not None
+        if measured:
+            input_tokens = max(0, current[0] - previous[0])
+            output_tokens = max(0, current[1] - previous[1])
+        else:
+            input_tokens = max(1, len(prompt) // 4)
+            output_tokens = max(1, len(reply) // 4)
+        priced = price_table_cost(
+            TokenUsage(
+                total=input_tokens + output_tokens,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            ),
+            self.model,
+        )
+        # No provider charge is ever available through this client. The billed
+        # cost is therefore null with a reason; the price-table figure travels
+        # beside it as an estimate.
+        return ModelUsage(
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cost_usd=None,
+            reported=measured,
+            tokens_measured=measured,
+            price_table_cost_usd=priced,
+            cost_unknown_reason=(
+                UNKNOWN_PROVIDER_COST
+                if measured
+                else f"{UNKNOWN_PROVIDER_TOKEN_USAGE}; token counts are character estimates"
+            ),
         )
 
     def complete(self, stage: str, prompt: str) -> str:
@@ -1324,25 +1414,36 @@ class CrewAIStageClient:
             reply = self._llm.call(prompt)
         except Exception as exc:
             raise classify_provider_exception(exc, stage=stage) from exc
+        text = reply if isinstance(reply, str) else str(reply)
 
-        previous_in, previous_out = self._totals
+        previous = self._totals
         self._totals = self._read_totals()
-        input_tokens = max(0, self._totals[0] - previous_in)
-        output_tokens = max(0, self._totals[1] - previous_out)
-        self.last_usage = ModelUsage(
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            cost_usd=estimate_cost(
-                TokenUsage(
-                    total=input_tokens + output_tokens,
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
-                ),
-                self.model,
-            ),
-            reported=True,
+        self.last_usage = self._usage_for(previous, self._totals, prompt, text)
+        return text
+
+    def reconcile_timed_out_call(self, *, stage: str = "") -> ModelUsage | None:
+        """Account a call that timed out, when the provider counters moved.
+
+        The protocol stops *waiting* on a stage timeout; it cannot cancel the
+        worker thread, so the provider may still finish the call. Reading the
+        cumulative counters again is the only reconciliation available through
+        this seam. If they have not moved (or are unreadable) the charge is
+        unreconciled, and the protocol says so instead of recording zero.
+        """
+        previous = self._totals
+        current = self._read_totals()
+        if previous is None or current is None or current == previous:
+            return None
+        self._totals = current
+        usage = self._usage_for(previous, current, "", "")
+        logger.warning(
+            "Timed-out stage %r was reconciled from provider counters: %s input / %s "
+            "output tokens (billed cost still unknown).",
+            stage,
+            usage.input_tokens,
+            usage.output_tokens,
         )
-        return reply if isinstance(reply, str) else str(reply)
+        return usage
 
 
 def _case_text(heading: str, claims: list[dict[str, Any]]) -> str:
@@ -1436,33 +1537,6 @@ def _extract_debate(result: Any) -> tuple[str, str]:
     return raw(0), raw(1)
 
 
-@dataclass(frozen=True)
-class TokenUsage:
-    """The billed token split for one agent run.
-
-    ``input_tokens`` is the **full** prompt count and already includes the cached
-    and cache-write portions - CrewAI's Anthropic provider folds those counters
-    into ``input_tokens`` before they reach ``usage_metrics``. The cached figures
-    are therefore broken out here for pricing, not added to the total.
-    """
-
-    total: int = 0
-    input_tokens: int = 0
-    output_tokens: int = 0
-    cached_read_tokens: int = 0
-    cache_write_tokens: int = 0
-
-    @property
-    def fresh_input_tokens(self) -> int:
-        """Prompt tokens billed at the full input rate."""
-        return max(0, self.input_tokens - self.cached_read_tokens - self.cache_write_tokens)
-
-    @property
-    def has_split(self) -> bool:
-        """True when the provider reported a real input/output breakdown."""
-        return self.input_tokens > 0 or self.output_tokens > 0
-
-
 def _read_number(source: Any, *names: str) -> int:
     """First positive integer among ``names``, on a dict or an object."""
     for name in names:
@@ -1504,60 +1578,6 @@ def _extract_usage(result: Any) -> TokenUsage:
 def _extract_tokens(result: Any) -> int:
     """Total token count for one run. Retained for callers that only need it."""
     return _extract_usage(result).total
-
-
-def estimate_cost(usage: TokenUsage | int, model: str) -> Decimal:
-    """Approximate USD cost from the configured price table.
-
-    Matches the exact model id first, then the longest prefix, so a dated id like
-    ``claude-haiku-4-5-20251001`` resolves against the ``claude-haiku-4-5`` entry.
-
-    Logs a warning when it falls back. Previously every model absent from the
-    table was priced at the default with no signal at all, which is how a
-    ``claude-*`` model came to be reported at DeepSeek rates - roughly half the
-    real cost - with nothing in the logs to suggest anything was wrong.
-    """
-    pricing = getattr(settings, "AI_MODEL_PRICING", {})
-    default = getattr(settings, "AI_DEFAULT_PRICING", {"input": 0.27, "output": 1.10})
-    key = (model or "").split("/")[-1]
-
-    rates = pricing.get(key)
-    if rates is None and key:
-        candidates = [k for k in pricing if key.startswith(k)]
-        if candidates:
-            rates = pricing[max(candidates, key=len)]
-    if rates is None:
-        logger.warning(
-            "No price entry for model %r - cost is approximate. Add it to "
-            "AI_MODEL_PRICING in config/settings.py.",
-            key or "<unset>",
-        )
-        rates = default
-    rate_in = Decimal(str(rates.get("input", 0)))
-    rate_out = Decimal(str(rates.get("output", 0)))
-    # Cached reads are billed at a discount and cache writes at a premium on
-    # Anthropic (0.1x and 1.25x of the input rate). Providers without those
-    # entries simply price every prompt token at the input rate, which is the
-    # conservative default rather than a guess.
-    rate_cached = Decimal(str(rates.get("cached_input", rates.get("input", 0))))
-    rate_write = Decimal(str(rates.get("cache_write", rates.get("input", 0))))
-
-    if isinstance(usage, TokenUsage) and usage.has_split:
-        million = Decimal("1000000")
-        cost = (
-            Decimal(usage.fresh_input_tokens) * rate_in
-            + Decimal(usage.cached_read_tokens) * rate_cached
-            + Decimal(usage.cache_write_tokens) * rate_write
-            + Decimal(usage.output_tokens) * rate_out
-        ) / million
-    else:
-        # No breakdown available (a heuristic run, or a provider that reports only
-        # a total). Fall back to a blend rather than pretending to precision.
-        total = usage.total if isinstance(usage, TokenUsage) else int(usage)
-        blended = rate_in * Decimal("0.7") + rate_out * Decimal("0.3")
-        cost = Decimal(total) / Decimal("1000000") * blended
-
-    return cost.quantize(Decimal("0.00001"))
 
 
 # ---------------------------------------------------------------------------

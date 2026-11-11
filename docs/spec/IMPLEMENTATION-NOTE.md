@@ -206,19 +206,102 @@ The measurement contract lives in [`MEASUREMENT.md`](MEASUREMENT.md). Phase 3 ad
    annualisation. `risk_adjusted.sharpe` publishes `included: false`, the frequency,
    the missing annualisation and risk-free assumptions, and the sample limit
    instead of the ratio.
-8. **Benchmark interval matching is declared, not re-derived.** Stored
-   `OutcomeRecord` rows carry a benchmark return but no benchmark observation
-   timestamps, so the report can declare the same-decision/same-horizon rule and
-   display the method version, but it sets `benchmark_interval_verified: false`.
-   Recomputing the benchmark would require a benchmark price history that the
-   stored rows do not contain.
-9. **`build_experiment` rebuilds rather than archives every report version.** The
-   latest report is stored on the experiment with an incremented `report_version`;
-   earlier versions are not retained as separate rows. Replay is deterministic
-   from the stored rows and the manifest checksum, so the previous report can be
-   regenerated, but it cannot be fetched by version number. Adding a report-history
-   table was not necessary for the Phase 3 gate and would have been a second source
-   of drift.
+8. **Benchmark interval matching is now recorded and checked, at session-date
+   precision.** `DecisionOutcome` and `OutcomeRecord` carry the benchmark's
+   decision and horizon prices, their observation dates and their source (and the
+   instrument's own observation dates beside them). The report verifies that the
+   benchmark's observations fall on the same sessions as the instrument's and
+   sets `benchmark_interval_verified` only when every matched pair passes. Rows
+   written before this change have no provenance: they keep their benchmark
+   return, are counted as unverified with the missing field named, and are never
+   assumed matched. What remains unverifiable is the intraday observation instant
+   (prices are daily closes) and the exchange calendar itself; the report publishes
+   `precision: "session_date"` and `intraday_observation_instant_verified: false`
+   rather than claiming more.
+9. **Report versions are now immutable.** Earlier builds were overwritten on the
+   experiment row: replay was deterministic, but a version could not be fetched
+   and later-maturing outcomes could change what a published number "was". Each
+   replay now appends an `ExperimentReportVersion` row holding the published
+   document, its hash, and a digest of every row the report read. An older
+   version reads back byte-identically, and `verify_report_version` rebuilds it
+   from current rows and names the dependency groups that drifted. The drift is
+   reported; the published version is not edited. What is still not frozen is the
+   model: a rebuild proves the *document* is reproducible from stored data, not
+   that regenerating model output would repeat the decisions.
+
+### FIX-07 — acceptance-review remediation
+
+The review found four cost/deadline defects, an experiment path that could
+measure but not execute, and report versions that were overwritten. This change
+closes them; it does not revise the Phase 1-5 claims above except where marked.
+
+**A — cost and deadline semantics.** Five quantities are now recorded and never
+interchanged: measured tokens, estimated tokens, price-table cost, billed cost
+and unknown. `ai_agent` no longer writes a price-table number into a billed-cost
+field; `CrewAIStageClient` reports tokens but `cost_usd: None` with a reason (a
+usage-summary failure is *unknown usage*, not `(0, 0)`); `ProtocolUsage` publishes
+the split and refuses to present a partial price-table sum as a total; the
+monetary ceiling is checked before **every** attempt, including every retry; each
+call's timeout is `min(stage timeout, remaining run deadline)` and a backoff that
+cannot fit the deadline is a typed `DeadlineExceeded`; an abandoned call is
+reconciled from the client's counters where possible and otherwise counted as
+`unreconciled_timeout_calls`. The budget docstring and the run metadata say
+plainly that the ceiling is **not** a strict billed-dollar cap
+(`strict_billed_ceiling: false`), because late provider charges and unreconciled
+calls are not visible to the check. `AgentDecisionLog.api_cost_usd` is nullable
+and `budget_state()` publishes `unknown_cost_runs` beside the billed total: a
+provider that reports tokens but no dollars now shows spend `0` with unknown
+runs, not a measured zero.
+
+Divergences recorded:
+
+1. A provider charge reported after the run ends is still not in the record.
+   The run says so; it cannot be fixed from inside the run.
+2. `estimate_cost` keeps its default-price fallback for the legacy path and for
+   callers that explicitly want an estimate. The protocol path uses
+   `price_table_cost`, which returns `None` for an unpriced model instead of
+   substituting a default. The warning is logged under
+   `alphaagent.cost_accounting`, not `alphaagent.ai`.
+3. A failed call's usage is counted only when the client published it. A provider
+   that bills a failed call silently is unreconciled by construction.
+
+**B — experiment execution path.** `services/experiment_execution.py` and
+`python manage.py run_experiment` schedule V0-V3 against one frozen opportunity
+set and one shared `InputSnapshot` per opportunity. V2 now records
+`debate.no_rebuttal.v1` (the Bull/Bear/CIO configuration with the rebuttal stage
+omitted) and V3 records `debate.v1`; previously both were `debate.v1`, which made
+"distinct arms" a relabelling. Each arm gets its own decisions, simulated fills
+and equity trajectory through the same guard, fill rule and accounting method.
+V4 remains declared and unimplemented (FIX-08 is not done) and is excluded from
+the equal-opportunity denominator.
+
+Divergences recorded:
+
+1. **The example execution is simulated.** The committed opportunity set's
+   prices, quotes and evidence are authored, and the `--provider stub` client's
+   replies are deterministic functions of the prompt. The runs are
+   `mode="simulated"`, cohort `simulated`, and the report says
+   `engineering_validation_only: true`, `comparative_protocol_claim: false`. The
+   code path, guard, snapshots, hashes and accounting are real; the model output
+   is not. With `--provider auto` and no configured provider, V1-V3 remain
+   `not_executed` with the reason and stay in the denominator.
+2. **Per-arm portfolio performance is a simulation, not the account's history.**
+   It replays each arm's decisions against the frozen marks. It is not the demo
+   account's realised trajectory and cannot be read as one.
+3. **The pre-registered primary metric is null.** It needs matured
+   `OutcomeRecord` rows; the execution produced none, so the report publishes the
+   registration, says it was not honoured for that metric, and returns
+   `null`/`no_matured_outcomes` rather than substituting a computable number.
+4. **The economic decision instant is the scheduled opportunity, not the
+   wall-clock replay time.** Each run records both; pricing uses the scheduled
+   instant, and the run metadata says so.
+
+**C — provenance and report immutability.** Benchmark and instrument
+observation dates and price sources are persisted; interval verification is
+computed per row and summarised, with `session_date` precision stated. Report
+versions are archived immutably with a dependency digest and a byte-identical
+rebuild check. Pre-registration is required in the opportunity set and its
+timing is validated.
 
 ## Phase 4 — allocate capital (PORT-01 … PORT-05)
 

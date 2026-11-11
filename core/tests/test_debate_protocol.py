@@ -1541,3 +1541,247 @@ class RunRecordingTests(ProtocolTestCase):
         )
         with self.assertRaises(DecisionRunError):
             link_legacy_log(outcome.run, other_log)
+
+
+# ---------------------------------------------------------------------------
+# FIX-07A: cost and deadline semantics
+# ---------------------------------------------------------------------------
+class CostAndDeadlineTests(ProtocolTestCase):
+    """Five cost quantities are kept apart, and the deadline is a bound.
+
+    Every test here fails on the pre-FIX-07 code: the legacy path priced tokens
+    with a price table and called it the billed cost; an unreadable usage summary
+    became ``(0, 0)`` and therefore a measured zero; the monetary ceiling was
+    checked once before the retry loop; and each call used the stage timeout
+    instead of the remaining run deadline.
+    """
+
+    def _client(self, *, usage=None, model="stub-debate-1", cost=Decimal("0.0005"), failures=None):
+        client = StubStageClient(standard_handlers(), cost=cost, failures=failures)
+        client.model = model
+        client.usage = usage
+        return client
+
+    def _no_usage_client(self, *, model="stub-debate-1"):
+        """A client that answers correctly but reports nothing about usage."""
+
+        class SilentUsageClient(StubStageClient):
+            def complete(self, stage, prompt):
+                self.calls.append((stage, prompt))
+                pending = self.failures.get(stage) or []
+                if pending:
+                    raise pending.pop(0)
+                handler = self.handlers[stage]
+                self.last_usage = None
+                return handler(self, prompt) if callable(handler) else handler
+
+        return SilentUsageClient(standard_handlers())
+
+    def _protocol_with_model(self, client, *, model=None, **budget_overrides):
+        budget = replace(self.budget, **budget_overrides) if budget_overrides else self.budget
+        return DebateProtocol(
+            client=client,
+            budget=budget,
+            config={"MAX_EVIDENCE_ITEMS": 20},
+            provider=client.provider,
+            model=model or client.model,
+            parameters=client.parameters,
+        )
+
+    def test_missing_usage_is_null_with_a_reason_not_zero(self):
+        """A client that reports no usage must not produce a measured zero."""
+        client = self._no_usage_client()
+        outcome = self._protocol_with_model(client).run(self.context, portfolio=self.portfolio)
+        usage = outcome.run.protocol_metadata["usage"]
+
+        self.assertEqual(usage["token_accounting"], "estimated_chars_per_4_tokens")
+        self.assertEqual(usage["estimated_tokens"]["input"] > 0, True)
+        self.assertIsNone(usage["billed_cost_usd"])
+        self.assertFalse(usage["cost_reported"])
+        self.assertIsNone(usage["cost_usd"])
+        self.assertTrue(usage["billed_cost_unknown_reason"])
+        # The test client's model id has no price-table entry either, so the
+        # price-table quantity is unknown too - not zero and not a guess.
+        self.assertIsNone(usage["price_table_cost_usd"])
+        self.assertIsNone(outcome.run.total_cost_usd)
+        self.assertEqual(outcome.run.cost_basis, "unknown")
+
+    def test_a_retry_that_would_breach_the_monetary_budget_is_refused_before_it_is_made(self):
+        """The ceiling is checked before every retry, not once before the loop."""
+
+        class BilledFailureClient(StubStageClient):
+            """Fails its first call after the provider has already charged for it."""
+
+            def complete(self, stage, prompt):
+                self.calls.append((stage, prompt))
+                if stage == "bull_case" and not getattr(self, "failed_once", False):
+                    self.failed_once = True
+                    self.last_usage = ModelUsage(
+                        input_tokens=1000,
+                        output_tokens=200,
+                        cost_usd=Decimal("2.00"),
+                        reported=True,
+                    )
+                    raise ProviderTransientError("429 rate limit", stage="analysing")
+                handler = self.handlers[stage]
+                reply = handler(self, prompt) if callable(handler) else handler
+                self.last_usage = ModelUsage(
+                    input_tokens=max(1, len(prompt) // 4),
+                    output_tokens=max(1, len(reply) // 4),
+                    cost_usd=self.cost,
+                    reported=True,
+                )
+                return reply
+
+        client = BilledFailureClient(standard_handlers(), cost=Decimal("0.0005"))
+        # The first, failed attempt reports $2.00. The run's ceiling is $1.00. The
+        # retry would spend again, so it must never be issued.
+        with self.assertRaises(BudgetExhausted) as ctx:
+            self._protocol_with_model(client, monetary_budget_usd=Decimal("1.00")).run(
+                self.context, portfolio=self.portfolio
+            )
+
+        self.assertEqual(ctx.exception.code, "budget_exhausted")
+        self.assertEqual(ctx.exception.budget, "monetary")
+        self.assertEqual(len(client.stage_calls("bull_case")), 1)
+        usage = ctx.exception.run.protocol_metadata["usage"]
+        self.assertGreaterEqual(Decimal(usage["monetary_ceiling_spent_usd"]), Decimal("1.00"))
+
+    def test_a_retry_near_the_deadline_fails_typed_instead_of_overrunning(self):
+        """Backoff that would outlive the run deadline is a typed failure."""
+        client = StubStageClient(
+            standard_handlers(),
+            failures={
+                "bull_case": [
+                    ProviderTransientError("503 temporarily unavailable", stage="analysing")
+                ]
+            },
+        )
+        # A 10s backoff cannot fit inside a 1s run deadline. The protocol must not
+        # sleep through the deadline and must not start the retry.
+        with self.assertRaises(BudgetExhausted) as ctx:
+            self._protocol_with_model(
+                client,
+                run_deadline_seconds=1.0,
+                provider_retry_backoff_seconds=10.0,
+            ).run(self.context, portfolio=self.portfolio)
+
+        self.assertEqual(ctx.exception.code, "run_deadline_exceeded")
+        self.assertEqual(len(client.stage_calls("bull_case")), 1)
+
+    def test_a_call_timeout_is_bounded_by_the_remaining_run_deadline(self):
+        """The effective timeout is the smaller of the stage and the deadline."""
+
+        def slow(client, prompt):
+            time.sleep(1.2)
+            return bull_case(client, prompt)
+
+        client = StubStageClient({**standard_handlers(), "bull_case": slow})
+        with self.assertRaises(BudgetExhausted) as ctx:
+            self._protocol_with_model(
+                client,
+                stage_timeout_seconds=30.0,
+                run_deadline_seconds=0.5,
+            ).run(self.context, portfolio=self.portfolio)
+
+        self.assertEqual(ctx.exception.code, "run_deadline_exceeded")
+        self.assertIn("deadline", ctx.exception.detail)
+        self.assertEqual(len(client.stage_calls("bull_case")), 1)
+
+    def test_a_timed_out_call_that_can_be_reconciled_is_accounted(self):
+        """A timed-out call is attributed when the client's counters moved."""
+
+        class RecoveringClient(StubStageClient):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.reconciled = 0
+
+            def reconcile_timed_out_call(self, *, stage=""):
+                self.reconciled += 1
+                return ModelUsage(
+                    input_tokens=1200,
+                    output_tokens=300,
+                    cost_usd=None,
+                    reported=True,
+                    tokens_measured=True,
+                    price_table_cost_usd=None,
+                    cost_unknown_reason="provider_reported_cost_unavailable",
+                )
+
+        client = RecoveringClient(
+            {**standard_handlers(), "bull_case": lambda c, p: time.sleep(0.6)}
+        )
+        with self.assertRaises(StageTimeout):
+            self._protocol_with_model(client, stage_timeout_seconds=0.2).run(
+                self.context, portfolio=self.portfolio
+            )
+
+        self.assertEqual(client.reconciled, 1)
+
+    def test_a_timed_out_call_that_cannot_be_reconciled_is_labelled(self):
+        """An abandoned call whose charge is unknown is never recorded as zero."""
+
+        def slow(client, prompt):
+            time.sleep(0.6)
+            return bull_case(client, prompt)
+
+        client = StubStageClient({**standard_handlers(), "bull_case": slow})
+
+        def reconcile(*, stage=""):
+            return None
+
+        client.reconcile_timed_out_call = reconcile
+        with self.assertRaises(StageTimeout) as ctx:
+            self._protocol_with_model(client, stage_timeout_seconds=0.2).run(
+                self.context, portfolio=self.portfolio
+            )
+
+        usage = ctx.exception.run.protocol_metadata["usage"]
+        self.assertEqual(usage["timed_out_calls"], 1)
+        self.assertEqual(usage["unreconciled_timeout_calls"], 1)
+        self.assertIsNone(usage["billed_cost_usd"])
+        self.assertTrue(usage["unreconciled_charge_note"])
+        kinds = [item["kind"] for item in ctx.exception.run.protocol_metadata["attempts"]]
+        self.assertIn("timeout_unreconciled", kinds)
+
+    def test_unknown_model_pricing_is_null_not_a_guessed_cost(self):
+        """An unpriced model yields an unknown price-table quantity."""
+        client = StubStageClient(standard_handlers(), cost=None)
+        outcome = self._protocol_with_model(client, model="definitely-not-a-priced-model").run(
+            self.context, portfolio=self.portfolio
+        )
+
+        usage = outcome.run.protocol_metadata["usage"]
+        self.assertIsNone(usage["price_table_cost_usd"])
+        self.assertTrue(usage["price_table_cost_unknown_calls"])
+        self.assertEqual(usage["price_table_cost_unknown_reason"], "model_not_in_price_table")
+        self.assertIsNone(usage["billed_cost_usd"])
+
+    def test_billed_measured_and_estimated_costs_are_never_interchanged(self):
+        """A provider that reports a charge produces a billed figure, not a table one."""
+        client = StubStageClient(standard_handlers(), cost=Decimal("0.25"))
+        outcome = self._protocol_with_model(client).run(self.context, portfolio=self.portfolio)
+
+        usage = outcome.run.protocol_metadata["usage"]
+        self.assertTrue(usage["cost_reported"])
+        self.assertEqual(usage["billed_cost_usd"], "1.250000")
+        self.assertEqual(usage["measured_tokens"]["input"] > 0, True)
+        self.assertEqual(usage["timed_out_calls"], 0)
+        self.assertEqual(
+            Decimal(str(outcome.run.total_cost_usd)), Decimal(usage["billed_cost_usd"])
+        )
+
+    def test_the_run_metadata_does_not_promise_a_strict_billed_ceiling(self):
+        client = StubStageClient(standard_handlers())
+        outcome = self._protocol_with_model(client).run(self.context, portfolio=self.portfolio)
+
+        cost = outcome.run.protocol_metadata["cost_accounting"]
+        self.assertFalse(cost["strict_billed_ceiling"])
+        self.assertFalse(cost["monetary_ceiling"]["strict_billed_ceiling"])
+        self.assertTrue(cost["monetary_ceiling"]["late_charges_possible"])
+        self.assertIn("not", cost["monetary_ceiling"]["note"])
+        self.assertTrue(
+            outcome.run.protocol_metadata["protocol"]["cost_ceiling"][
+                "checked_before_every_attempt"
+            ]
+        )
