@@ -42,6 +42,7 @@ from ai_agent import (
     build_news_report,
     run_alpha_agent,
 )
+from core.decision_models import DecisionRun
 from core.log_safety import log_safe
 from core.models import (
     AgentDecisionLog,
@@ -52,6 +53,7 @@ from core.models import (
     Transaction,
 )
 from services.budget import budget_state
+from services.decision_runs import link_legacy_log
 from services.events import (
     emit_agent_thinking,
     emit_budget_exhausted,
@@ -349,6 +351,23 @@ def run_alpha_agent_task(
         emit_budget_updated(user_id, budget_state().as_dict())
     except Exception as exc:
         logger.exception("Failed to persist AgentDecisionLog for %s: %s", portfolio_id, exc)
+
+    # Link the Phase 1/2 decision run to the audit row it explains (DATA-04).
+    # The run is written by the AI layer before the execution guard runs, so the
+    # link can only be made here. A failure is logged and never fails the task:
+    # the audit row is the Phase 0 contract and must survive.
+    if decision_log is not None and getattr(run_result, "decision_run_id", None):
+        try:
+            run = DecisionRun.objects.filter(pk=run_result.decision_run_id).first()
+            if run is not None:
+                link_legacy_log(run, decision_log)
+        except Exception as exc:
+            logger.warning(
+                "Could not link decision run %s to AgentDecisionLog %s: %s",
+                run_result.decision_run_id,
+                decision_log.id,
+                exc,
+            )
 
     if recommendation is not None and decision_log is not None:
         # Link the audit row so the dashboard can show proposal -> approval.

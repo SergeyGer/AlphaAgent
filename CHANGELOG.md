@@ -9,6 +9,47 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **Phase 2 of the technical specification: a real, bounded debate protocol.** The
+  pipeline was a single sequential crew that produced free-text cases; it now runs an
+  explicit protocol that records what actually happened.
+
+  - **Independent first round (DEB-01)** — Bull and Bear produce structured cases
+    without seeing each other. Independence is a context property, not a timing
+    assumption: both are persisted before any rebuttal begins.
+  - **One explicit rebuttal round (DEB-02)** — each agent answers the opponent's
+    validated claims using the `Rebuttal` contract and declares whether its position
+    changed. A concession is a valid output; an agent is never made to manufacture an
+    objection to fill a quota. Bounded at 3 claims per agent and 2 responses per agent,
+    with the limits used recorded on the run.
+  - **Adjudication (DEB-03)** — the CIO sees both cases *and* the rebuttals, must name
+    the strongest remaining objection, and may return HOLD. It is not called consensus
+    when the analysts still disagree.
+  - **Budgets and typed failures (DEB-04)** — per-stage timeout, run deadline, token
+    caps, one schema repair per stage, two provider retries with backoff, and a
+    monetary ceiling. A failed stage stops the protocol; a heuristic fallback becomes a
+    **separate run** that cannot inherit debate events it never had.
+  - **Reproducibility (DEB-05)** — provider, model, parameters, prompt template
+    version, tool versions, snapshot hash and raw validated outputs are recorded. The
+    code says plainly that stored events replay deterministically and a regenerated
+    model output does not.
+
+  `services/debate_protocol.py` does not import `ai_agent`, so the whole protocol is
+  testable with an injected model client and no key or network. `ai_agent.py` keeps
+  the legacy sequential crew behind `AI_DEBATE_PROTOCOL=legacy_sequential`.
+
+  **32 new tests**, including all four acceptance scenarios from the specification:
+  a dispute the CIO links to its decisive claim, a genuine concession, a provider
+  timeout that produces no fictional rebuttal, and a one-agent baseline on the same
+  snapshot and proposal contract.
+
+  What this does *not* do: no live provider call was made. The protocol, persistence,
+  event log, API and fallback separation are real; the model in tests and the demo is
+  a deterministic stub, recorded as such in `run.protocol`.
+
+## [1.1.5] — 2026-11-10
+
+### Added
+
 - **Phase 1 of the technical specification: explain one decision.** A reviewer can
   now open a decision and read the decisive evidence, the strongest objection, the
   reason for the verdict, the guard intervention and the measured outcome without

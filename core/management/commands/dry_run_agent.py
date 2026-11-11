@@ -127,7 +127,10 @@ class Command(BaseCommand):
             )
 
             try:
-                result = run_alpha_agent(context)
+                # ``record=False`` is this command's contract: it exercises the
+                # protocol but must not write a DecisionRun, evidence, claims or
+                # a decision row.
+                result = run_alpha_agent(context, record=False)
             except Exception as exc:
                 failures += 1
                 self.stdout.write(self.style.ERROR(f"  FAILED: {type(exc).__name__}: {exc}"))

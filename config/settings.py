@@ -386,6 +386,40 @@ AI_CONFIG = {
     "EXTRA_HEADERS": os.environ.get("AI_LLM_EXTRA_HEADERS", "").strip(),
 }
 
+# ---------------------------------------------------------------------------
+# Phase 2 - bounded debate protocol budgets (DEB-04)
+#
+# Every number here is a ceiling the protocol stops at, not a target it aims
+# for. The defaults are the values the specification starts with: one schema
+# repair per stage, two transient provider retries with backoff, and a single
+# rebuttal round (extra rounds are not configurable until an experiment
+# justifies their cost; the protocol refuses a different value rather than
+# silently running one round).
+#
+# ``PROTOCOL`` selects the producer:
+#
+#   debate.v1          two independent cases, one rebuttal round, CIO adjudication
+#   single_agent.v1    one analyst call, no debate stages (the baseline)
+#   legacy_sequential  the pre-Phase-2 CrewAI pipeline (compatibility, unrecorded)
+#
+# An unrecognised value is treated as ``debate.v1`` so a typo cannot silently
+# disable the protocol; the value actually used is recorded on the run.
+# ---------------------------------------------------------------------------
+DEBATE_CONFIG = {
+    "PROTOCOL": os.environ.get("AI_DEBATE_PROTOCOL", "debate.v1").strip().lower(),
+    "STAGE_TIMEOUT_SECONDS": env_int("AI_DEBATE_STAGE_TIMEOUT_SECONDS", 90),
+    "RUN_DEADLINE_SECONDS": env_int("AI_DEBATE_RUN_DEADLINE_SECONDS", 300),
+    "MAX_INPUT_TOKENS": env_int("AI_DEBATE_MAX_INPUT_TOKENS", 120_000),
+    "MAX_OUTPUT_TOKENS": env_int("AI_DEBATE_MAX_OUTPUT_TOKENS", 16_000),
+    "SCHEMA_REPAIR_ATTEMPTS": env_int("AI_DEBATE_SCHEMA_REPAIR_ATTEMPTS", 1),
+    "PROVIDER_RETRIES": env_int("AI_DEBATE_PROVIDER_RETRIES", 2),
+    "PROVIDER_RETRY_BACKOFF_SECONDS": env_float("AI_DEBATE_PROVIDER_RETRY_BACKOFF_SECONDS", 0.5),
+    "MONETARY_BUDGET_USD": str(env_decimal("AI_DEBATE_MONETARY_BUDGET_USD", "1.00")),
+    # Bound on the evidence catalog handed to the agents, so a long news feed
+    # cannot make every prompt grow without limit.
+    "MAX_EVIDENCE_ITEMS": env_int("AI_DEBATE_MAX_EVIDENCE_ITEMS", 20),
+}
+
 # USD per 1M tokens, used to populate AgentDecisionLog.api_cost_usd.
 # USD per million tokens, used only to show an approximate cost on the dashboard.
 # Matched by exact id first, then by longest prefix, so dated variants such as

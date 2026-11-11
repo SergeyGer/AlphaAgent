@@ -51,6 +51,7 @@ __all__ = [
     "export_evidence_payload",
     "guard_payload",
     "outcome_payload",
+    "protocol_summary",
     "rebuttal_payload",
 ]
 
@@ -410,7 +411,48 @@ def _limitations(run: DecisionRun, claims, outcomes, events) -> list[dict]:
             text = payload.get("reason") or payload.get("detail")
             if text:
                 limitations.append({"source": f"stage:{event.stage}", "text": str(text)})
+        elif event.event_type == "limitation.recorded":
+            # Phase 2 records excluded claims, skipped rebuttal stages and
+            # fallback attempts as limitation events. Lifting them into this
+            # list is what keeps "flagged, never silently dropped" visible to
+            # the reviewer rather than only to someone reading the raw stream.
+            text = (event.payload or {}).get("limitation")
+            if text:
+                limitations.append({"source": f"event:{event.sequence}", "text": str(text)})
     return limitations
+
+
+def protocol_summary(run: DecisionRun) -> dict | None:
+    """The Phase 2 provenance summary recorded on a run, or ``None``.
+
+    A summary rather than the whole ``protocol_metadata`` blob: the raw validated
+    stage outputs live in the database (they can be large and are not part of the
+    read contract), while everything a reviewer needs to judge reproducibility -
+    provider, model, parameters, prompt-template version, tool versions,
+    snapshot hash, limits, usage and the fallback label - is exposed here. A
+    Phase 1 fixture recorded no protocol of this kind and returns ``None``, so
+    the key cannot be mistaken for "a protocol ran and recorded nothing".
+    """
+    metadata = run.protocol_metadata or {}
+    if not metadata:
+        return None
+    protocol = metadata.get("protocol") or {}
+    return {
+        "name": protocol.get("name"),
+        "prompt_template_version": protocol.get("prompt_template_version"),
+        "provider": protocol.get("provider"),
+        "model": protocol.get("model"),
+        "parameters": protocol.get("parameters"),
+        "tool_versions": protocol.get("tool_versions"),
+        "snapshot_hash": metadata.get("snapshot_hash") or protocol.get("snapshot_hash"),
+        "limits": metadata.get("limits") or protocol.get("limits"),
+        "rounds": protocol.get("rounds"),
+        "usage": metadata.get("usage"),
+        "counts": metadata.get("counts"),
+        "analyst_consensus": metadata.get("analyst_consensus"),
+        "fallback": metadata.get("fallback"),
+        "deterministic_replay": metadata.get("deterministic_replay"),
+    }
 
 
 def build_run_metadata(run: DecisionRun, *, events=None) -> dict:
@@ -433,6 +475,7 @@ def build_run_metadata(run: DecisionRun, *, events=None) -> dict:
             "protocol_version": run.protocol_version,
             "fixture_id": run.fixture_id or None,
         },
+        "protocol": protocol_summary(run),
         "snapshot_id": str(run.snapshot_id) if run.snapshot_id else None,
         "started_at": utc_iso(run.started_at),
         "completed_at": utc_iso(run.completed_at),
