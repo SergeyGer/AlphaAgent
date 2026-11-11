@@ -89,7 +89,6 @@ class Command(BaseCommand):
         if portfolio is None:
             raise CommandError(f"User {username!r} has no portfolio.")
 
-        display_path = path
         try:
             display_path = path.resolve().relative_to(Path(settings.BASE_DIR).resolve())
         except ValueError:  # pragma: no cover - a set outside the repository
