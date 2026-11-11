@@ -96,6 +96,37 @@ class Portfolio(models.Model):
         default=Decimal("30.00"),
         help_text="Maximum percentage of equity that may be held in one instrument.",
     )
+    #: Ceiling on one sector, as a percentage of equity.
+    #:
+    #: ADR-0015 recorded that no sector limit existed: two 25% positions in
+    #: highly correlated names pass both previous ceilings and are not
+    #: diversified in any meaningful sense. This is the Phase 4 control that
+    #: closes it. It can only be evaluated for instruments whose sector is
+    #: explicitly classified; unclassified exposure is reported as incomplete,
+    #: never as a zero.
+    max_sector_concentration_pct = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal("40.00"),
+        help_text="Maximum percentage of equity that may be held in one classified sector.",
+    )
+    #: Ceiling on one rebalance plan's total traded notional, as a percentage of
+    #: equity. Both buys and sells count, matching the Phase 3 turnover formula.
+    max_turnover_pct = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal("25.00"),
+        help_text="Maximum traded notional in one allocation plan, as a percentage of equity.",
+    )
+    #: Minimum uninvested cash after an allocation plan, as a percentage of
+    #: equity. This is a buffer, not a target: it can be stricter than the
+    #: exposure ceiling allows (90% exposure implies 10% cash).
+    min_cash_buffer_pct = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal("10.00"),
+        help_text="Minimum cash to retain after an allocation plan, as a percentage of equity.",
+    )
     max_trade_allocation_pct = models.DecimalField(
         max_digits=4,
         decimal_places=2,
@@ -140,6 +171,19 @@ class Portfolio(models.Model):
                 condition=Q(max_ticker_concentration_pct__gte=0)
                 & Q(max_ticker_concentration_pct__lte=100),
                 name="portfolio_concentration_pct_range",
+            ),
+            models.CheckConstraint(
+                condition=Q(max_sector_concentration_pct__gte=0)
+                & Q(max_sector_concentration_pct__lte=100),
+                name="portfolio_sector_pct_range",
+            ),
+            models.CheckConstraint(
+                condition=Q(max_turnover_pct__gte=0) & Q(max_turnover_pct__lte=100),
+                name="portfolio_turnover_pct_range",
+            ),
+            models.CheckConstraint(
+                condition=Q(min_cash_buffer_pct__gte=0) & Q(min_cash_buffer_pct__lte=100),
+                name="portfolio_cash_buffer_pct_range",
             ),
         ]
 
@@ -703,6 +747,23 @@ class TelegramLink(models.Model):
             is_active=True,
         )
 
+
+# ---------------------------------------------------------------------------
+# Phase 4: allocation tables (instrument classification, plans, plan legs)
+# ---------------------------------------------------------------------------
+# Imported last for the same reason as the Phase 1 and Phase 3 models. See
+# core/allocation_models.py for why the sector lookup is explicit rather than
+# inferred and why a plan leg has a one-to-one ledger row.
+from core.allocation_models import (  # noqa: E402,F401
+    InstrumentClassification,
+    InstrumentClassificationSource,
+    PlanLegPriority,
+    PlanLegStatus,
+    PlanSide,
+    PlanStatus,
+    PortfolioPlan,
+    PortfolioPlanLeg,
+)
 
 # ---------------------------------------------------------------------------
 # Phase 1: decision runs, evidence, claims, guard records, outcomes

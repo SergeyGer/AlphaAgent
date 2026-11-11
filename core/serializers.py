@@ -164,6 +164,11 @@ class PortfolioSerializer(serializers.ModelSerializer):
             # them - a dashboard cannot show a limit it is not told about.
             "max_portfolio_exposure_pct",
             "max_ticker_concentration_pct",
+            # Phase 4 adds sector, turnover and cash-buffer ceilings. They are
+            # additive fields; the existing limits keep their names and values.
+            "max_sector_concentration_pct",
+            "max_turnover_pct",
+            "min_cash_buffer_pct",
             "ai_budget",
             "created_at",
             "metrics",

@@ -9,6 +9,52 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **Phase 4 of the technical specification: portfolio-aware capital allocation.**
+  The CIO now compares candidates at a portfolio decision boundary and returns
+  target weights, which a deterministic service converts into sized, constrained
+  orders.
+
+  - **Input brief (PORT-02).** Holdings, cash, equity, weights, sector and
+    asset-class exposure, limits, cost estimates, theses, candidate cases, claims,
+    data-quality flags, horizon, and **deterministic** covariance/correlation
+    estimates with their observation window, frequency and coverage. The prompt
+    forbids inventing expected returns, correlations or volatility, and the
+    validator rejects those keys outright.
+  - **Target contract (PORT-03).** Weights sum to 1 within **0.000001** after
+    Decimal validation, long-only, unlevered, non-negative, with cash included.
+    Maintaining cash and proposing no change are both valid outcomes.
+  - **Deterministic sizing (PORT-04).** `deterministic_constrained_projection.v1`
+    enforces per-name, sector, total-exposure, turnover and cash-buffer limits,
+    with lot rounding and cost reserves. There is deliberately **no optimizer**:
+    the model proposes, deterministic code projects. The method, objective version
+    and covariance version are all recorded.
+  - **Execution (PORT-05).** A plan is built from one snapshot, sells are processed
+    and revalidated first, and application is **atomic** — a failed leg rolls the
+    whole plan back rather than leaving partial state. Proceeds from a failed sale
+    are never treated as available cash.
+
+  **Sector data did not exist** — `grep sector core/models.py` returned nothing. An
+  explicit `InstrumentClassification` lookup was added rather than a nullable column,
+  so an unclassified name is unambiguously *unknown* and sector exposure reports as
+  incomplete instead of 0%. No sector is ever inferred from a ticker string.
+
+  **53 new tests**, including all four acceptance scenarios (a favourable candidate
+  declined by sector, two candidates sharing limited cash, stale/missing data labelled
+  with policy action, infeasible targets reporting deviations) and the concurrency
+  gate: two plans cannot spend the same cash, cumulative limits cannot be bypassed,
+  a changed portfolio version requires revalidation, and a duplicate apply adds no
+  ledger row.
+
+  The paper evaluation runs offline against a stub: equity 20000, requested MSFT
+  0.25 declined because technology was already at 50% against a 40% ceiling,
+  constrained weights AAPL 0.20 / JPM 0.15 / XYZ 0.05 / CASH 0.60 summing to
+  1.000000, three legs applied, cash after 12130. Forcing a leg to fail halts the
+  plan with `price_unavailable` and writes **zero** ledger rows.
+
+## [1.1.7] — 2026-11-11
+
+### Added
+
 - **Phase 3 of the technical specification: measurement, kept honest by
   construction.** The specification's gate is that accounting fixtures and leakage
   tests pass, and the central requirement is that signal diagnostics and portfolio

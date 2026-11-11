@@ -71,6 +71,7 @@ maintainer".
 | [0014](0014-decision-outcome-attribution.md) | Score decisions against outcomes, not just record them | Accepted | The audit trail proved why every decision was made and nothing about whether any worked. Forward returns, a signed decision return and a SPY benchmark over 1/7/30 days. |
 | [0015](0015-cumulative-exposure-and-concentration-limits.md) | Cap cumulative exposure and single-instrument concentration | Accepted | Closes the gap ADR-0001 recorded: a sequence of individually-permitted trades was unbounded, and nothing constrained concentration at all. |
 | [0016](0016-persistent-position-thesis.md) | Give each open position a persistent thesis | Accepted | The crew runs stateless, so the agent could sell at 10:00 and rebuy at 10:15 without noticing. One durable thesis per open position, fed back as prior belief. |
+| [0017](0017-constrained-portfolio-projection.md) | Allocate capital with a constrained projection, not an optimizer | Accepted | The model proposes portfolio weights; deterministic code projects them into the per-name, sector, exposure, turnover and cash-buffer limits and records every deviation. No invented expected returns. |
 
 ## Adding a new ADR
 

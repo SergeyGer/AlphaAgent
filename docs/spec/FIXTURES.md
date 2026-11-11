@@ -180,3 +180,27 @@ to the caller's portfolios:
 
 A run belonging to another user returns `404` with the project's standard error
 envelope, so ids cannot be probed for ownership.
+
+## Phase 4 paper allocation fixture
+
+[`phase4-allocation.v1.json`](fixtures/phase4-allocation.v1.json) is a **separate**
+fixture for the Phase 4 paper evaluation; it is not a decision-run manifest and
+no Phase 1 loader reads it. It declares a demo portfolio (cash, one AAPL
+holding), explicit sector classifications, quotes, a deterministic synthetic
+daily price series, three candidate cases with claims, and one stubbed CIO
+response whose `portfolio_version` is filled from the brief at run time.
+
+```bash
+python manage.py run_allocation --reset --apply
+python manage.py run_allocation --reset --apply --fail-leg AAPL
+```
+
+The command labels the provider `stub`, the source `fixture`, and computes the
+covariance/correlation values from the supplied series rather than inventing
+them. The series, prices, classifications and candidate cases are synthetic;
+this is engineering/paper evidence, not realised performance.
+
+A captured example of the command's compact output is kept at
+[`phase4-allocation.v1.output.json`](fixtures/phase4-allocation.v1.output.json).
+Like the Phase 3 report snapshot, it is an example output, is not loaded by any
+command, and can be regenerated.

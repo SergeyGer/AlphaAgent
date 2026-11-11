@@ -2,7 +2,7 @@
 
 This records the Phase 0 baseline the specification requires, and what is being
 built against it. The specification is a five-phase programme; this note covers
-Phase 0 in full, and Phase 1, Phase 2 and Phase 3 in implementation.
+Phase 0 in full, and Phase 1, Phase 2, Phase 3 and Phase 4 in implementation.
 
 ## BASE-01 — Baseline
 
@@ -218,3 +218,82 @@ The measurement contract lives in [`MEASUREMENT.md`](MEASUREMENT.md). Phase 3 ad
    regenerated, but it cannot be fetched by version number. Adding a report-history
    table was not necessary for the Phase 3 gate and would have been a second source
    of drift.
+
+## Phase 4 — allocate capital (PORT-01 … PORT-05)
+
+The allocation contract lives in [`ALLOCATION.md`](ALLOCATION.md). Phase 4 adds
+`services/portfolio_brief.py`, `services/portfolio_policy.py`,
+`services/portfolio_targets.py`, `services/portfolio_allocation.py`, the
+additive `InstrumentClassification` / `PortfolioPlan` / `PortfolioPlanLeg`
+tables, three additive `Portfolio` limit columns, and the `run_allocation` paper
+command.
+
+| Requirement | Where it is enforced | Evidence |
+| --- | --- | --- |
+| PORT-01 responsibility, not personas | `PortfolioCIO` makes one call at the portfolio boundary with every candidate, holding and constraint in the brief. No second allocator persona was added. | `StubModelEndToEndTests.test_the_cio_calls_a_stub_once_and_records_the_provenance`, `test_run_allocation_creates_a_plan_and_no_ledger_row_without_apply` |
+| PORT-02 required brief | `build_allocation_brief` includes holdings, cash, equity, weights, sector/asset-class exposure, limits, transaction-cost assumptions, theses, candidate cases, data-quality flags, horizon and deterministic covariance/correlation with observation window, frequency and quality flags. Expected returns do not exist in the contract. | `BriefTests.test_the_brief_contains_every_required_input`, `test_covariance_and_correlation_are_computed_when_history_exists`, `test_missing_history_produces_null_correlation_with_a_reason`, `test_insufficient_history_is_null_not_zero` |
+| PORT-03 output contract | `validate_target_proposal` requires cash, non-negative decimal weights summing to 1 within `0.000001` (then normalises to exactly 1), actions with rationales and claim links, `funding_source`, `rejected_alternatives`, `unresolved_uncertainties` and the brief's `portfolio_version`. Maintaining cash / no change is valid. | `TargetContractTests.*`, `PlanLifecycleTests.test_a_no_change_plan_is_a_valid_outcome_with_no_ledger_row` |
+| PORT-04 deterministic sizing | `constrain_targets` enforces per-name, sector, total-exposure, turnover and cash-buffer limits and sends every deficit to cash. `derive_legs` applies price/lot rounding, cost-aware funding and the live per-trade ceiling; post-trade trimming keeps the rounded plan inside the limits. The model is an explainer of candidate selection, not an optimizer. | `SectorAcceptanceTests.test_a_favourable_candidate_is_declined_because_its_sector_is_already_over_the_limit`, `CashCompetitionAcceptanceTests.test_two_attractive_candidates_share_the_limited_cash_in_one_plan`, `InfeasibleTargetAcceptanceTests.test_costs_and_rounding_make_a_target_infeasible_without_exceeding_limits` |
+| PORT-05 plan semantics | A plan references one `InputSnapshot`. `apply_plan` locks plan and portfolio, refuses a changed version, processes sells before buys, revalidates each leg through `evaluate_proposal`, writes `apply_trade` in one transaction, and rolls back and marks the plan failed on any failure. `revalidate_plan` re-derives legs. | `PlanLifecycleTests.test_applying_a_plan_is_atomic_and_a_second_apply_is_idempotent`, `test_a_changed_portfolio_version_requires_revalidation`, `test_a_failed_leg_halts_the_plan_and_writes_no_ledger_row`, `ConcurrencyTests.*` |
+
+### Phase 4 divergences, recorded rather than absorbed
+
+1. **Sector is an explicit lookup, not `Asset.sector`.** The task allowed a
+   nullable `Asset.sector` "or an equivalent lookup". `InstrumentClassification`
+   was chosen because it also classifies candidate names that are not held yet,
+   and because a missing row is unambiguously unknown. Sector is never inferred
+   from a ticker. Consequence: existing databases show sector exposure as
+   **incomplete**, not 0%, until an operator imports classifications. The paper
+   fixture supplies fixture classifications and labels them as such.
+
+2. **There is no optimizer, and therefore no optimizer objective to fit.** The
+   model proposes weights; `deterministic_constrained_projection.v1` projects
+   them into the feasible set and records every difference. The plan records the
+   method version, objective version, inputs, solver identity and covariance
+   method version. A mean-variance or expected-return objective was deliberately
+   not introduced: it would require expected returns the data does not contain.
+
+3. **Correlation estimates are informative, and their absence is a policy
+   input.** They are not used to size positions. When history is missing, the
+   pair is `null` with a reason; the policy can label it, retain cash or block new
+   risk. The default is `label_only`; the paper command and tests exercise the
+   stricter choices.
+
+4. **Transaction costs are planning estimates, not recorded fees.**
+   `Transaction.fee` remains `NULL` because no broker fee source exists. The plan
+   reserves and reports `estimated_cost_usd`, but applying the plan does not debit
+   it from the ledger. That is conservative for the cash buffer and preserves the
+   Phase 3 NULL-versus-zero contract. A consequence is that the ledger's actual
+   cash after application can be slightly higher than the plan's post-cost
+   estimate.
+
+5. **Application is atomic rather than partially applied.** The specification
+   allows atomic "where feasible", or leg-by-leg with funding legs first. This
+   implementation chooses one database transaction for the whole plan, with
+   selling legs processed and revalidated first. Any failure rolls the
+   transaction back and marks the plan failed; no earlier fill survives and no
+   failed sale's proceeds are used. A reviewer who expected a partially applied
+   plan will see `failed`, not `partially_applied`.
+
+6. **Revalidation is explicit.** A changed `portfolio_version` is a refusal, not
+   an automatic retry: an automatic re-derivation could silently change the
+   decision the model made. `revalidate_plan` must be called, and it re-projects
+   the stored requested weights against current holdings, cash and limits.
+
+7. **No HTTP endpoint or frontend was added.** The output contract is the stored
+   `PortfolioPlan` JSON (`plan_as_dict`) and the paper command's JSON. This keeps
+   the change out of `frontend/` and out of the Phase 1/2/3 response shapes. The
+   only API change is additive: `PortfolioSerializer` now publishes the three new
+   limit fields, because an existing test requires every limit on the model to be
+   visible in the portfolio payload.
+
+8. **V4 in the experiment manifest remains unimplemented.** Phase 4 delivers the
+   allocation service, but no V4 experiment arm was scheduled or measured.
+   `MEASUREMENT.md`'s V4 declaration is unchanged; marking it implemented without
+   a run would be exactly the kind of unmeasured claim Phase 3 refused.
+
+9. **The paper evaluation is synthetic.** `phase4-allocation.v1.json` is an
+   authored fixture. Its covariance/correlation numbers are computed from the
+   supplied synthetic series, but the series, prices, classifications and
+   candidate cases are not realised history. The command labels the provider
+   `stub` and the source `fixture`.
