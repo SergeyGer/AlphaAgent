@@ -113,7 +113,6 @@ PROTOCOL_VERSION = "portfolio_allocation.v1"
 PortfolioStateLike = PortfolioState
 PROMPT_TEMPLATE_VERSION = "portfolio_targets.v1"
 MAX_REPAIR_ATTEMPTS = 1
-SATOSHI = Decimal("0.00000001")
 
 PROMPT_INSTRUCTIONS = """\
 You are the chief investment officer (CIO) of this portfolio.
@@ -245,7 +244,8 @@ class AllocationClient(Protocol):
     parameters: dict
     last_usage: Any
 
-    def complete(self, stage: str, prompt: str) -> str: ...
+    def complete(self, stage: str, prompt: str) -> str:
+        raise NotImplementedError("AllocationClient is a Protocol; use a concrete client.")
 
 
 @dataclass

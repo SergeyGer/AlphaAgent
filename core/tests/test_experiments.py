@@ -66,8 +66,10 @@ from services.experiments import (
     build_experiment,
     checksum_of,
     load_manifest,
+    replay_experiment,
     validate_manifest,
 )
+from services.portfolio_accounting import AccountingError
 from services.signal_diagnostics import HOLD_ZERO_CONVENTION
 
 D = Decimal
@@ -980,6 +982,38 @@ class ReportApiTests(APITestCase):
     def test_an_invalid_id_is_a_404(self):
         response = self.client.get(reverse("core:experiment-report", args=[str(uuid4())]))
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_a_forced_internal_failure_never_leaks_the_exception_to_the_client(self):
+        secret = "sensitive accounting detail at /srv/alphaagent/ledger.py:42"
+        forced = AccountingError(secret)
+        with (
+            self.assertLogs("alphaagent.experiments", level="ERROR") as captured,
+            patch("services.experiments.build_performance", side_effect=forced),
+        ):
+            replay_experiment(self.experiment)
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        body = response.content.decode()
+        self.assertNotIn("Traceback", body)
+        self.assertNotIn("AccountingError", body)
+        self.assertNotIn(secret, body)
+        self.assertNotIn("/srv/alphaagent", body)
+        self.assertNotIn("ledger.py", body)
+
+        performance = response.data["portfolio_performance"]
+        self.assertFalse(performance["available"])
+        self.assertRegex(
+            performance["reason"],
+            r"^Portfolio accounting could not be completed\. The cause was logged "
+            r"on the server with correlation id [0-9a-f]{12}\.$",
+        )
+        correlation_id = performance["reason"].rsplit(" ", 1)[-1].rstrip(".")
+        # The operator can find the cause: the same id and the full detail are in
+        # the server log, which is the only place the exception text is kept.
+        self.assertTrue(any(secret in line for line in captured.output))
+        self.assertTrue(any(f"correlation_id={correlation_id}" in line for line in captured.output))
 
     def test_authentication_is_required(self):
         response = APIClient().get(self.url)

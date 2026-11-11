@@ -3,7 +3,7 @@
 Django REST Framework API mounted at `/api/` by `config/urls.py` (routes in `core/urls.py`). Paths
 are unversioned, payloads are JSON, and the browsable HTML renderer exists only when
 `DJANGO_DEBUG=true` ([[Configuration]]). Verified against `core/urls.py`, `core/views.py`,
-`core/serializers.py`, `core/exceptions.py` and `core/tests/`.
+`core/serializers.py`, `core/decision_views.py`, `core/experiment_views.py`, `core/exceptions.py` and `core/tests/`.
 
 ## Authentication
 
@@ -255,6 +255,53 @@ curl -sS -X POST "$API/api/portfolio/recommendations/12/approve/" -H "Authorizat
 
 Marks the proposal `REJECTED` (`decided_via: "WEB"`), writes a matching audit row and starts no
 trade. The body has `"executed": false` and `message: "Recommendation rejected."`.
+
+## Decision runs (Phase 1)
+
+Every route is authenticated and scoped to the caller's portfolios. Another user's
+run is a `404`, never a `403`; a malformed id is the same `404`, so ownership cannot
+be probed. Amounts are decimal strings.
+
+### `GET /api/decision-runs/` — `200`, `401`
+
+Newest first. Optional filters: `status`, `mode`, `source`, `ticker`; an unknown
+value matches nothing rather than erroring. Each item carries `mode`,
+`is_synthetic`, `source`, `cost` and `failure`.
+
+### `GET /api/decision-runs/<id>/` — `200`, `401`, `404`
+
+Run metadata plus `stage_states` (skipped stages are `not_run`, degraded stages
+`degraded`), `cost` and `failure`.
+
+### `GET /api/decision-runs/<id>/detail/` — `200`, `401`, `404`
+
+The evidence-backed decision. Flat fields: `rationale`, `decisive_claim_ids`,
+`strongest_objection`, `claims`, `rebuttals`, `evidence`, `guard`, `outcomes`,
+`has_rebuttals`. Nested forms are served alongside: `cases`, `verdict`,
+`guard_comparison`, `guards`, `snapshot`, `limitations`. A run with no recorded
+rebuttals returns `has_rebuttals: false` and an empty list.
+
+### `GET /api/decision-runs/<id>/events/?after_seq=N&limit=M` — `200`, `400`, `401`, `404`
+
+Cursor window, not page numbers. `after_seq` must be a non-negative integer and
+`limit` an integer (default 50, capped at 500); a bad value is a `400` with the
+standard error envelope. The response carries `count`, `last_sequence`,
+`latest_sequence`, `next` (URL or null) and `events[]` of
+`{event_id, seq, type, stage, agent_role, occurred_at, payload}`.
+
+### `GET /api/decision-runs/<id>/export/` — `200`, `401`, `404`
+
+A versioned, checksummed JSON bundle. Account identifiers and credentials are
+excluded; evidence excerpts are included only when `is_redistributable` is true.
+
+## Experiments (Phase 3)
+
+### `GET /api/experiments/<id>/report/` — `200`, `401`, `404`, `409`
+
+The stored experiment report, with `X-Report-Version`. An experiment another user
+owns is `404`; an experiment whose report has not been built is `409` with the
+build instruction. Reading it never calls a model, fetches a price or rebuilds
+accounting. The block shape is documented in `docs/spec/MEASUREMENT.md` §4.
 
 ## Market data
 

@@ -24,7 +24,7 @@ Two consequences matter for the architecture:
 | Property | Value | Source |
 | --- | --- | --- |
 | Implementation | `mcp_server/server.py` (FastMCP), entrypoint `mcp_server/__main__.py` | — |
-| SDK | `mcp` 1.28.1 in this venv (transitive dependency of `crewai==1.15.23`) | `pip show crewai` → `mcp` |
+| SDK | `mcp` 1.30.0 (pinned in `requirements.txt`; `crewai` 1.15.32 declares `mcp<2,>=1.30.0`, and the lockfile pins 1.15.33) | `requirements.txt`, `CHANGELOG.md` 1.1.2 |
 | Server name / identity | `alphaagent-market-data` | `FastMCP(name=...)`, asserted in `test_mcp` |
 | Tools | 6, all read-only | `@mcp.tool()` declarations |
 | Default transport | `stdio` | `run(transport="stdio")` |
@@ -135,16 +135,16 @@ mcp:
   environment:
     <<: *app_env
     MCP_LOG_LEVEL: INFO
-  ports: ["8100:8100"]
+  expose: ["8100"]
   healthcheck:
     test: [CMD-SHELL, "python -c \"import socket; socket.create_connection(('127.0.0.1', 8100), 3)\""]
 ```
 
 The health check is a **TCP connect**, not an HTTP request, because the MCP endpoint expects a
-JSON-RPC handshake. Binding `0.0.0.0` and publishing the port is deliberate — the tools serve
-public market data and are read-only; the compose comment notes the mapping can be dropped if
-only the worker needs them. `mcp_server/*` is exempted from ruff's `S104`
-(hardcoded-bind-all-interfaces) for this reason.
+JSON-RPC handshake. Binding `0.0.0.0` *inside the container* and `expose`-ing 8100 (not
+publishing it to the host) is deliberate: the service is reachable only on the compose network,
+and every request must also carry the shared secret. `mcp_server/*` is exempted from ruff's
+`S104` (hardcoded-bind-all-interfaces) for this reason.
 
 ## The read-only safety boundary
 

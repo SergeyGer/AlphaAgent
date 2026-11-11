@@ -12,7 +12,7 @@ implementation detail and the reasoning behind it.
 
 ## Watch first
 
-**▶ [81-second walkthrough](https://github.com/SergeyGer/AlphaAgent/blob/main/docs/demo-walkthrough.mp4)**
+**▶ [Watch the walkthrough](https://github.com/SergeyGer/AlphaAgent/blob/main/docs/demo-walkthrough.mp4)**
 — narrated, recorded from the running system: the dashboard, the AI debate, the risk
 guard, and the measured result.
 
@@ -30,14 +30,18 @@ Full annotated tracks, with a per-step breakdown:
 
 ## Current version
 
-**1.1.0** (2026-10-23). See the
+**1.1.7** (2026-11-11). See the
 [changelog](https://github.com/SergeyGer/AlphaAgent/blob/main/CHANGELOG.md) for what
 changed, and the
 [releases page](https://github.com/SergeyGer/AlphaAgent/releases) for the notes.
+Phase 4 (portfolio allocation) is in the changelog's Unreleased section.
 
 | Version | Date | Headline |
 | --- | --- | --- |
-| **1.1.0** | 2026-10-23 | Decision attribution, portfolio ceilings, position theses, security pass |
+| **1.1.7** | 2026-11-11 | Signal diagnostics and portfolio accounting, kept separate by construction (Phase 3) |
+| 1.1.6 | 2026-11-11 | A real, bounded debate protocol (Phase 2) |
+| 1.1.5 | 2026-11-10 | Decision runs: explain one decision (Phase 1) |
+| 1.1.0 | 2026-10-23 | Decision attribution, portfolio ceilings, position theses, security pass |
 | 1.0.0 | 2026-09-30 | Initial release: a four-tier autonomous investment platform |
 
 ## If you are evaluating this project
@@ -46,7 +50,7 @@ Three pages will tell you the most in the least time:
 
 | Page | What it demonstrates |
 | --- | --- |
-| [[Engineering-Decisions]] | Eight decision records with the alternatives rejected and the consequences accepted. Start here if you want to judge engineering judgement rather than code volume. |
+| [[Engineering-Decisions]] | Eight long-form decision records with the alternatives rejected and the consequences accepted; the full set of seventeen is in the [ADR index](https://github.com/SergeyGer/AlphaAgent/blob/main/docs/adr/README.md). Start here if you want to judge engineering judgement rather than code volume. |
 | [[Incident-Log]] | Real defects found in this system, their root causes, and the fixes. Includes one where the design itself was wrong, not just the code. |
 | [[Execution-Guard]] | The risk model — the part of the system that is deliberately *not* AI, and why. |
 
@@ -109,9 +113,10 @@ Every decision is reconstructible after the fact — including the decisions *no
 to act, which are usually the more interesting ones.
 
 **Degrade, never disappear.**
-Missing market data becomes `HOLD`. A cache outage is tolerated. With no LLM
-credential at all, a deterministic engine produces the same output contract so
-the entire pipeline remains exercisable offline.
+Missing market data does not abort the run: it is recorded, and the guard
+refuses any execution without a positive price. A cache outage is tolerated.
+With no LLM credential at all, a deterministic engine produces the same output
+contract so the entire pipeline remains exercisable offline.
 
 ---
 

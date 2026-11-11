@@ -9,6 +9,13 @@ The purpose of this page is not to catalogue mistakes. It is to show how they
 were diagnosed, and to make the case that the most valuable defects are the ones
 where **the design was wrong, not the code**.
 
+**Evidence note.** Several entries quote counts from production logs at the time
+of the incident — occurrences, affected runs, test counts. Those logs are not
+committed, so the counts are recorded narrative rather than reproducible
+measurement. They are not used in any performance or comparative claim; the
+committed evidence for the measurement systems is in `docs/spec/` and is labelled
+synthetic where it is synthetic.
+
 | ID | Incident | Class | Design change? |
 | --- | --- | --- | --- |
 | [INC-001](#inc-001--overlapping-sweeps-bought-the-same-stock-twice) | Overlapping sweeps bought the same stock twice | Risk model | **Yes** |
@@ -21,7 +28,7 @@ where **the design was wrong, not the code**.
 | [INC-008](#inc-008--sentiment-scored-backwards) | Sentiment scored backwards | Algorithm | No |
 | [INC-009](#inc-009--redis-ran-with-no-authentication-on-a-published-port) | Redis ran unauthenticated on a published port | Exposure | Partly |
 | [INC-010](#inc-010--both-databases-were-reachable-from-the-public-internet) | Both databases were reachable from the public internet | Exposure | **Yes** |
-| [INC-011](#inc-011--one-run-in-a-hundred-failed-on-a-token-cap) | One run in a hundred failed on a token cap | Model budget | **Yes** |
+| [INC-011](#inc-011--runs-failed-on-a-token-cap) | Runs failed on a token cap | Model budget | **Yes** |
 
 ---
 
@@ -112,7 +119,7 @@ crashes. The container healthcheck was also checking the wrong thing.
 ## INC-003 — WebSocket dropped every 90 seconds
 
 **Symptom.** The dashboard indicator flapped between `LIVE` and `RECONNECTING`
-roughly every ninety seconds. Measured at **26 occurrences in 40 minutes**.
+roughly every ninety seconds. It recurred repeatedly during a 40-minute observation window.
 
 **Root cause — two defaults that happen to be the same number.**
 
@@ -337,7 +344,7 @@ budget, a debounce key shared across portfolios, a `500` on a malformed `limit`
 parameter, a Telegram link code that never expired, a token purge that ignored last
 use, an executed trade never pushed to Telegram, a webhook that accepted unsigned
 POSTs when unconfigured, and a live snapshot frame whose shape did not match what the
-dashboard read. All eight are fixed and pinned by 35 tests in
+dashboard read. All eight are fixed and pinned by regression tests in
 `core/tests/test_regressions.py`; [[API-Reference]] and [[Operations]] document the
 corrected behaviour.
 
@@ -516,15 +523,15 @@ noisier, which is the point: it is a place where somebody had to decide.
 
 ---
 
-## INC-011 — One run in a hundred failed on a token cap
+## INC-011 — Runs failed on a token cap
 
 **Symptom.** Decisions occasionally appeared in the audit trail as
 `ERROR - agent pipeline failed` instead of a trade, a HOLD, or a heuristic
 fallback. Sixteen of them, scattered across two weeks, with no pattern a reader
 could see from the feed.
 
-**Impact.** Roughly **1% of agent runs produced no decision at all** (16 of 1,532).
-The guard was never bypassed — a failed run simply does nothing — but a system that
+**Impact.** A small but material share of agent runs over the observed two-week
+window produced no decision at all. The guard was never bypassed — a failed run simply does nothing — but a system that
 silently declines to decide one time in a hundred is harder to trust than one that
 refuses loudly.
 

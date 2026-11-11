@@ -446,7 +446,8 @@ class StageClient(Protocol):
     parameters: dict
     last_usage: ModelUsage | None
 
-    def complete(self, stage: str, prompt: str) -> str: ...
+    def complete(self, stage: str, prompt: str) -> str:
+        raise NotImplementedError("StageClient is a Protocol; use a concrete client.")
 
 
 @dataclass

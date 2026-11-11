@@ -51,13 +51,15 @@ seller independently construct opposing cases, and a chief investment officer
 adjudicates between them.
 
 **Consequences.**
-- The two cases are built from *different* evidence — the short seller is the
-  only agent with access to the fundamentals tool. Disagreement is therefore
-  real rather than performative.
-- Cost roughly triples: three agents, ~100k tokens and about $0.10 per
-  instrument per run.
-- Both arguments can be persisted and shown to the user, so a verdict is
-  traceable to the two cases that produced it.
+- The two first-round cases are built independently from the same recorded
+  evidence catalog: neither prompt contains the other's output, so disagreement
+  is real rather than performative. Since Phase 2 the producer is
+  `services/debate_protocol.py`, not the original sequential crew.
+- Cost is higher than a single-analyst pass — each run makes several model calls
+  rather than one. The run records its own token usage and cost; no per-run
+  dollar figure is asserted here because no representative run is committed.
+- Both arguments are persisted as claims and rebuttals and shown to the user, so
+  a verdict is traceable to the cases that produced it.
 
 **Alternatives rejected.**
 - *Sequential analyst → decider.* A single summary feeding a single

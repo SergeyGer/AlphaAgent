@@ -31,7 +31,7 @@ flowchart TB
 
     subgraph ai["&nbsp;AI layer"]
         direction LR
-        CREW["<b>CrewAI debate</b><br/>bull ⚔ bear ⚔ CIO"]
+        CREW["<b>Recorded debate</b><br/>independent cases ⚔ rebuttal ⚔ CIO"]
         GUARD["<b>Execution guard</b><br/>pure, unit-tested"]
     end
 
@@ -92,11 +92,11 @@ Everything below is in this repository and runs today.
 
 | Area | Delivered |
 | --- | --- |
-| **Multi-agent AI** | A three-agent adversarial debate on CrewAI — a Bullish Research Analyst, a Risk Assessor (Short Seller) and a Chief Investment Officer — with a payload contract validated by a schema library and a guardrail that forces a retry on malformed output |
+| **Multi-agent AI** | A three-role adversarial debate orchestrated by `services/debate_protocol.py` — a Bullish Research Analyst, a Risk Assessor (Short Seller) and a Chief Investment Officer — with independent first cases, one bounded rebuttal round, schema-validated stage output and a typed failure for each stage. Model calls go through the CrewAI `LLM` seam; the pre-Phase-2 sequential crew remains available as `legacy_sequential`. |
 | **Risk engine** | A deterministic execution guard enforcing allocation, cash, position, stop-loss, cumulative-exposure and concentration limits, designed as a pure function so it can be exhaustively tested |
 | **Autonomous scheduling** | A task queue that fans out one independent job per portfolio-and-instrument pair, on a timer, with cooldowns that stop overlapping runs compounding exposure |
 | **Decision audit trail** | Every run persisted with both sides of the argument, token usage and cost — queryable, streamable and prunable |
-| **Decision attribution** | Every decision scored against what the market did next — forward returns at 1, 7 and 30 days, what the action was worth, and alpha against a benchmark. The audit trail proves *why*; this measures *whether it worked* |
+| **Decision attribution** | Decisions that name an instrument are evaluated against what the market did next when a permitted price exists — forward returns at 1, 7 and 30 days, what the action was worth, and alpha against a benchmark. A HOLD makes no directional claim and is null in the hit rate. The audit trail proves *why*; this measures *whether it worked* |
 | **Position memory** | Each open position carries a written thesis and its own invalidation condition, fed back to the agents on every run so an exit has to argue with the reason for entry |
 | **Live analytics dashboard** | A React and TypeScript single-page app with an equity curve, allocation breakdown, real-time reasoning feed, approvals and trade history, streamed over WebSocket |
 | **Human-in-the-loop approvals** | Approve or reject any proposal from the dashboard or from Telegram, with the risk checks re-run against live prices at the moment of approval |
@@ -121,7 +121,7 @@ flowchart TB
 
     TASK --> S1["1 · autonomy + cooldown check"]
     S1 --> S2["2 · gather context<br/>price · news · fundamentals · ledger replay"]
-    S2 --> S3["3 · CrewAI debate<br/>bull → bear → CIO"]
+    S2 --> S3["3 · recorded debate<br/>independent cases → rebuttal → CIO"]
     S3 --> S4{"4 · EXECUTION GUARD<br/>allocation · cash · position · stop-loss"}
     S4 -->|approved| S5["5 · transaction.atomic + row locks"]
     S4 -->|blocked| S6
@@ -142,8 +142,8 @@ The AI never writes to the database. It returns a proposal; the guard decides.
 | Step | What happens | Failure behaviour |
 | --- | --- | --- |
 | 1 | Re-check that the portfolio is still autonomous, and claim a throttle slot | Run is skipped if autonomy was revoked or the cooldown is active |
-| 2 | Gather context: live quote, scored news, fundamentals, and a ledger replay for current position and cost basis | Missing market data degrades to `HOLD`; it does not abort |
-| 3 | Run the three-agent debate over read-only tools | Falls back to the deterministic engine when no LLM credential is configured |
+| 2 | Gather context: live quote, scored news, fundamentals, and a ledger replay for current position and cost basis | Missing market data does not abort the run; the gap is recorded, and the guard refuses any execution without a positive price |
+| 3 | Run the recorded debate protocol: independent first cases, one rebuttal round, CIO adjudication; prompts use the recorded evidence catalog | A typed stage failure stops the protocol; with no LLM credential a separate heuristic run is recorded |
 | 4 | Evaluate the proposal against every risk limit | Blocked proposals are recorded with the reason code |
 | 5 | Persist the trade inside a transaction with row locks | Rolled back atomically on any error |
 | 6 | Write the audit row — **always**, approved or not | This is the only step with no conditional path |
@@ -187,7 +187,7 @@ Celery Beat (15 min)
    └─► monitoring task ──► group of subtasks
                               └─► run_alpha_agent_task(portfolio, ticker)
                                      ├─ MCP / yfinance / RSS ──► context
-                                     ├─ CrewAI debate ─────────► TradeProposal
+                                     ├─ debate protocol ───────► validated verdict
                                      ├─ evaluate_proposal() ───► GuardDecision
                                      ├─ transaction.atomic() ──► Transaction + Asset
                                      ├─ AgentDecisionLog ──────► audit row (always)
@@ -201,17 +201,25 @@ Celery Beat (15 min)
 ├── config/            Django project: settings, ASGI, Celery app, routing
 ├── core/              Domain app
 │   ├── models.py      Portfolio · Asset · Transaction · AgentDecisionLog ·
-│   │                  PortfolioSnapshot · TradeRecommendation · TelegramLink
+│   │                  PortfolioSnapshot · TradeRecommendation · TelegramLink ·
+│   │                  PositionThesis · DecisionOutcome
+│   ├── decision_models.py     DecisionRun · Claim · Rebuttal · GuardRecord
+│   ├── measurement_models.py  CashFlow · Experiment · ExperimentVariant
+│   ├── allocation_models.py   InstrumentClassification · PortfolioPlan
 │   ├── views.py       REST endpoints
 │   ├── consumers.py   WebSocket consumer
 │   ├── management/    seed_demo · dry_run_agent · telegram_poll ·
-│   │                  purge_decision_logs
+│   │                  purge_decision_logs · load_decision_fixtures ·
+│   │                  build_experiment · run_allocation
 │   └── tests/         Test suite, one module per concern
 ├── services/          market_data · news · sentiment · ledger · metrics ·
 │                      execution · recommendations · snapshots · events ·
-│                      throttle · llm_hooks · fundamentals
+│                      throttle · llm_hooks · fundamentals · debate_protocol ·
+│                      decision_runs · evidence · signal_diagnostics ·
+│                      portfolio_accounting · experiments · portfolio_brief ·
+│                      portfolio_policy · portfolio_targets · portfolio_allocation
 ├── mcp_server/        Model Context Protocol tool server
-├── ai_agent.py        CrewAI debate, output contract, heuristic fallback
+├── ai_agent.py        public entry point, legacy CrewAI crew, heuristic fallback
 ├── tasks.py           Celery tasks and scheduling entry points
 ├── telegram_bot.py    Bot API client and inline-keyboard handlers
 └── frontend/          React + TypeScript SPA

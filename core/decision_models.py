@@ -41,7 +41,16 @@ from django.utils import timezone
 
 from core.decision_errors import SnapshotImmutableError
 
+#: The models, plus the small vocabulary constants the decision services import
+#: from here instead of duplicating. The constants below are a public contract:
+#: ``RUN_STAGE_ORDER``/``RUN_EVENT_TYPES`` drive statusing and validation in
+#: services/decision_runs.py, and the bounds are enforced by services/evidence.py.
 __all__ = [
+    "EVENT_SCHEMA_VERSION",
+    "MAX_EXCERPT_CHARS",
+    "MAX_STATEMENT_CHARS",
+    "RUN_EVENT_TYPES",
+    "RUN_STAGE_ORDER",
     "AgentRole",
     "Claim",
     "ClaimStance",
