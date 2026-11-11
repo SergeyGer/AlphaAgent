@@ -37,7 +37,7 @@ from django.contrib.auth.models import User
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
-from core.allocation_models import PortfolioPlan
+from core.allocation_models import EXECUTION_MODE_PAPER, PortfolioPlan
 from core.models import Asset, InstrumentClassification, Portfolio
 from services.portfolio_allocation import (
     AllocationError,
@@ -183,6 +183,7 @@ class Command(BaseCommand):
                     submission_key=submission_key,
                     policy=policy,
                     cost_model=cost_model,
+                    execution_mode=EXECUTION_MODE_PAPER,
                 )
             except AllocationError as exc:
                 self._emit({"phase": "error", "stage": "plan", "error": str(exc)})

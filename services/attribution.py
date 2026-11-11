@@ -31,11 +31,13 @@ from decimal import Decimal
 from django.utils import timezone
 
 from core.models import AgentDecisionLog, DecisionOutcome
+from services.decision_outcomes import OUTCOME_METHOD_VERSION, sync_outcome
 
 logger = logging.getLogger("alphaagent.attribution")
 
 __all__ = [
     "BENCHMARK_TICKER",
+    "OUTCOME_METHOD_VERSION",
     "Scorecard",
     "action_of",
     "build_scorecard",
@@ -228,7 +230,7 @@ def evaluate_pending(*, now=None, limit: int = 500) -> dict[str, int]:
             if benchmark_start and benchmark_end:
                 benchmark = _return_pct(benchmark_start, benchmark_end)
 
-            DecisionOutcome.objects.update_or_create(
+            outcome, _created = DecisionOutcome.objects.update_or_create(
                 decision=decision,
                 horizon_days=horizon,
                 defaults={
@@ -242,6 +244,10 @@ def evaluate_pending(*, now=None, limit: int = 500) -> dict[str, int]:
                     "directional_hit": directional_hit(action, forward),
                 },
             )
+            # The Phase 1 detail contract reads OutcomeRecord. Mirror the scored
+            # row through the versioned bridge so the detail screen and the
+            # scorecard cannot disagree about what this decision returned.
+            sync_outcome(decision, outcome, method_version=OUTCOME_METHOD_VERSION)
             scored += 1
             made_progress = True
 

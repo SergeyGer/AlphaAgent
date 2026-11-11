@@ -1,6 +1,9 @@
-import { useEffect, useRef, useState, type ReactElement } from 'react';
+import { useEffect, useMemo, useRef, type ReactElement } from 'react';
 import { cn } from '../lib/cn';
 import {
+  buildAsOfPresentation,
+  decisionSummary,
+  eventsRequiringDetailRefresh,
   formatLatency,
   formatRunTimestamp,
   isActiveRunStatus,
@@ -16,10 +19,11 @@ import {
   useDecisionRunEvents,
   useDecisionRuns,
 } from '../hooks/useDecisionRuns';
+import { useReplayNavigation } from '../hooks/useReplayNavigation';
 import type { RunSummary } from '../types';
 import { Badge, type BadgeTone } from './Badge';
 import { DebateTimeline } from './DebateTimeline';
-import { DecisionDetail } from './DecisionDetail';
+import { DecisionDetail, type DecisionDetailScene } from './DecisionDetail';
 import { ErrorState, SkeletonRows } from './Feedback';
 import { Panel } from './Panel';
 import { ReplayControls } from './ReplayControls';
@@ -165,7 +169,7 @@ function DecisionRunList(): ReactElement {
   );
 }
 
-function DecisionRunView({ runId }: { runId: string }): ReactElement {
+export function DecisionRunView({ runId }: { runId: string }): ReactElement {
   const { token } = useAuth();
   const detail = useDecisionRun(runId, token);
   const run = detail.data?.run ?? null;
@@ -175,22 +179,92 @@ function DecisionRunView({ runId }: { runId: string }): ReactElement {
     pollIntervalMs: active ? 2_000 : 0,
   });
   const hasRebuttals = detail.data?.has_rebuttals ?? true;
+  const navigation = useReplayNavigation(runId);
 
-  const [cursorSeq, setCursorSeq] = useState<number | null>(null);
-  const cursorInitialised = useRef(false);
   const maxSeq = lastEventSequence(events.events);
-
-  // Start a stored run at its tail so the full timeline is visible; the replay
-  // controls then move the cursor. Once initialised, new events must not yank a
-  // reader who deliberately stepped backwards.
-  useEffect(() => {
-    if (cursorInitialised.current || maxSeq === null) return;
-    cursorInitialised.current = true;
-    setCursorSeq(maxSeq);
-  }, [maxSeq]);
-
   const replayable =
     events.events.length > 0 && run !== null && isTerminalRunStatus(run.status);
+
+  // -- Live refresh ------------------------------------------------------
+  // A persisted stage, claim, rebuttal, decision, guard or outcome changes the
+  // detail payload. The events hook is the liveness signal; the detail resource
+  // is refreshed when one of those events arrives, so an open run moves from
+  // "analysing" to a terminal replay without the reader reloading the page.
+  const detailInitialised = useRef(false);
+  const lastDetailRefreshSeq = useRef(0);
+  useEffect(() => {
+    if (!detail.data) return undefined;
+    if (!detailInitialised.current) {
+      detailInitialised.current = true;
+      lastDetailRefreshSeq.current = lastEventSequence(events.events) ?? 0;
+      // One reconciliation refresh covers the race between the initial detail
+      // request and the first event page. After that, only new events trigger
+      // a refresh, so a completed run is not polled forever.
+      const initial = window.setTimeout(() => detail.refresh(), 150);
+      return () => window.clearTimeout(initial);
+    }
+
+    const fresh = eventsRequiringDetailRefresh(events.events, lastDetailRefreshSeq.current);
+    if (fresh.length === 0) return undefined;
+    lastDetailRefreshSeq.current = lastEventSequence(events.events) ?? lastDetailRefreshSeq.current;
+    const timer = window.setTimeout(() => detail.refresh(), 120);
+    return () => window.clearTimeout(timer);
+  }, [detail.data, detail.refresh, events.events]);
+
+  // -- Cursor navigation -------------------------------------------------
+  // The URL is the source of truth once a cursor exists. Without one, a stored
+  // run opens at its tail; as new events arrive while the reader is already at
+  // the tail, follow them. A reader who stepped back is never yanked forward.
+  const rawCursor = navigation.hasCursor ? navigation.cursorSeq : maxSeq;
+  const cursorSeq =
+    rawCursor !== null && rawCursor !== undefined && maxSeq !== null && rawCursor > maxSeq
+      ? maxSeq
+      : (rawCursor ?? null);
+  const lastMaxSeq = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (maxSeq === null) return;
+    const previousMax = lastMaxSeq.current;
+    lastMaxSeq.current = maxSeq;
+
+    if (!navigation.hasCursor) {
+      navigation.setCursor(maxSeq, { history: 'replace' });
+      return;
+    }
+    if (navigation.cursorSeq !== null && navigation.cursorSeq !== undefined && navigation.cursorSeq > maxSeq) {
+      navigation.setCursor(maxSeq, { history: 'replace' });
+      return;
+    }
+    if (previousMax !== null && navigation.cursorSeq === previousMax && maxSeq > previousMax) {
+      navigation.setCursor(maxSeq, { history: 'replace' });
+    }
+  }, [maxSeq, navigation.hasCursor, navigation.cursorSeq, navigation.setCursor]);
+
+  const presentation = useMemo(
+    () =>
+      replayable
+        ? buildAsOfPresentation(detail.data, events.events, cursorSeq)
+        : null,
+    [cursorSeq, detail.data, events.events, replayable],
+  );
+
+  const scene: DecisionDetailScene | undefined = presentation
+    ? {
+        active: true,
+        atEnd: presentation.atEnd,
+        cursorSeq: presentation.cursorSeq,
+        verdictVisible: presentation.verdictVisible,
+        guardVisible: presentation.guardVisible,
+        outcomesVisible: presentation.outcomesVisible,
+        hiddenClaims: presentation.hidden.claims,
+        hiddenEvidence: presentation.hidden.evidence,
+        hiddenOutcomes: presentation.hidden.outcomes,
+        hiddenRebuttals: presentation.hidden.rebuttals,
+      }
+    : undefined;
+
+  const pinnedFinalSummary =
+    presentation && !presentation.atEnd ? decisionSummary(detail.data) : null;
 
   return (
     <div className="space-y-3">
@@ -204,11 +278,30 @@ function DecisionRunView({ runId }: { runId: string }): ReactElement {
         <span className="break-all font-mono text-xs text-slate-400">{runId}</span>
       </nav>
 
+      {pinnedFinalSummary ? (
+        <details
+          data-testid="pinned-final-summary"
+          className="rounded-xl border border-amber-500/30 bg-amber-500/[0.06] px-4 py-3"
+        >
+          <summary className="cursor-pointer font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-200">
+            Final summary (pinned — not part of the replay scene)
+          </summary>
+          <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-200">
+            {pinnedFinalSummary}
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-amber-200/80">
+            This is the stored final summary. It is deliberately outside the replay scene and may
+            describe events later than the current cursor.
+          </p>
+        </details>
+      ) : null}
+
       <DecisionDetail
-        detail={detail.data}
+        detail={presentation?.detail ?? detail.data}
         loading={detail.loading}
         error={detail.error}
         onRetry={detail.refresh}
+        scene={scene}
       />
 
       <section aria-label="Run timeline and replay" className="min-w-0 space-y-3">
@@ -226,6 +319,26 @@ function DecisionRunView({ runId }: { runId: string }): ReactElement {
           </p>
         ) : null}
 
+        {events.catchingUp || events.remaining > 0 ? (
+          <div
+            data-state="event-stream-catching-up"
+            role="status"
+            className="rounded-xl border border-amber-500/30 bg-amber-500/[0.06] px-4 py-3"
+          >
+            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-200">
+              Event stream catching up
+            </p>
+            <p className="mt-1 text-sm leading-relaxed text-slate-300">
+              {events.remaining} event{events.remaining === 1 ? '' : 's'} up to the server tail
+              {events.serverLastSequence !== null ? ` (sequence ${events.serverLastSequence})` : ''}{' '}
+              {events.remaining === 1 ? 'is' : 'are'} still not held locally. Playback resumes from
+              the last contiguous sequence
+              {events.contiguousSequence !== null ? ` (${events.contiguousSequence})` : ''} rather
+              than skipping ahead.
+            </p>
+          </div>
+        ) : null}
+
         {run !== null && isActiveRunStatus(run.status) ? (
           <div
             data-state="replay-unavailable"
@@ -235,8 +348,9 @@ function DecisionRunView({ runId }: { runId: string }): ReactElement {
               Run in progress
             </p>
             <p className="mt-1 text-sm leading-relaxed text-slate-300">
-              Replay controls appear once the run reaches a terminal state. The timeline below shows
-              only events the backend has already stored — no live tokens are invented.
+              Replay controls appear once the run reaches a terminal state. The detail above is
+              refreshed as persisted stage, claim, rebuttal, verdict and guard events arrive; the
+              timeline below shows only events the backend has already stored.
             </p>
           </div>
         ) : null}
@@ -246,7 +360,9 @@ function DecisionRunView({ runId }: { runId: string }): ReactElement {
             events={events.events}
             hasRebuttals={hasRebuttals}
             cursorSeq={cursorSeq}
-            onCursorSeqChange={setCursorSeq}
+            onCursorSeqChange={navigation.setCursor}
+            timingMode={navigation.timing}
+            onTimingModeChange={navigation.setTiming}
           />
         ) : null}
 

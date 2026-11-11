@@ -7,6 +7,74 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Fixed
+
+- **FIX-02 [P0] — every trade is revalidated under lock.** `apply_trade` locked the
+  portfolio and asset rows, then checked cash and quantity, but never reran
+  cumulative exposure, concentration, daily-loss or budget rules under that lock.
+  Two independently approved additions to a 20% position could therefore pass a 30%
+  cap and reach 40%. There is now one authoritative `execute_trade` that locks,
+  rebuilds cash/holdings/marks/exposure, reruns the current policy, and mutates the
+  ledger in the same transaction. `evaluate_proposal` is explicitly read-only
+  simulation, and a hand-built `GuardDecision` cannot authorise anything.
+  A stable `execution_key` with a uniqueness constraint makes Celery redelivery and
+  repeated approval return the existing row.
+
+- **FIX-03 [P0] — portfolio policy is enforced at application time.** `apply_plan`
+  rechecked legs through the legacy guard, which has no sector, turnover or
+  cash-buffer rule, and the plan's state version ignored prices and policy limits.
+  A tightened sector ceiling or a doubled sector price could therefore be applied
+  against a plan approved under different constraints. Plans now bind limits,
+  classifications, cost model and allocation into a hash; `apply_plan` requires
+  timestamped finite marks for every material holding, recomputes the plan under
+  lock, checks the projected final state against every limit, and refuses materially
+  changed plans with `PlanReapprovalRequired`. Planned prices are accepted only in
+  explicit `paper` mode, which is persisted and labelled.
+
+- **FIX-01 [P1] — the decision lifecycle is one run, end to end.** The protocol
+  marked a run `completed` before the guard had run, so a real run could appear
+  finished while approval or execution was outstanding, and the detail screen lacked
+  the guard and outcome a synthetic fixture showed. Analysis now ends at `validating`;
+  a typed `GuardRecord` is persisted from the exact under-lock evaluation; approval,
+  rejection, expiry, execution and failure all update the same run; HOLD records an
+  explicit no-trade completion rather than a fabricated fill.
+
+- **FIX-06 [P1] — event delivery is durable.** Publishing used `on_commit` plus a
+  best-effort send, so a crash after commit or a Redis outage lost the notification.
+  An `EventOutbox` now persists the notification in the same transaction as the
+  event, a flush task retries with backoff, and `GET /api/events/catch-up/` lets a
+  client recover the ordered timeline after a reconnect.
+
+- **FIX-04 [P1] — live refresh and replay now agree.** Detail did not refresh on
+  events, so an open run stayed stale, and replay filtered the timeline while the
+  final verdict stayed visible. Detail now refreshes on persisted stage, claim,
+  rebuttal, decision, guard and outcome events; one as-of presentation state drives
+  claims, rebuttals, verdict, guard and timeline together, so before adjudication
+  there is no verdict in the scene. Compressed and recorded-time playback are
+  separately labelled, and the cursor and timing mode survive browser navigation.
+
+- **FIX-05 [P1] — a standalone offline viewer.** REP-02 asks for replay with no
+  database, and the previous path needed PostgreSQL and an authenticated API. A
+  static viewer now builds to `docs/viewer/`, validated by schema and SHA-256 before
+  import, labelling each run **Real recorded / Synthetic / Heuristic / Legacy**.
+  It has no execution, approval or live-analysis capability, and a fetch guard plus
+  CSP `default-src 'none'` keep it offline; verified under `unshare -n`.
+
+- **FIX-09 [P2] — CI publishes the coverage badge without touching `main`.** The
+  badge step pushed directly to `main` and failed every run with GH013, turning a
+  green test suite into a red workflow. It now pushes to an unprotected `badges`
+  branch and the README points at that raw URL; branch protection is unchanged.
+
+### Changed
+
+- **The walkthrough is rebuilt around one decision.** Narration starts on the first
+  frame over the social preview, names the models actually used (Claude Haiku 5.5
+  via CrewAI), opens on the login screen as the earlier demo did, crops into the
+  reasoning so the arguments are legible, removes the second title card, and drops
+  the music level further.
+
+## [1.1.8] — 2026-11-11
+
 ### Added
 
 - **Phase 4 of the technical specification: portfolio-aware capital allocation.**

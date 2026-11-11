@@ -1,4 +1,5 @@
 import type { AgentStage, AgentThinkingEvent, DecisionLog, FeedItem } from '../types';
+import { runLinkId } from './decisionRuns';
 
 const STAGE_LABELS: Record<AgentStage, string> = {
   analyst_started: 'Analyst · started',
@@ -53,6 +54,7 @@ export function feedItemFromLog(log: DecisionLog): FeedItem {
     bearCase: log.bear_case,
     stage: null,
     message: null,
+    runId: runLinkId(log),
   };
 }
 
@@ -72,6 +74,7 @@ export function feedItemFromThinking(event: AgentThinkingEvent): FeedItem {
     bearCase: null,
     stage: event.stage,
     message: event.message,
+    runId: null,
   };
 }
 

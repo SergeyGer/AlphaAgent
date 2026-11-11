@@ -15,9 +15,10 @@ needs the stage uses it, and is labelled ``synthetic``.
 reads the current maximum sequence and inserts the next number in the same
 transaction. The event is therefore persisted before anything is published
 (API-03): a live consumer may see an event twice, but it can never see
-``sequence=7`` before ``sequence=6`` exists. Publishing is best-effort - the
-event log is the record, the WebSocket is a convenience - so a Redis outage does
-not fail a decision run.
+``sequence=7`` before ``sequence=6`` exists. The notification is persisted in the
+same transaction as an outbox row; delivery is retried, and the event log remains
+the authority even when Redis is down. A realtime outage never fails a decision
+run.
 """
 
 from __future__ import annotations
@@ -45,7 +46,7 @@ from core.decision_models import (
     RunSource,
     RunStage,
 )
-from services.events import publish
+from services.event_outbox import deliver_now, enqueue_event
 
 logger = logging.getLogger("alphaagent.decision_runs")
 
@@ -158,11 +159,17 @@ def _validate_choice(value: str, choices, *, field: str) -> str:
     return value
 
 
-def _publish_event(user_id: int | None, event: RunEvent) -> None:
-    """Broadcast a persisted event. Never raises: see ``services.events.publish``."""
-    publish(
+def _queue_event(user_id: int | None, event: RunEvent) -> object | None:
+    """Persist the notification for a committed-or-committing event.
+
+    Called *inside* the event transaction so the queue row and the event row
+    commit together. The live delivery is attempted after commit; if the process
+    dies in between, the pending row survives and the retry task delivers it.
+    """
+    return enqueue_event(
         user_id,
         RUN_EVENT_STREAM,
+        "decision_run.event",
         {
             "run_id": str(event.run_id),
             "sequence": event.sequence,
@@ -171,8 +178,16 @@ def _publish_event(user_id: int | None, event: RunEvent) -> None:
             "stage": event.stage,
             "agent_role": event.agent_role,
             "occurred_at": utc_iso(event.occurred_at),
+            "detail_path": f"/api/decision-runs/{event.run_id}/",
         },
+        dedupe_key=f"run_event:{event.event_id}",
     )
+
+
+def _dispatch_after_commit(outbox_row) -> None:
+    if outbox_row is None:
+        return
+    transaction.on_commit(lambda: deliver_now(outbox_row.id))
 
 
 def _next_sequence(run_id) -> int:
@@ -225,15 +240,23 @@ def append_event(
     payload: dict | None = None,
     occurred_at=None,
     schema_version: str = EVENT_SCHEMA_VERSION,
+    dedupe_key: str = "",
 ) -> RunEvent:
     """Append one event to a run's ordered log.
 
     The run row is locked for the duration of sequence allocation, so two
     producers appending concurrently get consecutive numbers rather than the
-    same one. The event is committed before the live notification is published.
+    same one. The event and its queued notification are committed together.
+    A non-empty ``dedupe_key`` makes a retried handler return the first event
+    instead of appending a duplicate.
     """
+    key = (dedupe_key or "").strip()[:160]
     with transaction.atomic():
         locked = DecisionRun.objects.select_for_update().select_related("portfolio").get(pk=run.pk)
+        if key:
+            existing = RunEvent.objects.filter(run=locked, dedupe_key=key).first()
+            if existing is not None:
+                return existing
         event = _create_event(
             locked,
             event_type=event_type,
@@ -243,9 +266,12 @@ def append_event(
             occurred_at=occurred_at,
             schema_version=schema_version,
         )
-        user_id = locked.portfolio.user_id
+        if key:
+            RunEvent.objects.filter(pk=event.pk).update(dedupe_key=key)
+            event.dedupe_key = key
+        outbox_row = _queue_event(locked.portfolio.user_id, event)
 
-    transaction.on_commit(lambda: _publish_event(user_id, event))
+    _dispatch_after_commit(outbox_row)
     return event
 
 
@@ -338,9 +364,9 @@ def create_run(
                 "fixture_id": fixture_id or None,
             },
         )
-        user_id = portfolio.user_id
+        outbox_row = _queue_event(portfolio.user_id, event)
 
-    transaction.on_commit(lambda: _publish_event(user_id, event))
+    _dispatch_after_commit(outbox_row)
     logger.info("Created decision run %s for %s (%s, %s)", run.id, symbol, mode, source)
     return run
 
@@ -416,7 +442,7 @@ def transition_status(
             occurred_at=at,
             payload=event_payload,
         )
-        user_id = locked.portfolio.user_id
+        outbox_row = _queue_event(locked.portfolio.user_id, event)
 
     # Keep the caller's instance readable without a refetch. This is the only
     # mutation of a model instance outside the database layer, and it mirrors
@@ -428,7 +454,7 @@ def transition_status(
         run.error_code = locked.error_code
         run.error_detail = locked.error_detail
 
-    transaction.on_commit(lambda: _publish_event(user_id, event))
+    _dispatch_after_commit(outbox_row)
     logger.info("Decision run %s: %s -> %s", run.id, previous, new_status)
     return event
 
@@ -531,8 +557,11 @@ def stage_states(run: DecisionRun, events=None) -> dict:
                 payload.get("reason") or payload.get("detail") or "stage reported an error"
             )
 
+    current_index = (
+        RUN_STAGE_ORDER.index(run.status) if run.status in RUN_STAGE_ORDER else len(RUN_STAGE_ORDER)
+    )
     stages = []
-    for stage in RUN_STAGE_ORDER:
+    for index, stage in enumerate(RUN_STAGE_ORDER):
         if stage == run.status and not run.is_terminal:
             state = "active"
         elif stage == failure_stage:
@@ -540,7 +569,10 @@ def stage_states(run: DecisionRun, events=None) -> dict:
         elif stage in entered or stage in left:
             state = "degraded" if stage in degraded else "complete"
         else:
-            state = "not_run" if run.is_terminal else "pending"
+            # A stage the run has already moved past was skipped, not pending:
+            # a baseline in ``validating`` will never run ``rebutting``. Only a
+            # stage ahead of the current one can still happen.
+            state = "not_run" if run.is_terminal or index < current_index else "pending"
 
         stages.append(
             {

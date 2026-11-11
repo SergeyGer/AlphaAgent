@@ -305,3 +305,123 @@ export const TIMELINE_EVENTS: RunEvent[] = [
     payload: { message: 'Run completed.' },
   }),
 ];
+
+/**
+ * An event log whose payloads carry the ids the detail fixture uses.
+ *
+ * The generic `TIMELINE_EVENTS` above is deliberately token-shaped and carries
+ * only display messages, which is enough for the stage aggregator but not for
+ * an as-of join. These events let a test move the cursor to before the
+ * adjudication and prove the verdict is withheld, then step forward and prove
+ * it appears with the same claims and evidence.
+ */
+export function detailRunEvents(): RunEvent[] {
+  const base = [
+    runEvent({
+      event_id: 'd1',
+      seq: 1,
+      type: 'status.changed',
+      stage: 'collecting',
+      occurred_at: '2026-11-10T14:09:40Z',
+      payload: { status: 'collecting' },
+    }),
+    runEvent({
+      event_id: 'd2',
+      seq: 2,
+      type: 'evidence.recorded',
+      stage: 'collecting',
+      occurred_at: '2026-11-10T14:09:41Z',
+      payload: { evidence_id: 'ev-1' },
+    }),
+    runEvent({
+      event_id: 'd3',
+      seq: 3,
+      type: 'evidence.recorded',
+      stage: 'collecting',
+      occurred_at: '2026-11-10T14:09:42Z',
+      payload: { evidence_id: 'ev-2' },
+    }),
+  ];
+  const claimIds = ['claim-bull-1', 'claim-bull-2', 'claim-bull-3', 'claim-bull-4', 'claim-bear-1', 'claim-bear-2'];
+  const claimEvents = claimIds.map((claimId, index) =>
+    runEvent({
+      event_id: `d-claim-${index}`,
+      seq: 4 + index,
+      type: 'claim.created',
+      stage: 'analysing',
+      occurred_at: `2026-11-10T14:09:5${index}Z`,
+      payload: { claim_id: claimId },
+    }),
+  );
+  const rest = [
+    runEvent({
+      event_id: 'd-rebuttal-1',
+      seq: 10,
+      type: 'rebuttal.created',
+      stage: 'rebutting',
+      agent_role: 'bear',
+      occurred_at: '2026-11-10T14:09:56Z',
+      payload: { rebuttal_id: 'rebuttal-bear-1', target_claim_id: 'claim-bull-1' },
+    }),
+    runEvent({
+      event_id: 'd-decision-1',
+      seq: 11,
+      type: 'decision.proposed',
+      stage: 'adjudicating',
+      occurred_at: '2026-11-10T14:10:00Z',
+      payload: {
+        action: 'BUY',
+        decisive_claim_ids: ['claim-bull-1'],
+        strongest_objection: 'Customer concentration is unresolved.',
+      },
+    }),
+    runEvent({
+      event_id: 'd-guard-1',
+      seq: 12,
+      type: 'guard.evaluated',
+      stage: 'validating',
+      occurred_at: '2026-11-10T14:10:03Z',
+      payload: { guard_id: 'guard-1', status: 'clamped' },
+    }),
+    runEvent({
+      event_id: 'd-outcome-1',
+      seq: 13,
+      type: 'outcome.recorded',
+      stage: 'completed',
+      occurred_at: '2026-11-10T14:10:04Z',
+      payload: { outcome_id: 'outcome-30', horizon_days: 30 },
+    }),
+    runEvent({
+      event_id: 'd-outcome-2',
+      seq: 14,
+      type: 'outcome.recorded',
+      stage: 'completed',
+      occurred_at: '2026-11-10T14:10:05Z',
+      payload: { outcome_id: 'outcome-1', horizon_days: 1 },
+    }),
+    runEvent({
+      event_id: 'd-complete',
+      seq: 15,
+      type: 'status.changed',
+      stage: 'completed',
+      occurred_at: '2026-11-10T14:10:06Z',
+      payload: { status: 'completed' },
+    }),
+  ];
+  return [...base, ...claimEvents, ...rest];
+}
+
+/** Three hundred and twenty contiguous events, for pagination tests. */
+export function manyRunEvents(count = 320): RunEvent[] {
+  return Array.from({ length: count }, (_, index) => {
+    const seq = index + 1;
+    return runEvent({
+      event_id: `many-${seq}`,
+      seq,
+      type: seq % 10 === 0 ? 'stage.completed' : 'agent.token',
+      stage: 'analysing',
+      occurred_at: new Date(Date.UTC(2026, 10, 10, 14, 0, 0) + index * 1_000).toISOString(),
+      payload: { message: `event ${seq}` },
+    });
+  });
+}

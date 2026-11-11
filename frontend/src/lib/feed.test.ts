@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { FeedItem } from '../types';
-import { deriveAction, mergeFeed, normalizeDebateText, stageLabel } from './feed';
+import type { DecisionLog, FeedItem } from '../types';
+import { deriveAction, feedItemFromLog, mergeFeed, normalizeDebateText, stageLabel } from './feed';
 
 /**
  * The thoughts feed.
@@ -133,5 +133,35 @@ describe('stageLabel', () => {
 
   it('falls back to a readable label when no stage is present', () => {
     expect(stageLabel(null)).toBe('Agent');
+  });
+});
+
+describe('feedItemFromLog', () => {
+  const log: DecisionLog = {
+    id: 77,
+    action_taken: 'BUY 2 NVDA',
+    market_sentiment: 'BULLISH',
+    ticker: 'NVDA',
+    transaction_id: 12,
+    tokens_used: 100,
+    input_tokens: 80,
+    output_tokens: 20,
+    cached_input_tokens: 0,
+    cache_write_tokens: 0,
+    api_cost_usd: '0.00100',
+    reasoning: 'Demand is accelerating.',
+    bull_case: null,
+    bear_case: null,
+    created_at: '2026-11-10T14:09:40Z',
+  };
+
+  it('carries the associated run id when the API publishes one', () => {
+    expect(feedItemFromLog({ ...log, run_id: 'run-1' }).runId).toBe('run-1');
+    expect(feedItemFromLog({ ...log, decision_run_id: 9 }).runId).toBe('9');
+    expect(feedItemFromLog({ ...log, run: { id: 'nested' } }).runId).toBe('nested');
+  });
+
+  it('leaves the link absent when no mapping exists', () => {
+    expect(feedItemFromLog(log).runId).toBeNull();
   });
 });

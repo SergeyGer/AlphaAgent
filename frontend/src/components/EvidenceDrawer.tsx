@@ -34,6 +34,13 @@ export interface EvidenceDrawerProps {
   /** Item opened from a specific claim/rebuttal. Falls back to the first item. */
   initialEvidenceId?: string | null;
   onClose: () => void;
+  /**
+   * When false, an http(s) source URI is shown as text and is never rendered as
+   * an anchor. The offline viewer uses this: a link that is never clicked cannot
+   * make a request, and this makes that guarantee structural rather than a
+   * promise about reviewer behaviour.
+   */
+  allowExternalLinks?: boolean;
   className?: string;
 }
 
@@ -93,13 +100,20 @@ function ObservationBlock({ observation }: { observation: EvidenceObservation | 
   );
 }
 
-function EvidenceDetails({ item }: { item: EvidenceItem }): ReactElement {
+function EvidenceDetails({
+  item,
+  allowExternalLinks = true,
+}: {
+  item: EvidenceItem;
+  allowExternalLinks?: boolean;
+}): ReactElement {
   const flags = evidenceQualityFlags(item);
   const excerpt = presentText(item.excerpt);
   const publisher = presentText(item.publisher);
   const sourceType = presentText(item.source_type);
   const sourceUri = presentText(item.source_uri);
-  const linked = isExternalHttpUrl(sourceUri);
+  const linked = isExternalHttpUrl(sourceUri) && allowExternalLinks;
+  const externalButNotLinked = isExternalHttpUrl(sourceUri) && !allowExternalLinks;
   const publishedKnown = presentText(item.published_at) !== null;
 
   return (
@@ -158,6 +172,13 @@ function EvidenceDetails({ item }: { item: EvidenceItem }): ReactElement {
             >
               {sourceUri}
             </a>
+          ) : externalButNotLinked && sourceUri ? (
+            <span className="break-all text-slate-300">
+              {sourceUri}{' '}
+              <span className="text-amber-300">
+                (external link disabled — the offline viewer makes no network requests)
+              </span>
+            </span>
           ) : sourceUri ? (
             <span className="break-all text-slate-300">
               {sourceUri} <span className="text-amber-300">(not an http(s) link; not clickable)</span>
@@ -203,6 +224,7 @@ export function EvidenceDrawer({
   evidence,
   initialEvidenceId = null,
   onClose,
+  allowExternalLinks = true,
   className,
 }: EvidenceDrawerProps): ReactElement | null {
   const titleId = useId();
@@ -371,7 +393,7 @@ export function EvidenceDrawer({
 
           <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4">
             {selected ? (
-              <EvidenceDetails item={selected} />
+              <EvidenceDetails item={selected} allowExternalLinks={allowExternalLinks} />
             ) : (
               <div className="rounded-lg border border-dashed border-slate-800 bg-slate-900/30 px-4 py-6">
                 <p className="font-mono text-xs uppercase tracking-wider text-slate-400">

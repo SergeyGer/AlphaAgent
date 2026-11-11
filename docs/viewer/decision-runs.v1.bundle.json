@@ -1,0 +1,1255 @@
+{
+  "bundle_kind": "alphaagent.offline-viewer",
+  "bundle_version": "1.0",
+  "schema_version": "1.0",
+  "generated_at": "2026-11-11T13:19:49.993Z",
+  "generated_for": "REP-02 offline decision replay viewer",
+  "source": {
+    "label": "synthetic",
+    "manifest": "docs/spec/fixtures/decision-runs.v1.json",
+    "manifest_version": 1,
+    "description": "The Phase 1 pipeline has no rebuttal stage, and no live run was available when these fixtures were authored. Every run is mode=synthetic, source=fixture, and the API exposes both so a UI can label it.",
+    "offline": true,
+    "read_only": true
+  },
+  "honesty": {
+    "all_fixtures_synthetic": true,
+    "why": "The Phase 1 pipeline has no rebuttal stage, and no live run was available when these fixtures were authored. Every run is mode=synthetic, source=fixture, and the API exposes both so a UI can label it.",
+    "rebuttal_note": "The disagreement fixture contains a rebuttal that the current pipeline cannot produce. It exists to exercise the EVID-03 consumer contract for Phase 2; it is not a recording of a real debate.",
+    "outcome_note": "Synthetic outcome figures are illustrative fixtures, not measured performance. They are labelled method_version=attribution.synthetic.v1 and carry signal_diagnostics.synthetic=true. Do not use them for comparative claims.",
+    "no_live_analysis": true,
+    "no_execution": true,
+    "no_database": true,
+    "no_network": true,
+    "note": "The viewer replays these stored payloads only. It has no execution, approval, model or live-analysis capability."
+  },
+  "runs": [
+    {
+      "run_id": "risk-intervention-aapl-2026-02-03",
+      "mode": "synthetic",
+      "source_label": "synthetic",
+      "provenance": {
+        "label": "synthetic",
+        "note": "Risk intervention: the guard clamps a 40-share BUY to 2 shares",
+        "fixture_id": "risk-intervention-aapl-2026-02-03",
+        "protocol_version": "synthetic.v1",
+        "authored": true
+      },
+      "detail": {
+        "run": {
+          "id": "risk-intervention-aapl-2026-02-03",
+          "ticker": "AAPL",
+          "status": "completed",
+          "mode": "synthetic",
+          "protocol_version": "synthetic.v1",
+          "started_at": "2026-02-03T14:30:00Z",
+          "completed_at": "2026-02-10T21:00:00Z",
+          "latency_ms": 628200000,
+          "error_code": null,
+          "is_synthetic": true,
+          "source": "fixture",
+          "fixture_id": "risk-intervention-aapl-2026-02-03"
+        },
+        "action": "BUY",
+        "rationale": "Services growth and resilient margin justify adding exposure. Valuation is the real objection, but it is a risk to size, not a reason to refuse the position.",
+        "decisive_claim_ids": [
+          "claim-risk-intervention-aapl-2026-02-03-bull-services"
+        ],
+        "strongest_objection": "At 31x forward earnings the shares already price in the services mix, leaving no margin for error.",
+        "claims": [
+          {
+            "claim_id": "claim-risk-intervention-aapl-2026-02-03-bull-services",
+            "agent_role": "bull",
+            "stance": "bull",
+            "statement": "Services revenue grew 14% year over year and gross margin held at 46.2%.",
+            "claim_type": "observed_fact",
+            "evidence_ids": [
+              "ev-risk-intervention-aapl-2026-02-03-aapl-services-news",
+              "ev-risk-intervention-aapl-2026-02-03-aapl-fundamentals"
+            ],
+            "horizon": "next 2 quarters",
+            "limitations": "Synthetic source text; the underlying filing was not available offline."
+          },
+          {
+            "claim_id": "claim-risk-intervention-aapl-2026-02-03-bull-multiple",
+            "agent_role": "bull",
+            "stance": "bull",
+            "statement": "A richer services mix supports a higher multiple than the market assigns at 31x forward earnings.",
+            "claim_type": "interpretation",
+            "evidence_ids": [
+              "ev-risk-intervention-aapl-2026-02-03-aapl-services-news",
+              "ev-risk-intervention-aapl-2026-02-03-aapl-fundamentals"
+            ],
+            "horizon": "12 months",
+            "limitations": "The comparison multiple is taken from a single synthetic fundamentals snapshot."
+          },
+          {
+            "claim_id": "claim-risk-intervention-aapl-2026-02-03-bear-valuation",
+            "agent_role": "bear",
+            "stance": "bear",
+            "statement": "At 31x forward earnings the shares already price in the services mix, leaving no margin for error.",
+            "claim_type": "interpretation",
+            "evidence_ids": [
+              "ev-risk-intervention-aapl-2026-02-03-aapl-fundamentals",
+              "ev-risk-intervention-aapl-2026-02-03-aapl-quote"
+            ],
+            "horizon": "12 months",
+            "limitations": "Peer multiples were not available in this synthetic snapshot."
+          },
+          {
+            "claim_id": "claim-risk-intervention-aapl-2026-02-03-bear-drawdown",
+            "agent_role": "bear",
+            "stance": "bear",
+            "statement": "A 10% drawdown is more likely than a 10% rally if multiple compression resumes.",
+            "claim_type": "forecast",
+            "evidence_ids": [
+              "ev-risk-intervention-aapl-2026-02-03-aapl-quote"
+            ],
+            "horizon": "next quarter",
+            "limitations": "No options-implied distribution was available; this is a judgement, not a modelled probability."
+          }
+        ],
+        "rebuttals": [],
+        "evidence": [
+          {
+            "id": "ev-risk-intervention-aapl-2026-02-03-aapl-quote",
+            "source_type": "price_quote",
+            "source_uri": "fixture://synthetic-market-data/aapl/2026-02-03",
+            "publisher": "Synthetic market data",
+            "published_at": "2026-02-03T14:29:58Z",
+            "retrieved_at": "2026-02-03T14:30:08Z",
+            "excerpt": null,
+            "observation": {
+              "value": "225.00",
+              "unit": "USD/share",
+              "currency": "USD"
+            },
+            "content_hash": "sha256:8792d00db265de858b374b68875928f7eda330f5cf59571463cd015fd8301c10"
+          },
+          {
+            "id": "ev-risk-intervention-aapl-2026-02-03-aapl-services-news",
+            "source_type": "news_article",
+            "source_uri": "fixture://synthetic-wire/aapl-services-2026-02-03",
+            "publisher": "Synthetic Wire",
+            "published_at": "2026-02-03T12:00:00Z",
+            "retrieved_at": "2026-02-03T12:05:00Z",
+            "excerpt": "Synthetic fixture text: services revenue grew 14% year over year, ahead of the 11% consensus, and gross margin held at 46.2%.",
+            "observation": null,
+            "content_hash": "sha256:38e139d0051ff1d9be7939718ac9653879f2ab755d01cf32662fe86f9e44ea20"
+          },
+          {
+            "id": "ev-risk-intervention-aapl-2026-02-03-aapl-fundamentals",
+            "source_type": "fundamentals",
+            "source_uri": "fixture://synthetic-fundamentals/aapl/2026-q1",
+            "publisher": "Synthetic fundamentals feed",
+            "published_at": "2026-01-30T21:05:00Z",
+            "retrieved_at": "2026-02-03T13:00:00Z",
+            "excerpt": null,
+            "observation": {
+              "value": "46.2",
+              "unit": "pct",
+              "currency": null
+            },
+            "content_hash": "sha256:12b0648ede2a9eedfb30c9cac8870da8f9a6afb413261710afd6d459b7fa78a8"
+          }
+        ],
+        "guard": {
+          "status": "clamped",
+          "requested_quantity": "40.00000000",
+          "allowed_quantity": "2.00000000",
+          "binding_rule": "max_trade_allocation_pct",
+          "reason_codes": [
+            "requested_notional_exceeds_trade_budget",
+            "quantity_clamped_to_budget"
+          ],
+          "checks": [
+            {
+              "rule_code": "max_trade_allocation_pct",
+              "outcome": "fail",
+              "threshold": "500.00",
+              "actual": "9000.00",
+              "unit": "USD"
+            },
+            {
+              "rule_code": "max_ticker_concentration_pct",
+              "outcome": "pass",
+              "threshold": "30.00",
+              "actual": "0.00",
+              "unit": "pct"
+            },
+            {
+              "rule_code": "daily_loss_limit_usd",
+              "outcome": "not_evaluated",
+              "threshold": "500.00",
+              "actual": null,
+              "unit": "USD"
+            }
+          ]
+        },
+        "outcomes": [
+          {
+            "id": "outcome-risk-intervention-aapl-2026-02-03-1d-attribution.synthetic.v1",
+            "horizon_days": 1,
+            "maturity": "pending",
+            "signal_score": null,
+            "benchmark": "SPY",
+            "portfolio_impact": null,
+            "method_version": "attribution.synthetic.v1",
+            "unavailable_reason": null,
+            "decision_return_pct": null
+          },
+          {
+            "id": "outcome-risk-intervention-aapl-2026-02-03-7d-attribution.synthetic.v1",
+            "horizon_days": 7,
+            "maturity": "evaluated",
+            "signal_score": "-2.0000",
+            "benchmark": "SPY",
+            "portfolio_impact": null,
+            "method_version": "attribution.synthetic.v1",
+            "unavailable_reason": null,
+            "decision_return_pct": "-2.0000"
+          }
+        ],
+        "has_rebuttals": false
+      },
+      "events": [
+        {
+          "event_id": "risk-intervention-aapl-2026-02-03:event:1",
+          "seq": 1,
+          "type": "status.changed",
+          "stage": "collecting",
+          "agent_role": "system",
+          "occurred_at": "2026-02-03T14:30:05Z",
+          "payload": {
+            "status": "collecting",
+            "note": "Snapshot captured; evidence collection started."
+          }
+        },
+        {
+          "event_id": "risk-intervention-aapl-2026-02-03:event:2",
+          "seq": 2,
+          "type": "stage.started",
+          "stage": "collecting",
+          "agent_role": "system",
+          "occurred_at": "2026-02-03T14:30:05Z",
+          "payload": {
+            "sources_requested": [
+              "quote",
+              "news",
+              "fundamentals"
+            ]
+          }
+        },
+        {
+          "event_id": "risk-intervention-aapl-2026-02-03:event:3",
+          "seq": 3,
+          "type": "evidence.recorded",
+          "stage": "collecting",
+          "agent_role": "system",
+          "occurred_at": "2026-02-03T14:30:10Z",
+          "payload": {
+            "evidence_id": "ev-risk-intervention-aapl-2026-02-03-aapl-quote",
+            "key": "aapl-quote",
+            "source_type": "price_quote",
+            "published_at": "2026-02-03T14:29:58Z",
+            "available_at": "2026-02-03T14:30:08Z"
+          }
+        },
+        {
+          "event_id": "risk-intervention-aapl-2026-02-03:event:4",
+          "seq": 4,
+          "type": "evidence.recorded",
+          "stage": "collecting",
+          "agent_role": "system",
+          "occurred_at": "2026-02-03T14:30:12Z",
+          "payload": {
+            "evidence_id": "ev-risk-intervention-aapl-2026-02-03-aapl-services-news",
+            "key": "aapl-services-news",
+            "source_type": "news_article",
+            "published_at": "2026-02-03T12:00:00Z",
+            "available_at": "2026-02-03T12:05:00Z"
+          }
+        },
+        {
+          "event_id": "risk-intervention-aapl-2026-02-03:event:5",
+          "seq": 5,
+          "type": "evidence.recorded",
+          "stage": "collecting",
+          "agent_role": "system",
+          "occurred_at": "2026-02-03T14:30:14Z",
+          "payload": {
+            "evidence_id": "ev-risk-intervention-aapl-2026-02-03-aapl-fundamentals",
+            "key": "aapl-fundamentals",
+            "source_type": "fundamentals",
+            "published_at": "2026-01-30T21:05:00Z",
+            "available_at": "2026-02-03T13:00:00Z"
+          }
+        },
+        {
+          "event_id": "risk-intervention-aapl-2026-02-03:event:6",
+          "seq": 6,
+          "type": "status.changed",
+          "stage": "analysing",
+          "agent_role": "system",
+          "occurred_at": "2026-02-03T14:30:20Z",
+          "payload": {
+            "status": "analysing",
+            "evidence_count": 3
+          }
+        },
+        {
+          "event_id": "risk-intervention-aapl-2026-02-03:event:7",
+          "seq": 7,
+          "type": "claim.created",
+          "stage": "analysing",
+          "agent_role": "bull",
+          "occurred_at": "2026-02-03T14:30:40Z",
+          "payload": {
+            "claim_id": "claim-risk-intervention-aapl-2026-02-03-bull-services",
+            "key": "bull-services",
+            "stance": "bull",
+            "claim_type": "observed_fact",
+            "evidence_ids": [
+              "ev-risk-intervention-aapl-2026-02-03-aapl-services-news",
+              "ev-risk-intervention-aapl-2026-02-03-aapl-fundamentals"
+            ]
+          }
+        },
+        {
+          "event_id": "risk-intervention-aapl-2026-02-03:event:8",
+          "seq": 8,
+          "type": "claim.created",
+          "stage": "analysing",
+          "agent_role": "bull",
+          "occurred_at": "2026-02-03T14:30:45Z",
+          "payload": {
+            "claim_id": "claim-risk-intervention-aapl-2026-02-03-bull-multiple",
+            "key": "bull-multiple",
+            "stance": "bull",
+            "claim_type": "interpretation",
+            "evidence_ids": [
+              "ev-risk-intervention-aapl-2026-02-03-aapl-services-news",
+              "ev-risk-intervention-aapl-2026-02-03-aapl-fundamentals"
+            ]
+          }
+        },
+        {
+          "event_id": "risk-intervention-aapl-2026-02-03:event:9",
+          "seq": 9,
+          "type": "claim.created",
+          "stage": "analysing",
+          "agent_role": "bear",
+          "occurred_at": "2026-02-03T14:30:50Z",
+          "payload": {
+            "claim_id": "claim-risk-intervention-aapl-2026-02-03-bear-valuation",
+            "key": "bear-valuation",
+            "stance": "bear",
+            "claim_type": "interpretation",
+            "evidence_ids": [
+              "ev-risk-intervention-aapl-2026-02-03-aapl-fundamentals",
+              "ev-risk-intervention-aapl-2026-02-03-aapl-quote"
+            ]
+          }
+        },
+        {
+          "event_id": "risk-intervention-aapl-2026-02-03:event:10",
+          "seq": 10,
+          "type": "claim.created",
+          "stage": "analysing",
+          "agent_role": "bear",
+          "occurred_at": "2026-02-03T14:30:55Z",
+          "payload": {
+            "claim_id": "claim-risk-intervention-aapl-2026-02-03-bear-drawdown",
+            "key": "bear-drawdown",
+            "stance": "bear",
+            "claim_type": "forecast",
+            "evidence_ids": [
+              "ev-risk-intervention-aapl-2026-02-03-aapl-quote"
+            ]
+          }
+        },
+        {
+          "event_id": "risk-intervention-aapl-2026-02-03:event:11",
+          "seq": 11,
+          "type": "status.changed",
+          "stage": "adjudicating",
+          "agent_role": "system",
+          "occurred_at": "2026-02-03T14:31:00Z",
+          "payload": {
+            "status": "adjudicating",
+            "note": "No rebuttal stage in the current protocol; adjudication reads both initial cases."
+          }
+        },
+        {
+          "event_id": "risk-intervention-aapl-2026-02-03:event:12",
+          "seq": 12,
+          "type": "decision.proposed",
+          "stage": "adjudicating",
+          "agent_role": "cio",
+          "occurred_at": "2026-02-03T14:31:05Z",
+          "payload": {
+            "action": "BUY",
+            "requested_quantity": "40.00000000",
+            "decisive_claim_ids": [
+              "claim-risk-intervention-aapl-2026-02-03-bull-services"
+            ],
+            "strongest_objection": "At 31x forward earnings the shares already price in the services mix, leaving no margin for error."
+          }
+        },
+        {
+          "event_id": "risk-intervention-aapl-2026-02-03:event:13",
+          "seq": 13,
+          "type": "status.changed",
+          "stage": "validating",
+          "agent_role": "system",
+          "occurred_at": "2026-02-03T14:31:10Z",
+          "payload": {
+            "status": "validating",
+            "note": "Deterministic guard evaluation started."
+          }
+        },
+        {
+          "event_id": "risk-intervention-aapl-2026-02-03:event:14",
+          "seq": 14,
+          "type": "guard.evaluated",
+          "stage": "validating",
+          "agent_role": "risk",
+          "occurred_at": "2026-02-03T14:31:15Z",
+          "payload": {
+            "guard_id": "guard-risk-intervention-aapl-2026-02-03",
+            "status": "clamped",
+            "requested_quantity": "40.00000000",
+            "allowed_quantity": "2.00000000",
+            "binding_rule": "max_trade_allocation_pct",
+            "reason_codes": [
+              "requested_notional_exceeds_trade_budget",
+              "quantity_clamped_to_budget"
+            ]
+          }
+        },
+        {
+          "event_id": "risk-intervention-aapl-2026-02-03:event:15",
+          "seq": 15,
+          "type": "status.changed",
+          "stage": "completed",
+          "agent_role": "system",
+          "occurred_at": "2026-02-03T14:31:20Z",
+          "payload": {
+            "status": "completed",
+            "note": "Proposal validated and clamped; autonomous execution permitted."
+          }
+        },
+        {
+          "event_id": "risk-intervention-aapl-2026-02-03:event:16",
+          "seq": 16,
+          "type": "outcome.recorded",
+          "stage": "completed",
+          "agent_role": "system",
+          "occurred_at": "2026-02-04T21:00:00Z",
+          "payload": {
+            "outcome_id": "outcome-risk-intervention-aapl-2026-02-03-1d-attribution.synthetic.v1",
+            "horizon_days": 1,
+            "maturity": "pending",
+            "method_version": "attribution.synthetic.v1"
+          }
+        },
+        {
+          "event_id": "risk-intervention-aapl-2026-02-03:event:17",
+          "seq": 17,
+          "type": "outcome.recorded",
+          "stage": "completed",
+          "agent_role": "system",
+          "occurred_at": "2026-02-10T21:00:00Z",
+          "payload": {
+            "outcome_id": "outcome-risk-intervention-aapl-2026-02-03-7d-attribution.synthetic.v1",
+            "horizon_days": 7,
+            "maturity": "evaluated",
+            "method_version": "attribution.synthetic.v1"
+          }
+        },
+        {
+          "event_id": "risk-intervention-aapl-2026-02-03:event:18",
+          "seq": 18,
+          "type": "run.completed",
+          "stage": "completed",
+          "agent_role": "system",
+          "occurred_at": "2026-02-10T21:00:00Z",
+          "payload": {
+            "status": "completed",
+            "note": "Fixture playback contains stored events only; no model or execution call was made."
+          }
+        }
+      ],
+      "checksum": {
+        "algorithm": "sha256",
+        "scope": "this run object with its 'checksum' member removed, canonicalised as sorted-key compact JSON (UTF-8)",
+        "value": "a8725e172413782b3a98e5ceff310f11eb09a4b31ed08df446ff91eebfe23dff"
+      }
+    },
+    {
+      "run_id": "disagreement-tsla-2026-02-04",
+      "mode": "synthetic",
+      "source_label": "synthetic",
+      "provenance": {
+        "label": "synthetic",
+        "note": "Disagreement: opposing cases, two rebuttals, explicit HOLD adjudication",
+        "fixture_id": "disagreement-tsla-2026-02-04",
+        "protocol_version": "synthetic.v1",
+        "authored": true
+      },
+      "detail": {
+        "run": {
+          "id": "disagreement-tsla-2026-02-04",
+          "ticker": "TSLA",
+          "status": "completed",
+          "mode": "synthetic",
+          "protocol_version": "synthetic.v1",
+          "started_at": "2026-02-04T15:00:00Z",
+          "completed_at": "2026-02-11T21:00:00Z",
+          "latency_ms": 626400000,
+          "error_code": null,
+          "is_synthetic": true,
+          "source": "fixture",
+          "fixture_id": "disagreement-tsla-2026-02-04"
+        },
+        "action": "HOLD",
+        "rationale": "Each case rests on a verifiable fact and the rebuttals narrow the disagreement without resolving it. The multiple and the delivery decline are real; the storage offset is not yet large enough to prove itself. Holding preserves the option to act once Q1 deliveries resolve it.",
+        "decisive_claim_ids": [
+          "claim-disagreement-tsla-2026-02-04-bull-storage",
+          "claim-disagreement-tsla-2026-02-04-bear-deliveries"
+        ],
+        "strongest_objection": "The storage segment is too small to support a 58x forward multiple.",
+        "claims": [
+          {
+            "claim_id": "claim-disagreement-tsla-2026-02-04-bull-storage",
+            "agent_role": "bull",
+            "stance": "bull",
+            "statement": "Energy storage growth of 52% is large enough to offset the vehicle margin decline.",
+            "claim_type": "interpretation",
+            "evidence_ids": [
+              "ev-disagreement-tsla-2026-02-04-tsla-deliveries",
+              "ev-disagreement-tsla-2026-02-04-tsla-segment-filing"
+            ],
+            "horizon": "12 months",
+            "limitations": "Storage is still 12% of revenue; the offset is unproven."
+          },
+          {
+            "claim_id": "claim-disagreement-tsla-2026-02-04-bull-product-cycle",
+            "agent_role": "bull",
+            "stance": "bull",
+            "statement": "A 2026 product cycle can restore volume growth without further price cuts.",
+            "claim_type": "forecast",
+            "evidence_ids": [
+              "ev-disagreement-tsla-2026-02-04-tsla-quote"
+            ],
+            "horizon": "next 12 months",
+            "limitations": "No product timetable was available in the synthetic snapshot."
+          },
+          {
+            "claim_id": "claim-disagreement-tsla-2026-02-04-bear-deliveries",
+            "agent_role": "bear",
+            "stance": "bear",
+            "statement": "Deliveries fell 6% year over year for a second consecutive quarter, so the core business is shrinking.",
+            "claim_type": "observed_fact",
+            "evidence_ids": [
+              "ev-disagreement-tsla-2026-02-04-tsla-deliveries"
+            ],
+            "horizon": "next quarter",
+            "limitations": "One synthetic article is the only source for the delivery figure."
+          },
+          {
+            "claim_id": "claim-disagreement-tsla-2026-02-04-bear-multiple",
+            "agent_role": "bear",
+            "stance": "bear",
+            "statement": "The storage segment is too small to support a 58x forward multiple.",
+            "claim_type": "interpretation",
+            "evidence_ids": [
+              "ev-disagreement-tsla-2026-02-04-tsla-segment-filing",
+              "ev-disagreement-tsla-2026-02-04-tsla-quote"
+            ],
+            "horizon": "12 months",
+            "limitations": "No peer multiple set was available; 58x is read in isolation."
+          }
+        ],
+        "rebuttals": [
+          {
+            "rebuttal_id": "rebuttal-disagreement-tsla-2026-02-04-bear-disputes-storage",
+            "responding_agent": "bear",
+            "target_claim_id": "claim-disagreement-tsla-2026-02-04-bull-storage",
+            "response_type": "dispute",
+            "explanation": "Storage growth is 52% off a base that is still only 12% of revenue. Even at that growth rate it cannot offset a 6% decline in the larger vehicle business within the stated horizon.",
+            "evidence_ids": [
+              "ev-disagreement-tsla-2026-02-04-tsla-deliveries",
+              "ev-disagreement-tsla-2026-02-04-tsla-segment-filing"
+            ],
+            "position_change": "Remains bearish; conviction increased."
+          },
+          {
+            "rebuttal_id": "rebuttal-disagreement-tsla-2026-02-04-bull-qualifies-multiple",
+            "responding_agent": "bull",
+            "target_claim_id": "claim-disagreement-tsla-2026-02-04-bear-multiple",
+            "response_type": "qualify",
+            "explanation": "A 58x multiple is only defensible if storage keeps compounding above 40%. The bear is right about the level and wrong about the trajectory; this is a sizing problem, not a rejection.",
+            "evidence_ids": [
+              "ev-disagreement-tsla-2026-02-04-tsla-segment-filing"
+            ],
+            "position_change": "Trims conviction from high to moderate."
+          }
+        ],
+        "evidence": [
+          {
+            "id": "ev-disagreement-tsla-2026-02-04-tsla-deliveries",
+            "source_type": "news_article",
+            "source_uri": "fixture://synthetic-wire/tsla-deliveries-2026-02-04",
+            "publisher": "Synthetic Wire",
+            "published_at": "2026-02-03T21:10:00Z",
+            "retrieved_at": "2026-02-04T15:00:08Z",
+            "excerpt": "Synthetic fixture text: quarterly deliveries fell 6% year over year, the second consecutive decline, while energy storage deployments rose 52%.",
+            "observation": null,
+            "content_hash": "sha256:eddbc2bfae6538025b222a82e653132517811b750e0dec55eb576998d4bcec8c"
+          },
+          {
+            "id": "ev-disagreement-tsla-2026-02-04-tsla-segment-filing",
+            "source_type": "filing",
+            "source_uri": "fixture://synthetic-filings/tsla/2026-q4",
+            "publisher": "Synthetic filing archive",
+            "published_at": "2026-02-03T21:30:00Z",
+            "retrieved_at": "2026-02-04T15:00:11Z",
+            "excerpt": null,
+            "observation": {
+              "value": "12.0",
+              "unit": "pct",
+              "currency": null
+            },
+            "content_hash": "sha256:1807a2aca1231f2220d4cf4c61debc51593ddb2a9a582a1547a4e4d0ad25ba08"
+          },
+          {
+            "id": "ev-disagreement-tsla-2026-02-04-tsla-quote",
+            "source_type": "price_quote",
+            "source_uri": "fixture://synthetic-market-data/tsla/2026-02-04",
+            "publisher": "Synthetic market data",
+            "published_at": "2026-02-04T14:59:58Z",
+            "retrieved_at": "2026-02-04T15:00:13Z",
+            "excerpt": null,
+            "observation": {
+              "value": "310.00",
+              "unit": "USD/share",
+              "currency": "USD"
+            },
+            "content_hash": "sha256:d60a4cd67d74a91e65b1bbc49edf046700688c8bcd996250daa140e5978436e5"
+          }
+        ],
+        "guard": null,
+        "outcomes": [
+          {
+            "id": "outcome-disagreement-tsla-2026-02-04-7d-attribution.synthetic.v1",
+            "horizon_days": 7,
+            "maturity": "pending",
+            "signal_score": null,
+            "benchmark": "SPY",
+            "portfolio_impact": null,
+            "method_version": "attribution.synthetic.v1",
+            "unavailable_reason": null,
+            "decision_return_pct": null
+          }
+        ],
+        "has_rebuttals": true
+      },
+      "events": [
+        {
+          "event_id": "disagreement-tsla-2026-02-04:event:1",
+          "seq": 1,
+          "type": "status.changed",
+          "stage": "collecting",
+          "agent_role": "system",
+          "occurred_at": "2026-02-04T15:00:05Z",
+          "payload": {
+            "status": "collecting",
+            "note": "Snapshot captured; evidence collection started."
+          }
+        },
+        {
+          "event_id": "disagreement-tsla-2026-02-04:event:2",
+          "seq": 2,
+          "type": "evidence.recorded",
+          "stage": "collecting",
+          "agent_role": "system",
+          "occurred_at": "2026-02-04T15:00:10Z",
+          "payload": {
+            "evidence_id": "ev-disagreement-tsla-2026-02-04-tsla-deliveries",
+            "key": "tsla-deliveries",
+            "source_type": "news_article",
+            "published_at": "2026-02-03T21:10:00Z",
+            "available_at": "2026-02-04T15:00:08Z"
+          }
+        },
+        {
+          "event_id": "disagreement-tsla-2026-02-04:event:3",
+          "seq": 3,
+          "type": "evidence.recorded",
+          "stage": "collecting",
+          "agent_role": "system",
+          "occurred_at": "2026-02-04T15:00:12Z",
+          "payload": {
+            "evidence_id": "ev-disagreement-tsla-2026-02-04-tsla-segment-filing",
+            "key": "tsla-segment-filing",
+            "source_type": "filing",
+            "published_at": "2026-02-03T21:30:00Z",
+            "available_at": "2026-02-04T15:00:11Z"
+          }
+        },
+        {
+          "event_id": "disagreement-tsla-2026-02-04:event:4",
+          "seq": 4,
+          "type": "evidence.recorded",
+          "stage": "collecting",
+          "agent_role": "system",
+          "occurred_at": "2026-02-04T15:00:14Z",
+          "payload": {
+            "evidence_id": "ev-disagreement-tsla-2026-02-04-tsla-quote",
+            "key": "tsla-quote",
+            "source_type": "price_quote",
+            "published_at": "2026-02-04T14:59:58Z",
+            "available_at": "2026-02-04T15:00:13Z"
+          }
+        },
+        {
+          "event_id": "disagreement-tsla-2026-02-04:event:5",
+          "seq": 5,
+          "type": "status.changed",
+          "stage": "analysing",
+          "agent_role": "system",
+          "occurred_at": "2026-02-04T15:00:20Z",
+          "payload": {
+            "status": "analysing",
+            "evidence_count": 3
+          }
+        },
+        {
+          "event_id": "disagreement-tsla-2026-02-04:event:6",
+          "seq": 6,
+          "type": "claim.created",
+          "stage": "analysing",
+          "agent_role": "bull",
+          "occurred_at": "2026-02-04T15:00:35Z",
+          "payload": {
+            "claim_id": "claim-disagreement-tsla-2026-02-04-bull-storage",
+            "key": "bull-storage",
+            "stance": "bull",
+            "claim_type": "interpretation",
+            "evidence_ids": [
+              "ev-disagreement-tsla-2026-02-04-tsla-deliveries",
+              "ev-disagreement-tsla-2026-02-04-tsla-segment-filing"
+            ]
+          }
+        },
+        {
+          "event_id": "disagreement-tsla-2026-02-04:event:7",
+          "seq": 7,
+          "type": "claim.created",
+          "stage": "analysing",
+          "agent_role": "bull",
+          "occurred_at": "2026-02-04T15:00:40Z",
+          "payload": {
+            "claim_id": "claim-disagreement-tsla-2026-02-04-bull-product-cycle",
+            "key": "bull-product-cycle",
+            "stance": "bull",
+            "claim_type": "forecast",
+            "evidence_ids": [
+              "ev-disagreement-tsla-2026-02-04-tsla-quote"
+            ]
+          }
+        },
+        {
+          "event_id": "disagreement-tsla-2026-02-04:event:8",
+          "seq": 8,
+          "type": "claim.created",
+          "stage": "analysing",
+          "agent_role": "bear",
+          "occurred_at": "2026-02-04T15:00:45Z",
+          "payload": {
+            "claim_id": "claim-disagreement-tsla-2026-02-04-bear-deliveries",
+            "key": "bear-deliveries",
+            "stance": "bear",
+            "claim_type": "observed_fact",
+            "evidence_ids": [
+              "ev-disagreement-tsla-2026-02-04-tsla-deliveries"
+            ]
+          }
+        },
+        {
+          "event_id": "disagreement-tsla-2026-02-04:event:9",
+          "seq": 9,
+          "type": "claim.created",
+          "stage": "analysing",
+          "agent_role": "bear",
+          "occurred_at": "2026-02-04T15:00:50Z",
+          "payload": {
+            "claim_id": "claim-disagreement-tsla-2026-02-04-bear-multiple",
+            "key": "bear-multiple",
+            "stance": "bear",
+            "claim_type": "interpretation",
+            "evidence_ids": [
+              "ev-disagreement-tsla-2026-02-04-tsla-segment-filing",
+              "ev-disagreement-tsla-2026-02-04-tsla-quote"
+            ]
+          }
+        },
+        {
+          "event_id": "disagreement-tsla-2026-02-04:event:10",
+          "seq": 10,
+          "type": "status.changed",
+          "stage": "rebutting",
+          "agent_role": "system",
+          "occurred_at": "2026-02-04T15:00:55Z",
+          "payload": {
+            "status": "rebutting",
+            "note": "Synthetic rebuttal stage. The live Phase 1 pipeline has no rebuttal producer; this fixture exists to exercise the EVID-03 consumer contract."
+          }
+        },
+        {
+          "event_id": "disagreement-tsla-2026-02-04:event:11",
+          "seq": 11,
+          "type": "rebuttal.created",
+          "stage": "rebutting",
+          "agent_role": "bear",
+          "occurred_at": "2026-02-04T15:01:00Z",
+          "payload": {
+            "rebuttal_id": "rebuttal-disagreement-tsla-2026-02-04-bear-disputes-storage",
+            "target_claim_id": "claim-disagreement-tsla-2026-02-04-bull-storage",
+            "response_type": "dispute",
+            "key": "bear-disputes-storage"
+          }
+        },
+        {
+          "event_id": "disagreement-tsla-2026-02-04:event:12",
+          "seq": 12,
+          "type": "rebuttal.created",
+          "stage": "rebutting",
+          "agent_role": "bull",
+          "occurred_at": "2026-02-04T15:01:05Z",
+          "payload": {
+            "rebuttal_id": "rebuttal-disagreement-tsla-2026-02-04-bull-qualifies-multiple",
+            "target_claim_id": "claim-disagreement-tsla-2026-02-04-bear-multiple",
+            "response_type": "qualify",
+            "key": "bull-qualifies-multiple"
+          }
+        },
+        {
+          "event_id": "disagreement-tsla-2026-02-04:event:13",
+          "seq": 13,
+          "type": "status.changed",
+          "stage": "adjudicating",
+          "agent_role": "system",
+          "occurred_at": "2026-02-04T15:01:10Z",
+          "payload": {
+            "status": "adjudicating",
+            "note": "Adjudication reads both cases and both rebuttals."
+          }
+        },
+        {
+          "event_id": "disagreement-tsla-2026-02-04:event:14",
+          "seq": 14,
+          "type": "decision.proposed",
+          "stage": "adjudicating",
+          "agent_role": "cio",
+          "occurred_at": "2026-02-04T15:01:20Z",
+          "payload": {
+            "action": "HOLD",
+            "requested_quantity": null,
+            "decisive_claim_ids": [
+              "claim-disagreement-tsla-2026-02-04-bull-storage",
+              "claim-disagreement-tsla-2026-02-04-bear-deliveries"
+            ],
+            "strongest_objection": "The storage segment is too small to support a 58x forward multiple."
+          }
+        },
+        {
+          "event_id": "disagreement-tsla-2026-02-04:event:15",
+          "seq": 15,
+          "type": "status.changed",
+          "stage": "validating",
+          "agent_role": "system",
+          "occurred_at": "2026-02-04T15:01:25Z",
+          "payload": {
+            "status": "validating",
+            "note": "No executable proposal, so no guard evaluation."
+          }
+        },
+        {
+          "event_id": "disagreement-tsla-2026-02-04:event:16",
+          "seq": 16,
+          "type": "status.changed",
+          "stage": "completed",
+          "agent_role": "system",
+          "occurred_at": "2026-02-04T15:01:30Z",
+          "payload": {
+            "status": "completed",
+            "note": "HOLD recorded; nothing to execute."
+          }
+        },
+        {
+          "event_id": "disagreement-tsla-2026-02-04:event:17",
+          "seq": 17,
+          "type": "outcome.recorded",
+          "stage": "completed",
+          "agent_role": "system",
+          "occurred_at": "2026-02-11T21:00:00Z",
+          "payload": {
+            "outcome_id": "outcome-disagreement-tsla-2026-02-04-7d-attribution.synthetic.v1",
+            "horizon_days": 7,
+            "maturity": "pending",
+            "method_version": "attribution.synthetic.v1"
+          }
+        },
+        {
+          "event_id": "disagreement-tsla-2026-02-04:event:18",
+          "seq": 18,
+          "type": "run.completed",
+          "stage": "completed",
+          "agent_role": "system",
+          "occurred_at": "2026-02-11T21:00:00Z",
+          "payload": {
+            "status": "completed",
+            "note": "Fixture playback contains stored events only; no model or execution call was made."
+          }
+        }
+      ],
+      "checksum": {
+        "algorithm": "sha256",
+        "scope": "this run object with its 'checksum' member removed, canonicalised as sorted-key compact JSON (UTF-8)",
+        "value": "1e103310401ed52554aa77026611ee3a0963e79329fa0d5784b39e42b4ba29fc"
+      }
+    },
+    {
+      "run_id": "uncertainty-msft-2026-02-05",
+      "mode": "synthetic",
+      "source_label": "synthetic",
+      "provenance": {
+        "label": "synthetic",
+        "note": "Uncertainty: unknown publication date, a degraded stage, an unpriced outcome, HOLD",
+        "fixture_id": "uncertainty-msft-2026-02-05",
+        "protocol_version": "synthetic.v1",
+        "authored": true
+      },
+      "detail": {
+        "run": {
+          "id": "uncertainty-msft-2026-02-05",
+          "ticker": "MSFT",
+          "status": "completed",
+          "mode": "synthetic",
+          "protocol_version": "synthetic.v1",
+          "started_at": "2026-02-05T14:00:00Z",
+          "completed_at": "2026-02-06T21:00:00Z",
+          "latency_ms": 111600000,
+          "error_code": null,
+          "is_synthetic": true,
+          "source": "fixture",
+          "fixture_id": "uncertainty-msft-2026-02-05"
+        },
+        "action": "HOLD",
+        "rationale": "Guidance is deferred and one source has no publication date. The evidence does not support a directional position, and inventing a probability from missing inputs would be worse than holding.",
+        "decisive_claim_ids": [
+          "claim-uncertainty-msft-2026-02-05-bear-guidance",
+          "claim-uncertainty-msft-2026-02-05-neutral-unresolved"
+        ],
+        "strongest_objection": "Revenue and cloud growth are both real and may not require guidance to keep compounding.",
+        "claims": [
+          {
+            "claim_id": "claim-uncertainty-msft-2026-02-05-bull-revenue",
+            "agent_role": "bull",
+            "stance": "bull",
+            "statement": "Revenue grew 12% year over year and cloud grew 18%, so demand has not broken.",
+            "claim_type": "observed_fact",
+            "evidence_ids": [
+              "ev-uncertainty-msft-2026-02-05-msft-revenue"
+            ],
+            "horizon": "next 2 quarters",
+            "limitations": "The publication date of this source is unknown; the archive is undated, so the information set available at the cutoff cannot be proven."
+          },
+          {
+            "claim_id": "claim-uncertainty-msft-2026-02-05-bear-guidance",
+            "agent_role": "bear",
+            "stance": "bear",
+            "statement": "Deferred cloud guidance means near-term visibility is worse than the revenue figure suggests.",
+            "claim_type": "interpretation",
+            "evidence_ids": [
+              "ev-uncertainty-msft-2026-02-05-msft-guidance"
+            ],
+            "horizon": "next quarter",
+            "limitations": "The article gives no reason beyond the migration and no date for resumed guidance."
+          },
+          {
+            "claim_id": "claim-uncertainty-msft-2026-02-05-neutral-unresolved",
+            "agent_role": "cio",
+            "stance": "neutral",
+            "statement": "Neither case can be resolved before the cloud migration completes and guidance resumes.",
+            "claim_type": "forecast",
+            "evidence_ids": [
+              "ev-uncertainty-msft-2026-02-05-msft-revenue",
+              "ev-uncertainty-msft-2026-02-05-msft-guidance"
+            ],
+            "horizon": "until guidance resumes",
+            "limitations": "Analyst estimates and an implied distribution were unavailable, so no probability can be attached."
+          }
+        ],
+        "rebuttals": [],
+        "evidence": [
+          {
+            "id": "ev-uncertainty-msft-2026-02-05-msft-revenue",
+            "source_type": "fundamentals",
+            "source_uri": "fixture://synthetic-fundamentals/msft/undated-archive",
+            "publisher": "Synthetic fundamentals archive",
+            "published_at": null,
+            "retrieved_at": "2026-02-05T13:40:00Z",
+            "excerpt": null,
+            "observation": {
+              "value": "12.0",
+              "unit": "pct",
+              "currency": null
+            },
+            "content_hash": "sha256:7d704cc6d150efe8650898f9f8e7cc99d384a179a00755470d8d27ac928f0a13"
+          },
+          {
+            "id": "ev-uncertainty-msft-2026-02-05-msft-guidance",
+            "source_type": "news_article",
+            "source_uri": "fixture://synthetic-wire/msft-guidance-2026-02-04",
+            "publisher": "Synthetic Wire",
+            "published_at": "2026-02-04T16:00:00Z",
+            "retrieved_at": "2026-02-05T13:45:00Z",
+            "excerpt": "Synthetic fixture text: the company deferred cloud-segment guidance, citing an ongoing systems migration, and did not give a date for resuming it.",
+            "observation": null,
+            "content_hash": "sha256:729b93c4954a4fddfa41f6b3172d3fd1d9d9e1e1442b40b9e06c2067eb3b3922"
+          }
+        ],
+        "guard": null,
+        "outcomes": [
+          {
+            "id": "outcome-uncertainty-msft-2026-02-05-1d-attribution.synthetic.v1",
+            "horizon_days": 1,
+            "maturity": "unavailable",
+            "signal_score": null,
+            "benchmark": "SPY",
+            "portfolio_impact": null,
+            "method_version": "attribution.synthetic.v1",
+            "unavailable_reason": "No closing price was recorded for the decision date in the synthetic snapshot. Scoring it would require inventing one, so the outcome is recorded as unavailable rather than zero.",
+            "decision_return_pct": null
+          }
+        ],
+        "has_rebuttals": false
+      },
+      "events": [
+        {
+          "event_id": "uncertainty-msft-2026-02-05:event:1",
+          "seq": 1,
+          "type": "status.changed",
+          "stage": "collecting",
+          "agent_role": "system",
+          "occurred_at": "2026-02-05T14:00:05Z",
+          "payload": {
+            "status": "collecting",
+            "note": "Snapshot captured; analyst estimate feed was expected but did not respond."
+          }
+        },
+        {
+          "event_id": "uncertainty-msft-2026-02-05:event:2",
+          "seq": 2,
+          "type": "evidence.recorded",
+          "stage": "collecting",
+          "agent_role": "system",
+          "occurred_at": "2026-02-05T14:00:10Z",
+          "payload": {
+            "evidence_id": "ev-uncertainty-msft-2026-02-05-msft-revenue",
+            "key": "msft-revenue",
+            "source_type": "fundamentals",
+            "published_at": null,
+            "available_at": "2026-02-05T13:40:00Z"
+          }
+        },
+        {
+          "event_id": "uncertainty-msft-2026-02-05:event:3",
+          "seq": 3,
+          "type": "evidence.recorded",
+          "stage": "collecting",
+          "agent_role": "system",
+          "occurred_at": "2026-02-05T14:00:12Z",
+          "payload": {
+            "evidence_id": "ev-uncertainty-msft-2026-02-05-msft-guidance",
+            "key": "msft-guidance",
+            "source_type": "news_article",
+            "published_at": "2026-02-04T16:00:00Z",
+            "available_at": "2026-02-05T13:45:00Z"
+          }
+        },
+        {
+          "event_id": "uncertainty-msft-2026-02-05:event:4",
+          "seq": 4,
+          "type": "status.changed",
+          "stage": "analysing",
+          "agent_role": "system",
+          "occurred_at": "2026-02-05T14:00:20Z",
+          "payload": {
+            "status": "analysing",
+            "evidence_count": 2
+          }
+        },
+        {
+          "event_id": "uncertainty-msft-2026-02-05:event:5",
+          "seq": 5,
+          "type": "stage.failed",
+          "stage": "analysing",
+          "agent_role": "system",
+          "occurred_at": "2026-02-05T14:00:40Z",
+          "payload": {
+            "reason": "Analyst estimate feed unavailable; two of three expected evidence sources are missing. The run continues on partial data and records the gap.",
+            "missing_fields": [
+              "analyst_estimates",
+              "options_implied_distribution"
+            ]
+          }
+        },
+        {
+          "event_id": "uncertainty-msft-2026-02-05:event:6",
+          "seq": 6,
+          "type": "claim.created",
+          "stage": "analysing",
+          "agent_role": "bull",
+          "occurred_at": "2026-02-05T14:00:45Z",
+          "payload": {
+            "claim_id": "claim-uncertainty-msft-2026-02-05-bull-revenue",
+            "key": "bull-revenue",
+            "stance": "bull",
+            "claim_type": "observed_fact",
+            "evidence_ids": [
+              "ev-uncertainty-msft-2026-02-05-msft-revenue"
+            ]
+          }
+        },
+        {
+          "event_id": "uncertainty-msft-2026-02-05:event:7",
+          "seq": 7,
+          "type": "claim.created",
+          "stage": "analysing",
+          "agent_role": "bear",
+          "occurred_at": "2026-02-05T14:00:50Z",
+          "payload": {
+            "claim_id": "claim-uncertainty-msft-2026-02-05-bear-guidance",
+            "key": "bear-guidance",
+            "stance": "bear",
+            "claim_type": "interpretation",
+            "evidence_ids": [
+              "ev-uncertainty-msft-2026-02-05-msft-guidance"
+            ]
+          }
+        },
+        {
+          "event_id": "uncertainty-msft-2026-02-05:event:8",
+          "seq": 8,
+          "type": "claim.created",
+          "stage": "analysing",
+          "agent_role": "cio",
+          "occurred_at": "2026-02-05T14:00:55Z",
+          "payload": {
+            "claim_id": "claim-uncertainty-msft-2026-02-05-neutral-unresolved",
+            "key": "neutral-unresolved",
+            "stance": "neutral",
+            "claim_type": "forecast",
+            "evidence_ids": [
+              "ev-uncertainty-msft-2026-02-05-msft-revenue",
+              "ev-uncertainty-msft-2026-02-05-msft-guidance"
+            ]
+          }
+        },
+        {
+          "event_id": "uncertainty-msft-2026-02-05:event:9",
+          "seq": 9,
+          "type": "status.changed",
+          "stage": "adjudicating",
+          "agent_role": "system",
+          "occurred_at": "2026-02-05T14:01:00Z",
+          "payload": {
+            "status": "adjudicating",
+            "note": "Adjudication with a recorded data gap."
+          }
+        },
+        {
+          "event_id": "uncertainty-msft-2026-02-05:event:10",
+          "seq": 10,
+          "type": "decision.proposed",
+          "stage": "adjudicating",
+          "agent_role": "cio",
+          "occurred_at": "2026-02-05T14:01:05Z",
+          "payload": {
+            "action": "HOLD",
+            "requested_quantity": null,
+            "decisive_claim_ids": [
+              "claim-uncertainty-msft-2026-02-05-bear-guidance",
+              "claim-uncertainty-msft-2026-02-05-neutral-unresolved"
+            ],
+            "strongest_objection": "Revenue and cloud growth are both real and may not require guidance to keep compounding."
+          }
+        },
+        {
+          "event_id": "uncertainty-msft-2026-02-05:event:11",
+          "seq": 11,
+          "type": "status.changed",
+          "stage": "validating",
+          "agent_role": "system",
+          "occurred_at": "2026-02-05T14:01:10Z",
+          "payload": {
+            "status": "validating",
+            "note": "HOLD produces no executable order, so no guard record."
+          }
+        },
+        {
+          "event_id": "uncertainty-msft-2026-02-05:event:12",
+          "seq": 12,
+          "type": "status.changed",
+          "stage": "completed",
+          "agent_role": "system",
+          "occurred_at": "2026-02-05T14:01:15Z",
+          "payload": {
+            "status": "completed",
+            "note": "HOLD recorded with limitations attached."
+          }
+        },
+        {
+          "event_id": "uncertainty-msft-2026-02-05:event:13",
+          "seq": 13,
+          "type": "outcome.recorded",
+          "stage": "completed",
+          "agent_role": "system",
+          "occurred_at": "2026-02-06T21:00:00Z",
+          "payload": {
+            "outcome_id": "outcome-uncertainty-msft-2026-02-05-1d-attribution.synthetic.v1",
+            "horizon_days": 1,
+            "maturity": "unavailable",
+            "method_version": "attribution.synthetic.v1"
+          }
+        },
+        {
+          "event_id": "uncertainty-msft-2026-02-05:event:14",
+          "seq": 14,
+          "type": "run.completed",
+          "stage": "completed",
+          "agent_role": "system",
+          "occurred_at": "2026-02-06T21:00:00Z",
+          "payload": {
+            "status": "completed",
+            "note": "Fixture playback contains stored events only; no model or execution call was made."
+          }
+        }
+      ],
+      "checksum": {
+        "algorithm": "sha256",
+        "scope": "this run object with its 'checksum' member removed, canonicalised as sorted-key compact JSON (UTF-8)",
+        "value": "99965ba1134ab33c52c6f67dc2655244926c02d2230ffa9a13918e2511010360"
+      }
+    }
+  ],
+  "checksum": {
+    "algorithm": "sha256",
+    "scope": "this bundle object with its 'checksum' member removed (run checksums included), canonicalised as sorted-key compact JSON (UTF-8)",
+    "value": "e3b990cdbc726f619296834195c4e5b4312ec96ffbac5579dcf657459cdb329b"
+  }
+}

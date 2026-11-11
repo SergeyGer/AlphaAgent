@@ -1,7 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState, type ReactElement } from 'react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DebateTimeline } from './DebateTimeline';
 import { ReplayControls } from './ReplayControls';
 import { TIMELINE_EVENTS } from '../test/decisionRunFixtures';
@@ -172,5 +172,57 @@ describe('ReplayControls', () => {
     expect(screen.getByText(/No recorded events to play/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Play replay' })).toBeDisabled();
     expect(screen.getByTestId('recorded-run-label')).toHaveTextContent('Recorded run');
+  });
+});
+
+describe('ReplayControls — timing and accessibility modes', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('explicitly labels compressed timing and switches to recorded-time playback', async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    const label = screen.getByTestId('timing-mode-label');
+    expect(label).toHaveAttribute('data-timing-mode', 'compressed');
+    expect(label).toHaveTextContent('Compressed timing');
+    expect(label).toHaveTextContent('not the recorded pace');
+
+    const recorded = screen.getByRole('button', { name: 'Recorded-time playback' });
+    expect(recorded).toHaveAttribute('aria-pressed', 'false');
+    recorded.focus();
+    await user.keyboard('{Enter}');
+
+    expect(recorded).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('timing-mode-label')).toHaveAttribute(
+      'data-timing-mode',
+      'recorded',
+    );
+    expect(screen.getByTestId('timing-mode-label')).toHaveTextContent(
+      'Recorded-time playback',
+    );
+    expect(screen.getByTestId('timing-mode-label')).toHaveTextContent('not compressed');
+  });
+
+  it('honours prefers-reduced-motion with an explicit note and no blocking of controls', () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query.includes('prefers-reduced-motion'),
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })) as unknown as typeof window.matchMedia;
+
+    render(<Harness />);
+
+    expect(screen.getByTestId('reduced-motion-note')).toHaveTextContent('Reduced motion is on');
+    expect(screen.getByRole('button', { name: 'Play replay' })).toBeEnabled();
+
+    window.matchMedia = originalMatchMedia;
   });
 });

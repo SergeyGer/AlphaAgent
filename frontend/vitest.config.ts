@@ -21,7 +21,7 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
-    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    include: ['src/**/*.{test,spec}.{ts,tsx}', 'viewer/**/*.{test,spec}.{ts,tsx}'],
     // Playwright specs live in e2e/ and must not be picked up here; they need a
     // running server and would fail confusingly.
     exclude: ['node_modules/**', 'dist/**', 'e2e/**'],

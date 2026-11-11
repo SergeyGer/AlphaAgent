@@ -452,7 +452,8 @@ class IndependentFirstRoundTests(ProtocolTestCase):
 
         for claim in Claim.objects.filter(run=run):
             self.assertEqual(claim.case_round, 1)
-        self.assertEqual(run.status, DecisionStatus.COMPLETED)
+        # The protocol finishes the analysis; the guard/execution lifecycle completes it.
+        self.assertEqual(run.status, DecisionStatus.VALIDATING)
         self.assertEqual(run.mode, RunMode.LIVE)
         self.assertFalse(run.is_synthetic)
 
@@ -557,7 +558,8 @@ class RebuttalRoundTests(ProtocolTestCase):
         outcome = self.run_debate(client)
 
         run = outcome.run
-        self.assertEqual(run.status, DecisionStatus.COMPLETED)
+        # The protocol finishes the analysis; the guard/execution lifecycle completes it.
+        self.assertEqual(run.status, DecisionStatus.VALIDATING)
         self.assertEqual(
             Claim.objects.filter(run=run, stance=ClaimStance.BEAR).count(),
             0,
@@ -726,7 +728,8 @@ class RebuttalRoundTests(ProtocolTestCase):
             if event.event_type == RunEventType.LIMITATION_RECORDED
         ]
         self.assertTrue(any("outside the catalog" in text for text in limitations), limitations)
-        self.assertEqual(run.status, DecisionStatus.COMPLETED)
+        # The protocol finishes the analysis; the guard/execution lifecycle completes it.
+        self.assertEqual(run.status, DecisionStatus.VALIDATING)
 
     def test_invalid_rebuttal_target_gets_one_bounded_repair_then_succeeds(self):
         attempts = {"count": 0}
@@ -769,7 +772,8 @@ class RebuttalRoundTests(ProtocolTestCase):
         repair_prompts = client.stage_calls("bear_rebuttal")
         self.assertIn("VALID TARGET CLAIM IDS", repair_prompts[1])
         self.assertIn("schema repair", repair_prompts[1])
-        self.assertEqual(outcome.run.status, DecisionStatus.COMPLETED)
+        # The protocol finishes the analysis; the guard/execution lifecycle completes it.
+        self.assertEqual(outcome.run.status, DecisionStatus.VALIDATING)
         self.assertEqual(
             Rebuttal.objects.filter(run=outcome.run, response_type="dispute").count(), 1
         )
@@ -993,7 +997,8 @@ class FailurePathTests(ProtocolTestCase):
         )
         outcome = self.run_debate(client)
 
-        self.assertEqual(outcome.run.status, DecisionStatus.COMPLETED)
+        # The protocol finishes the analysis; the guard/execution lifecycle completes it.
+        self.assertEqual(outcome.run.status, DecisionStatus.VALIDATING)
         self.assertEqual(len(client.stage_calls("bull_case")), 3)
         usage = outcome.run.protocol_metadata["usage"]
         self.assertEqual(usage["provider_retries_used"], 2)
@@ -1048,13 +1053,17 @@ class FailurePathTests(ProtocolTestCase):
         self.assertTrue(Claim.objects.filter(run=run).exists())
 
     def test_run_deadline_stops_the_protocol(self):
+        # The deadline includes evidence capture, which does database work. Keep
+        # a wide margin between that setup cost and the sleeping stage so a
+        # loaded test runner cannot trip the deadline before the first model
+        # call and turn this into a timing flake rather than a protocol check.
         def slow_bull_case(client, prompt):
-            time.sleep(0.3)
+            time.sleep(1.8)
             return bull_case(client, prompt)
 
         client = StubStageClient({**standard_handlers(), "bull_case": slow_bull_case})
         with self.assertRaises(BudgetExhausted) as ctx:
-            self.run_debate(client, budget_overrides={"run_deadline_seconds": 0.2})
+            self.run_debate(client, budget_overrides={"run_deadline_seconds": 1.5})
 
         self.assertEqual(ctx.exception.code, "run_deadline_exceeded")
         run = ctx.exception.run
@@ -1160,7 +1169,8 @@ class SingleAgentBaselineTests(ProtocolTestCase):
         self.assertEqual(baseline.run.protocol_version, BASELINE_PROTOCOL_VERSION)
         self.assertEqual(baseline.run.mode, RunMode.LIVE)
         self.assertFalse(baseline.run.is_synthetic)
-        self.assertEqual(baseline.run.status, DecisionStatus.COMPLETED)
+        # The protocol finishes the analysis; the guard/execution lifecycle completes it.
+        self.assertEqual(baseline.run.status, DecisionStatus.VALIDATING)
         self.assertTrue(baseline.recorded)
 
         # The debate stages did not run.

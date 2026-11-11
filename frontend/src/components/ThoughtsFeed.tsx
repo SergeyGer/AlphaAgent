@@ -1,5 +1,6 @@
 import { memo, useState, type ReactElement, type ReactNode } from 'react';
 import { cn } from '../lib/cn';
+import { decisionRunHref } from '../lib/decisionRuns';
 import { deriveAction, normalizeDebateText, stageLabel, type ActionDescriptor } from '../lib/feed';
 import { formatClockTime, formatCurrency, formatQuantity, formatRelativeTime } from '../lib/format';
 import type { FeedItem } from '../types';
@@ -120,6 +121,7 @@ const FeedRow = memo(function FeedRow({ item, now }: FeedRowProps): ReactElement
   const body = isDecision ? item.reasoning : item.message;
   const isLong = typeof body === 'string' && body.length > 180;
   const action = isDecision ? deriveAction(item.action) : null;
+  const runHref = decisionRunHref(item.runId);
 
   const hasDebate =
     normalizeDebateText(item.bullCase) !== null || normalizeDebateText(item.bearCase) !== null;
@@ -152,6 +154,17 @@ const FeedRow = memo(function FeedRow({ item, now }: FeedRowProps): ReactElement
         )}
 
         <SentimentBadge sentiment={item.sentiment} />
+
+        {runHref ? (
+          <a
+            href={runHref}
+            data-testid="thought-run-link"
+            aria-label={`Open decision run for ${item.ticker ?? 'this decision'}`}
+            className="rounded font-mono text-[10px] uppercase tracking-wider text-cyan-300 underline decoration-cyan-500/40 underline-offset-2 transition-colors hover:text-cyan-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/70 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
+          >
+            Explain run
+          </a>
+        ) : null}
 
         <span className="ml-auto flex items-center gap-2 font-mono text-[10px] tabular-nums text-slate-500">
           {item.tokensUsed !== null ? <span>{formatQuantity(item.tokensUsed, 0)} tok</span> : null}

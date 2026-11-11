@@ -1,8 +1,10 @@
-"""Real-time event bus.
+"""Real-time event bus - now backed by a durable outbox (FIX-06).
 
 Celery workers publish here; the dashboard's WebSocket consumer subscribes.
-Every publish is best-effort: if Redis or the channel layer is unavailable the
-event is logged and dropped. **A live-update failure must never fail a trade.**
+A publish persists a queued notification and then attempts one best-effort
+delivery. If Redis or the channel layer is unavailable the row stays pending for
+``flush_event_outbox_task``; the notification is delayed, never lost.
+**A live-update failure must never fail a trade or a decision.**
 """
 
 from __future__ import annotations
@@ -13,6 +15,8 @@ from decimal import Decimal
 from typing import Any
 
 from django.utils import timezone
+
+from services.event_outbox import deliver_now, enqueue_event, portfolio_group
 
 logger = logging.getLogger("alphaagent.events")
 
@@ -49,10 +53,6 @@ class EventType:
     BUDGET_EXHAUSTED = "budget.exhausted"
 
 
-def portfolio_group(user_id: int) -> str:
-    return f"portfolio.{user_id}"
-
-
 def serialize(value: Any) -> Any:
     """Convert Decimals/datetimes into JSON-safe primitives, recursively."""
     if isinstance(value, Decimal):
@@ -66,35 +66,36 @@ def serialize(value: Any) -> Any:
     return value
 
 
-def publish(user_id: int | None, event_type: str, payload: dict[str, Any]) -> bool:
-    """Broadcast ``event_type`` to one user's dashboard.
+def publish(
+    user_id: int | None,
+    event_type: str,
+    payload: dict[str, Any],
+    *,
+    dedupe_key: str = "",
+) -> bool:
+    """Queue ``event_type`` durably and try one live delivery.
 
-    Returns ``True`` when the event reached the channel layer. Never raises.
+    Returns ``True`` when the event reached the channel layer. A ``False`` return
+    now means "queued but not delivered yet", not "dropped". Never raises into
+    the caller: a realtime outage must not fail a trade.
     """
     if user_id is None:
         return False
 
     try:
-        from asgiref.sync import async_to_sync
-        from channels.layers import get_channel_layer
-
-        channel_layer = get_channel_layer()
-        if channel_layer is None:
-            logger.debug("No channel layer configured; dropping %s", event_type)
-            return False
-
-        async_to_sync(channel_layer.group_send)(
-            portfolio_group(user_id),
-            {
-                "type": "portfolio_event",  # -> PortfolioConsumer.portfolio_event
-                "event_type": event_type,
-                "payload": serialize(payload),
-            },
+        row = enqueue_event(
+            user_id,
+            "portfolio",
+            event_type,
+            serialize(payload),
+            dedupe_key=dedupe_key,
         )
-        return True
-    except Exception as exc:
-        logger.warning("Failed to publish %s to user %s: %s", event_type, user_id, exc)
+    except Exception as exc:  # pragma: no cover - database is the authority
+        logger.warning("Could not persist %s for user %s: %s", event_type, user_id, exc)
         return False
+    if row is None:
+        return False
+    return deliver_now(row.id)
 
 
 # ---------------------------------------------------------------------------

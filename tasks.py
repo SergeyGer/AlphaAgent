@@ -11,12 +11,14 @@ Flow
     1. Re-check autonomy and the portfolio-level daily stop-loss.
     2. Gather read-only context (live price, news, ledger replay).
     3. Run the CrewAI bull -> bear -> CIO debate (``ai_agent.run_alpha_agent``).
-    4. **Execution Guard**: validate the JSON payload against
-       ``max_trade_allocation_pct`` and ``daily_loss_limit_usd``.
-    5. Only if approved, open ``transaction.atomic()`` + ``select_for_update()``
-       and mutate ``Portfolio`` / ``Asset`` / ``Transaction``.
+    4. **Execution Guard**: run the read-only simulation for sizing and for the
+       audit trail. It is not an authorisation.
+    5. Only if the simulation approves, call the authoritative execution service,
+       which locks ``Portfolio`` / ``Asset``, re-runs the guard against current
+       policy and marks, and mutates the ledger in the same transaction.
     6. Always write an ``AgentDecisionLog`` row - including HOLDs and rejections -
-       so the audit trail is complete and explainable.
+       so the audit trail is complete and explainable, then complete the decision
+       run with the actual execution state.
 
 In **advisory mode** (``require_approval=True`` on a non-autonomous portfolio)
 step 5 is replaced by a ``PENDING TradeRecommendation``; a human then approves
@@ -42,7 +44,10 @@ from ai_agent import (
     build_news_report,
     run_alpha_agent,
 )
-from core.decision_models import DecisionRun
+from core.decision_models import (
+    DecisionExecutionState,
+    DecisionRun,
+)
 from core.log_safety import log_safe
 from core.models import (
     AgentDecisionLog,
@@ -53,6 +58,8 @@ from core.models import (
     Transaction,
 )
 from services.budget import budget_state
+from services.decision_lifecycle import complete_run
+from services.decision_outcomes import sync_outcomes_for_run
 from services.decision_runs import link_legacy_log
 from services.events import (
     emit_agent_thinking,
@@ -64,12 +71,16 @@ from services.events import (
 from services.execution import (
     CENT,
     ZERO,
+    ExecutionRejected,
+    ExecutionRequest,
     apply_trade,
     evaluate_proposal,
+    portfolio_policy_version,
 )
 from services.fundamentals import get_financial_health, get_price_history
 from services.ledger import PositionState, realised_pnl_today, replay_positions
 from services.market_data import get_latest_quote
+from services.portfolio_brief import portfolio_state_version
 from services.portfolio_metrics import build_exposure
 from services.recommendations import (
     create_recommendation,
@@ -132,6 +143,34 @@ def run_alpha_agent_task(
     # Autonomy always wins: an autonomous portfolio never queues for approval.
     require_approval = require_approval and not portfolio.is_autonomous
     user_id = portfolio.user_id
+
+    # ---- 0a. Duplicate delivery ------------------------------------------
+    # The Celery task id is the stable identity of this decision *delivery*.
+    # ``acks_late`` means a worker can receive the same message twice; the
+    # second delivery must return the first result, not re-run the model and
+    # then discover that the portfolio has moved.
+    execution_key = f"celery:{self.request.id}" if self.request.id else ""
+    if execution_key:
+        existing = Transaction.objects.filter(execution_key=execution_key).first()
+        if existing is not None:
+            logger.info(
+                "Duplicate delivery for task %s: returning transaction %s",
+                self.request.id,
+                existing.id,
+            )
+            return {
+                "status": "executed",
+                "duplicate_delivery": True,
+                "portfolio_id": portfolio_id,
+                "ticker": ticker,
+                "action": existing.tx_type,
+                "approved": True,
+                "amount": str(existing.amount),
+                "price": str(existing.price),
+                "notional": str(existing.gross_value_usd),
+                "transaction_id": existing.id,
+                "decision_run_id": None,
+            }
 
     # ---- 0. AI spend ceiling ---------------------------------------------
     # Checked after the throttle but before any work that costs money, and before
@@ -279,30 +318,87 @@ def run_alpha_agent_task(
     proposal = run_result.proposal
 
     # ---- 3. Execution guard ---------------------------------------------
-    # The portfolio-level limits need market values, which the guard cannot fetch
-    # without breaking its purity. Built here and passed in.
-    exposure = build_exposure(portfolio, ticker)
+    # This is a read-only *simulation*. It sizes the proposal for the audit trail
+    # and for advisory review, but it is not an authorisation: the authoritative
+    # revalidation happens under the portfolio lock in services.execution.
+    marks = _current_marks(portfolio, ticker, quote)
+    exposure = build_exposure(portfolio, ticker, price_map=marks)
+    policy_version = portfolio_policy_version(portfolio)
+    portfolio_version = portfolio_state_version(portfolio)
     decision = evaluate_proposal(
         portfolio, proposal, price, position, realised_today, exposure=exposure
     )
+    decision.policy_version = policy_version
+    decision.evaluated_portfolio_version = portfolio_version
+    decision.quote_time = quote.as_of if quote is not None else None
+
+    run = DecisionRun.objects.filter(pk=run_result.decision_run_id).first()
+    if not execution_key:
+        execution_key = f"run:{run.id if run is not None else 'none'}"
 
     transaction_row: Transaction | None = None
     recommendation = None
+    final_decision = decision
+    execution_state = None
+    execution_error = ""
 
     if require_approval and decision.approved:
         # Advisory mode: the trade is valid, but a human must approve it.
-        recommendation = create_recommendation(portfolio, proposal, decision.price, ticker=ticker)
+        recommendation = create_recommendation(
+            portfolio,
+            proposal,
+            decision.price,
+            ticker=ticker,
+            approved_amount=decision.amount,
+            decision_run=run,
+        )
+        execution_state = DecisionExecutionState.AWAITING_APPROVAL
     elif decision.approved:
+        request = ExecutionRequest(
+            portfolio_id=portfolio.id,
+            ticker=ticker,
+            side=decision.action,
+            quantity=decision.amount,
+            quotes=marks,
+            requested_quantity=decision.requested_amount or decision.amount,
+            execution_key=execution_key,
+            source="autonomous",
+            approval_ref=f"run:{run.id}" if run is not None else "",
+            approved_policy_version=policy_version,
+            approved_portfolio_version=portfolio_version,
+            approved_price=decision.price,
+        )
         try:
-            transaction_row = apply_trade(portfolio.id, ticker, decision)
-        except (DatabaseError, OperationalError) as exc:
+            execution = apply_trade(portfolio.id, ticker, decision, request=request)
+        except (ExecutionRejected, DatabaseError, OperationalError) as exc:
             decision.approved = False
             decision.reason = f"Execution failed and was rolled back: {exc}"
+            execution_error = str(exc)
+            final_decision = getattr(exc, "decision", None) or decision
+            execution_state = (
+                DecisionExecutionState.BLOCKED
+                if isinstance(exc, ExecutionRejected)
+                else DecisionExecutionState.FAILED
+            )
             logger.exception("Trade execution failed for %s/%s: %s", portfolio_id, ticker, exc)
         else:
-            emit_trade(user_id, transaction_row)
-            notify_trade.delay(transaction_row.id)
-            _capture_after_trade(portfolio)
+            final_decision = execution.decision
+            if not execution.approved or execution.transaction is None:
+                # The under-lock revalidation refused the proposal. That is a
+                # blocked decision, never an execution with a null fill.
+                decision.approved = False
+                decision.reason = execution.reason
+                execution_state = DecisionExecutionState.BLOCKED
+            else:
+                transaction_row = execution.transaction
+                execution_state = DecisionExecutionState.EXECUTED
+                emit_trade(user_id, transaction_row)
+                notify_trade.delay(transaction_row.id)
+                _capture_after_trade(portfolio)
+    elif decision.action == "HOLD":
+        execution_state = DecisionExecutionState.HELD
+    else:
+        execution_state = DecisionExecutionState.BLOCKED
 
     # ---- 4. Explainability log (always written) -------------------------
     audit_reasoning = run_result.reasoning
@@ -356,18 +452,38 @@ def run_alpha_agent_task(
     # The run is written by the AI layer before the execution guard runs, so the
     # link can only be made here. A failure is logged and never fails the task:
     # the audit row is the Phase 0 contract and must survive.
-    if decision_log is not None and getattr(run_result, "decision_run_id", None):
+    if decision_log is not None and run is not None:
         try:
-            run = DecisionRun.objects.filter(pk=run_result.decision_run_id).first()
-            if run is not None:
-                link_legacy_log(run, decision_log)
+            link_legacy_log(run, decision_log)
         except Exception as exc:
             logger.warning(
                 "Could not link decision run %s to AgentDecisionLog %s: %s",
-                run_result.decision_run_id,
+                run.id,
                 decision_log.id,
                 exc,
             )
+
+    # ---- 4b. Complete the decision lifecycle ----------------------------
+    # The run stayed in ``validating`` until this point. Only now, with an actual
+    # guard result and (where applicable) a ledger row, does it become a
+    # completed decision - and the execution state says exactly what happened.
+    if run is not None and execution_state is not None:
+        try:
+            complete_run(
+                run,
+                outcome=execution_state,
+                guard_decision=final_decision if final_decision.action != "HOLD" else None,
+                transaction_row=transaction_row,
+                recommendation=recommendation,
+                reason=final_decision.reason or execution_error,
+                error_code="execution_failed" if execution_state == "failed" else "",
+                error_detail=execution_error,
+                requires_approval=execution_state == DecisionExecutionState.AWAITING_APPROVAL,
+            )
+            if decision_log is not None:
+                sync_outcomes_for_run(run)
+        except Exception as exc:  # pragma: no cover - audit row is the Phase 0 contract
+            logger.exception("Could not complete decision run %s: %s", run.id, exc)
 
     if recommendation is not None and decision_log is not None:
         # Link the audit row so the dashboard can show proposal -> approval.
@@ -403,6 +519,8 @@ def run_alpha_agent_task(
         status = "awaiting_approval"
     elif decision.action == "HOLD":
         status = "hold"
+    elif execution_state == DecisionExecutionState.FAILED:
+        status = "failed"
     else:
         status = "blocked"
 
@@ -422,6 +540,8 @@ def run_alpha_agent_task(
         "latency_ms": run_result.latency_ms,
         "transaction_id": transaction_row.id if transaction_row else None,
         "recommendation_id": recommendation.id if recommendation else None,
+        "decision_run_id": str(run.id) if run is not None else None,
+        "execution_state": execution_state,
         "bull_case_chars": len(run_result.bull_case),
         "bear_case_chars": len(run_result.bear_case),
     }
@@ -593,6 +713,31 @@ def purge_expired_auth_tokens_task(self, max_age_days: int = 30) -> dict[str, An
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+def _current_marks(portfolio: Portfolio, ticker: str, primary_quote) -> dict[str, Any]:
+    """Current marks for every material holding, for authoritative exposure.
+
+    The traded ticker's quote is already in hand. Other holdings are priced with
+    the same tolerant accessor; a name the provider cannot price is omitted, and
+    the execution service then refuses a BUY rather than substituting cost.
+    """
+    marks: dict[str, Any] = {}
+    if primary_quote is not None:
+        marks[ticker.upper()] = primary_quote
+    for asset in portfolio.assets.all():
+        symbol = asset.ticker.upper()
+        if symbol in marks:
+            continue
+        fallback = asset.avg_purchase_price if asset.avg_purchase_price > 0 else None
+        try:
+            other = get_latest_quote(symbol, fallback_price=fallback)
+        except Exception as exc:  # pragma: no cover - accessor already tolerates
+            logger.warning("Could not price %s for exposure: %s", symbol, exc)
+            other = None
+        if other is not None and getattr(other, "source", "") != "fallback":
+            marks[symbol] = other
+    return marks
+
+
 def _capture_after_trade(portfolio: Portfolio) -> None:
     """Record a snapshot immediately after execution so the chart has a marker."""
     try:
@@ -674,6 +819,30 @@ def capture_portfolio_snapshots_task(self) -> dict[str, Any]:
             logger.warning("Snapshot event failed for portfolio %s: %s", portfolio.id, exc)
 
     return {"status": "ok", "captured": len(captured), "emitted": emitted}
+
+
+# ---------------------------------------------------------------------------
+# Durable event delivery
+# ---------------------------------------------------------------------------
+@shared_task(bind=True, name="tasks.flush_event_outbox_task")
+def flush_event_outbox_task(self, limit: int = 500) -> dict[str, Any]:
+    """Retry queued notifications. Periodic catch-up, independent of sockets.
+
+    The run event log and the ledger are the authority; this only reconciles the
+    delivery queue with them. It also reports backlog and lag so a delivery
+    failure is visible as a metric rather than as a silently stale dashboard.
+    """
+    from services.event_outbox import flush_outbox, outbox_metrics
+
+    result = flush_outbox(limit=limit)
+    metrics = outbox_metrics()
+    logger.info("Event outbox flush: %s metrics=%s", result, metrics)
+    return {
+        "status": "ok",
+        **result,
+        "pending": metrics["pending"],
+        "oldest_pending_age_seconds": metrics["oldest_pending_age_seconds"],
+    }
 
 
 # ---------------------------------------------------------------------------

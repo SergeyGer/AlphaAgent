@@ -49,11 +49,38 @@ import { Panel } from './Panel';
 
 const INITIAL_CLAIMS = 3;
 
+export interface DecisionDetailScene {
+  /** True when the payload is an as-of replay reduction rather than the final record. */
+  active: boolean;
+  atEnd: boolean;
+  cursorSeq: number | null;
+  /** Whether adjudication has been reached at the cursor. */
+  verdictVisible: boolean;
+  guardVisible?: boolean;
+  outcomesVisible?: boolean;
+  /** Counts withheld because they are later in the recording. */
+  hiddenClaims?: number;
+  hiddenEvidence?: number;
+  hiddenOutcomes?: number;
+  hiddenRebuttals?: number;
+}
+
 export interface DecisionDetailProps {
   detail: DecisionDetailPayload | null;
   loading: boolean;
   error: string | null;
   onRetry: () => void;
+  /**
+   * Present only while replaying. The parent already reduced `detail` to the
+   * cursor; this flag controls copy that must not read "not recorded" when the
+   * truth is "not reached yet", and keeps the final summary out of the scene.
+   */
+  scene?: DecisionDetailScene;
+  /**
+   * Offline viewer sets this to false so an http(s) source URI is displayed but
+   * never clickable — the page must be able to make zero external calls.
+   */
+  allowExternalLinks?: boolean;
   className?: string;
 }
 
@@ -214,11 +241,14 @@ function EvidenceLinkButton({
   ids,
   evidenceIndex,
   onOpenEvidence,
+  highlighted = false,
   className,
 }: {
   ids: readonly string[] | null | undefined;
   evidenceIndex: ReadonlyMap<string, EvidenceItem>;
   onOpenEvidence: (evidenceId: string | null) => void;
+  /** True when this evidence belongs to the selected response's target claim. */
+  highlighted?: boolean;
   className?: string;
 }): ReactElement {
   const { items, missingIds } = resolveEvidenceLinks(ids, evidenceIndex);
@@ -242,8 +272,12 @@ function EvidenceLinkButton({
       type="button"
       onClick={() => onOpenEvidence(items[0]?.id ?? null)}
       aria-label={`Open ${label.toLowerCase()}`}
+      data-highlighted={highlighted ? 'true' : undefined}
       className={cn(
-        'inline-flex items-center rounded border border-cyan-500/30 bg-cyan-500/[0.07] px-2 py-1 font-mono text-[11px] font-semibold uppercase tracking-wider text-cyan-200 transition-colors hover:bg-cyan-500/15',
+        'inline-flex items-center rounded border px-2 py-1 font-mono text-[11px] font-semibold uppercase tracking-wider transition-colors',
+        highlighted
+          ? 'border-cyan-300/70 bg-cyan-400/15 text-cyan-100 ring-2 ring-cyan-400/40'
+          : 'border-cyan-500/30 bg-cyan-500/[0.07] text-cyan-200 hover:bg-cyan-500/15',
         FOCUS_CLASS,
         className,
       )}
@@ -258,26 +292,38 @@ function ClaimCard({
   side,
   evidenceIndex,
   onOpenEvidence,
+  highlighted = false,
+  highlightedEvidenceIds,
 }: {
   claim: Claim;
   side: Side;
   evidenceIndex: ReadonlyMap<string, EvidenceItem>;
   onOpenEvidence: (evidenceId: string | null) => void;
+  highlighted?: boolean;
+  highlightedEvidenceIds?: ReadonlySet<string>;
 }): ReactElement {
   const statement = presentText(claim?.statement) ?? 'No statement was recorded for this claim.';
   const stance = presentText(claim?.stance);
   const limitation = presentText(claim?.limitations);
   const horizon = presentText(claim?.horizon);
   const claimId = presentText(claim?.claim_id);
+  const claimEvidenceIds = Array.isArray(claim?.evidence_ids) ? claim.evidence_ids : [];
+  const evidenceHighlighted =
+    highlighted ||
+    claimEvidenceIds.some(
+      (id) => typeof id === 'string' && (highlightedEvidenceIds?.has(id) ?? false),
+    );
 
   return (
     <article
       aria-label={`${sideLabel(side)} claim${claimId ? ` ${claimId}` : ''}`}
+      data-highlighted={highlighted ? 'true' : undefined}
       className={cn(
         'min-w-0 rounded-lg border p-3',
         side === 'bull'
           ? 'border-emerald-500/30 bg-emerald-500/[0.05]'
           : 'border-rose-500/30 bg-rose-500/[0.05]',
+        highlighted && 'ring-2 ring-cyan-400/60 ring-offset-2 ring-offset-slate-950',
       )}
     >
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -292,6 +338,11 @@ function ClaimCard({
         <span className="rounded border border-slate-700 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-slate-300">
           {claimTypeLabel(claim?.claim_type)}
         </span>
+        {highlighted ? (
+          <span className="rounded border border-cyan-500/40 bg-cyan-500/10 px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-cyan-200">
+            Target of selected response
+          </span>
+        ) : null}
         {claimId ? (
           <span className="ml-auto break-all font-mono text-[10px] text-slate-400">{claimId}</span>
         ) : null}
@@ -311,9 +362,10 @@ function ClaimCard({
           {horizon ? `Horizon: ${horizon}` : 'Horizon not stated'}
         </span>
         <EvidenceLinkButton
-          ids={claim?.evidence_ids}
+          ids={claimEvidenceIds}
           evidenceIndex={evidenceIndex}
           onOpenEvidence={onOpenEvidence}
+          highlighted={evidenceHighlighted}
         />
       </div>
 
@@ -333,6 +385,10 @@ function ClaimColumn({
   status,
   evidenceIndex,
   onOpenEvidence,
+  replayActive = false,
+  hiddenCount = 0,
+  highlightedClaimId = null,
+  highlightedEvidenceIds,
 }: {
   side: Side;
   claims: Claim[];
@@ -340,10 +396,21 @@ function ClaimColumn({
   status: string;
   evidenceIndex: ReadonlyMap<string, EvidenceItem>;
   onOpenEvidence: (evidenceId: string | null) => void;
+  replayActive?: boolean;
+  hiddenCount?: number;
+  highlightedClaimId?: string | null;
+  highlightedEvidenceIds?: ReadonlySet<string>;
 }): ReactElement {
   const [expanded, setExpanded] = useState(false);
   const listId = useId();
-  const visible = expanded ? claims : claims.slice(0, INITIAL_CLAIMS);
+  const highlightedIndex = highlightedClaimId
+    ? claims.findIndex((claim) => presentText(claim?.claim_id) === highlightedClaimId)
+    : -1;
+  // A selected response can target a claim beyond the first three. Showing only
+  // the default slice would highlight nothing, so the whole side is revealed in
+  // that case rather than scrolling to a claim that is not rendered.
+  const forceExpanded = highlightedIndex >= INITIAL_CLAIMS;
+  const visible = expanded || forceExpanded ? claims : claims.slice(0, INITIAL_CLAIMS);
   const hasMore = claims.length > INITIAL_CLAIMS;
   const name = sideLabel(side);
 
@@ -352,6 +419,10 @@ function ClaimColumn({
     emptyCopy = 'Legacy report — individual claims were not recorded in this format.';
   } else if (mode === 'heuristic') {
     emptyCopy = `Heuristic fallback — no ${name.toLowerCase()} debate claim was produced.`;
+  } else if (replayActive && hiddenCount > 0) {
+    emptyCopy = `No ${name.toLowerCase()} claims have been reached at this replay cursor.`;
+  } else if (replayActive) {
+    emptyCopy = `No ${name.toLowerCase()} claims have been recorded yet at this replay cursor.`;
   } else if (isActiveRunStatus(status)) {
     emptyCopy = `No ${name.toLowerCase()} claims yet — analysis is still in progress.`;
   }
@@ -384,6 +455,8 @@ function ClaimColumn({
                   side={side}
                   evidenceIndex={evidenceIndex}
                   onOpenEvidence={onOpenEvidence}
+                  highlighted={presentText(claim?.claim_id) === highlightedClaimId}
+                  highlightedEvidenceIds={highlightedEvidenceIds}
                 />
               </li>
             ))}
@@ -416,11 +489,17 @@ function TargetedResponse({
   target,
   evidenceIndex,
   onOpenEvidence,
+  selected = false,
+  onSelect,
+  highlightedEvidenceIds,
 }: {
   rebuttal: Rebuttal;
   target: Claim | undefined;
   evidenceIndex: ReadonlyMap<string, EvidenceItem>;
   onOpenEvidence: (evidenceId: string | null) => void;
+  selected?: boolean;
+  onSelect?: () => void;
+  highlightedEvidenceIds?: ReadonlySet<string>;
 }): ReactElement {
   const responder = (rebuttal?.responding_agent ?? '').trim().toLowerCase();
   const responderName = responder === 'bear' ? 'Bear' : 'Bull';
@@ -428,11 +507,21 @@ function TargetedResponse({
   const explanation = presentText(rebuttal?.explanation);
   const positionChange = presentText(rebuttal?.position_change);
   const targetId = presentText(rebuttal?.target_claim_id);
+  const rebuttalId = presentText(rebuttal?.rebuttal_id);
+  const evidenceIds = Array.isArray(rebuttal?.evidence_ids) ? rebuttal.evidence_ids : [];
+  const rebuttalEvidenceHighlighted =
+    evidenceIds.some((id) => typeof id === 'string' && (highlightedEvidenceIds?.has(id) ?? false));
 
   return (
     <article
       aria-label={`${responderName} response to claim ${targetId ?? 'unknown'}`}
-      className="min-w-0 rounded-lg border border-slate-800/70 bg-slate-950/40 p-3"
+      data-selected={selected ? 'true' : undefined}
+      className={cn(
+        'min-w-0 rounded-lg border bg-slate-950/40 p-3',
+        selected
+          ? 'border-cyan-400/70 bg-cyan-500/[0.06] ring-2 ring-cyan-400/30'
+          : 'border-slate-800/70',
+      )}
     >
       <div className="flex flex-wrap items-center gap-2">
         <span
@@ -452,9 +541,26 @@ function TargetedResponse({
         >
           {rebuttalResponseLabel(responseType)}
         </span>
-        {presentText(rebuttal?.rebuttal_id) ? (
+        {onSelect ? (
+          <button
+            type="button"
+            onClick={onSelect}
+            aria-pressed={selected}
+            aria-label={`Highlight target claim for response ${rebuttalId ?? targetId ?? 'unknown'}`}
+            className={cn(
+              'rounded border px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider transition-colors',
+              selected
+                ? 'border-cyan-400/70 bg-cyan-400/15 text-cyan-100'
+                : 'border-slate-700 bg-slate-950/60 text-slate-300 hover:bg-slate-800',
+              FOCUS_CLASS,
+            )}
+          >
+            {selected ? 'Target shown' : 'Show target'}
+          </button>
+        ) : null}
+        {rebuttalId ? (
           <span className="ml-auto break-all font-mono text-[10px] text-slate-400">
-            {rebuttal.rebuttal_id}
+            {rebuttalId}
           </span>
         ) : null}
       </div>
@@ -486,9 +592,10 @@ function TargetedResponse({
 
       <div className="mt-2">
         <EvidenceLinkButton
-          ids={rebuttal?.evidence_ids}
+          ids={evidenceIds}
           evidenceIndex={evidenceIndex}
           onOpenEvidence={onOpenEvidence}
+          highlighted={selected || rebuttalEvidenceHighlighted}
         />
       </div>
     </article>
@@ -570,6 +677,8 @@ export function DecisionDetail({
   loading,
   error,
   onRetry,
+  scene,
+  allowExternalLinks = true,
   className,
 }: DecisionDetailProps): ReactElement {
   const headingId = useId();
@@ -585,6 +694,7 @@ export function DecisionDetail({
     open: false,
     initialEvidenceId: null,
   });
+  const [selectedRebuttalId, setSelectedRebuttalId] = useState<string | null>(null);
 
   const openEvidence = useCallback((evidenceIdToOpen: string | null) => {
     setDrawer({ open: true, initialEvidenceId: evidenceIdToOpen });
@@ -645,10 +755,22 @@ export function DecisionDetail({
   const modeNotice = (MODE_NOTICES as Partial<Record<string, ModeNotice>>)[mode];
 
   const summary = decisionSummary(detail);
-  const active = isActiveRunStatus(status);
   const providerFailure = status === 'failed' && isProviderFailure(run?.error_code);
   const partialReasons = partialRunReasons(detail);
   const hasMissingEvidence = claims.length > 0 && evidence.length === 0;
+
+  const replayScene = scene?.active === true;
+  const verdictVisible = !replayScene || scene?.verdictVisible !== false;
+  const guardVisible = !replayScene || scene?.guardVisible !== false;
+  const outcomesVisible = !replayScene || scene?.outcomesVisible !== false;
+  // An as-of status of "collecting" on a completed replay is a position in the
+  // recording, not a live run. The live-progress notice belongs only outside the
+  // replay scene; the replay-scene notice explains the cursor.
+  const active = isActiveRunStatus(status) && !replayScene;
+  const sceneSummary =
+    replayScene && !verdictVisible
+      ? 'Replay scene — adjudication has not been reached at this cursor. The final summary is pinned outside the scene and is not shown here.'
+      : summary;
 
   const rebuttals = Array.isArray(detail.rebuttals) ? detail.rebuttals.filter(Boolean) : [];
   const outcomes = Array.isArray(detail.outcomes) ? detail.outcomes.filter(Boolean) : [];
@@ -658,6 +780,21 @@ export function DecisionDetail({
   const strongestObjection = presentText(detail.strongest_objection);
   const rationale = presentText(detail.rationale);
   const action = presentText(detail.action);
+
+  const selectedRebuttal =
+    selectedRebuttalId === null
+      ? null
+      : (rebuttals.find((rebuttal) => presentText(rebuttal?.rebuttal_id) === selectedRebuttalId) ??
+        null);
+  const highlightedClaimId = presentText(selectedRebuttal?.target_claim_id);
+  const targetClaim = highlightedClaimId ? claimsById.get(highlightedClaimId) : undefined;
+  const highlightedEvidenceIds = new Set<string>();
+  for (const id of selectedRebuttal?.evidence_ids ?? []) {
+    if (typeof id === 'string' && id.trim() !== '') highlightedEvidenceIds.add(id.trim());
+  }
+  for (const id of targetClaim?.evidence_ids ?? []) {
+    if (typeof id === 'string' && id.trim() !== '') highlightedEvidenceIds.add(id.trim());
+  }
 
   return (
     <article
@@ -736,8 +873,17 @@ export function DecisionDetail({
           data-testid="decision-summary"
           className="mt-1 max-w-4xl whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-100 sm:text-base"
         >
-          {summary}
+          {sceneSummary}
         </p>
+        {replayScene ? (
+          <p
+            data-testid="replay-scene-position"
+            className="mt-1 font-mono text-[10px] uppercase tracking-wider text-cyan-300"
+          >
+            Replay scene at sequence {scene?.cursorSeq ?? 'start'}
+            {scene?.atEnd ? ' · final position' : ' · earlier content is withheld'}
+          </p>
+        ) : null}
       </section>
 
       <div className="space-y-2 border-b border-slate-800/70 px-4 py-3">
@@ -800,6 +946,24 @@ export function DecisionDetail({
             {modeNotice.body}
           </StateNotice>
         ) : null}
+
+        {replayScene && !scene?.atEnd ? (
+          <StateNotice state="replay-scene" tone="sky" title="Replay scene">
+            <p>
+              Only content recorded at or before sequence {scene?.cursorSeq ?? 'start'} is shown.
+              Later claims, responses, the verdict, the guard and outcomes stay out of this scene.
+            </p>
+            <p className="mt-1 text-slate-400">
+              {scene?.hiddenClaims ?? 0} claim{(scene?.hiddenClaims ?? 0) === 1 ? '' : 's'},{' '}
+              {scene?.hiddenRebuttals ?? 0} response
+              {(scene?.hiddenRebuttals ?? 0) === 1 ? '' : 's'},{' '}
+              {scene?.hiddenEvidence ?? 0} evidence item
+              {(scene?.hiddenEvidence ?? 0) === 1 ? '' : 's'} and{' '}
+              {scene?.hiddenOutcomes ?? 0} outcome
+              {(scene?.hiddenOutcomes ?? 0) === 1 ? '' : 's'} later in the recording.
+            </p>
+          </StateNotice>
+        ) : null}
       </div>
 
       <section aria-labelledby={claimsId} className={SECTION_CLASS}>
@@ -816,6 +980,9 @@ export function DecisionDetail({
             status={status}
             evidenceIndex={evidenceIndex}
             onOpenEvidence={openEvidence}
+            replayActive={replayScene}
+            highlightedClaimId={highlightedClaimId}
+            highlightedEvidenceIds={highlightedEvidenceIds}
           />
           <ClaimColumn
             side="bear"
@@ -824,6 +991,9 @@ export function DecisionDetail({
             status={status}
             evidenceIndex={evidenceIndex}
             onOpenEvidence={openEvidence}
+            replayActive={replayScene}
+            highlightedClaimId={highlightedClaimId}
+            highlightedEvidenceIds={highlightedEvidenceIds}
           />
         </div>
       </section>
@@ -855,6 +1025,12 @@ export function DecisionDetail({
                   }
                   evidenceIndex={evidenceIndex}
                   onOpenEvidence={openEvidence}
+                  selected={presentText(rebuttal?.rebuttal_id) === selectedRebuttalId}
+                  onSelect={() => {
+                    const id = presentText(rebuttal?.rebuttal_id);
+                    setSelectedRebuttalId((current) => (current === id ? null : (id ?? null)));
+                  }}
+                  highlightedEvidenceIds={highlightedEvidenceIds}
                 />
               ))
             )}
@@ -865,6 +1041,16 @@ export function DecisionDetail({
       <section aria-labelledby={cioId} className={SECTION_CLASS}>
         <SectionHeading id={cioId} title="CIO explanation" />
 
+        {!verdictVisible ? (
+          <div className="mt-2">
+            <InlineEmpty state="verdict-not-reached">
+              Replay has not reached adjudication at this cursor. The verdict, decisive claims,
+              strongest objection and rationale stay out of the scene until the decision is
+              recorded.
+            </InlineEmpty>
+          </div>
+        ) : (
+          <>
         <dl className="mt-2 grid grid-cols-1 gap-3 md:grid-cols-3">
           <div className="min-w-0">
             <dt className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
@@ -948,6 +1134,8 @@ export function DecisionDetail({
             </p>
           </div>
         </div>
+          </>
+        )}
       </section>
 
       <section aria-labelledby={evidenceId} className={SECTION_CLASS}>
@@ -963,9 +1151,14 @@ export function DecisionDetail({
         />
         {evidence.length === 0 ? (
           <div className="mt-2">
-            <InlineEmpty state="missing-evidence">
-              No evidence was stored for this run. Claims that reference evidence show it as missing
-              rather than reconstructed.
+            <InlineEmpty state={replayScene ? 'evidence-not-reached' : 'missing-evidence'}>
+              {replayScene
+                ? `No evidence item has been reached at this replay cursor.${
+                    (scene?.hiddenEvidence ?? 0) > 0
+                      ? ` ${scene?.hiddenEvidence} more item${(scene?.hiddenEvidence ?? 0) === 1 ? '' : 's'} appear later in the recording.`
+                      : ''
+                  }`
+                : 'No evidence was stored for this run. Claims that reference evidence show it as missing rather than reconstructed.'}
             </InlineEmpty>
           </div>
         ) : (
@@ -974,14 +1167,20 @@ export function DecisionDetail({
               const publisher = presentText(item?.publisher);
               const sourceType = presentText(item?.source_type);
               const publication = formatRunTimestamp(item?.published_at);
+              const itemId = presentText(item?.id);
+              const isHighlighted = itemId !== null && highlightedEvidenceIds.has(itemId);
               return (
-                <li key={presentText(item?.id) ?? `evidence-${index}`} className="min-w-0">
+                <li key={itemId ?? `evidence-${index}`} className="min-w-0">
                   <button
                     type="button"
                     onClick={() => openEvidence(item?.id ?? null)}
                     aria-label={`Open evidence from ${publisher ?? sourceType ?? item?.id ?? 'unknown source'}`}
+                    data-highlighted={isHighlighted ? 'true' : undefined}
                     className={cn(
-                      'w-full min-w-0 rounded-lg border border-slate-800/70 bg-slate-950/40 px-3 py-2.5 text-left transition-colors hover:border-slate-700 hover:bg-slate-900/40',
+                      'w-full min-w-0 rounded-lg border px-3 py-2.5 text-left transition-colors',
+                      isHighlighted
+                        ? 'border-cyan-400/70 bg-cyan-500/[0.08] ring-2 ring-cyan-400/30'
+                        : 'border-slate-800/70 bg-slate-950/40 hover:border-slate-700 hover:bg-slate-900/40',
                       FOCUS_CLASS,
                     )}
                   >
@@ -1019,7 +1218,14 @@ export function DecisionDetail({
           hint="The deterministic risk guard compares the requested order with what it allowed, check by check."
         />
         <div className="mt-2">
-          <GuardComparison guard={detail.guard} />
+          {!guardVisible ? (
+            <InlineEmpty state="guard-not-reached">
+              Replay has not reached validation at this cursor. The guard comparison stays out of
+              the scene until it is recorded.
+            </InlineEmpty>
+          ) : (
+            <GuardComparison guard={detail.guard} />
+          )}
         </div>
       </section>
 
@@ -1029,10 +1235,22 @@ export function DecisionDetail({
           title="Outcomes"
           hint="Only horizons the run actually recorded appear here. A null value is not a zero."
         />
-        {outcomes.length === 0 ? (
+        {!outcomesVisible ? (
+          <div className="mt-2">
+            <InlineEmpty state="outcomes-not-reached">
+              Replay has not reached outcome measurement at this cursor. No performance is implied.
+            </InlineEmpty>
+          </div>
+        ) : outcomes.length === 0 ? (
           <div className="mt-2">
             <InlineEmpty state="no-outcomes">
-              No outcome horizons were recorded for this run. No performance is implied.
+              {replayScene
+                ? `No outcome horizon has been reached at this replay cursor.${
+                    (scene?.hiddenOutcomes ?? 0) > 0
+                      ? ` ${scene?.hiddenOutcomes} more appear later in the recording.`
+                      : ''
+                  }`
+                : 'No outcome horizons were recorded for this run. No performance is implied.'}
             </InlineEmpty>
           </div>
         ) : (
@@ -1052,6 +1270,7 @@ export function DecisionDetail({
         evidence={evidence}
         initialEvidenceId={drawer.initialEvidenceId}
         onClose={closeEvidence}
+        allowExternalLinks={allowExternalLinks}
       />
     </article>
   );

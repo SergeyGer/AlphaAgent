@@ -11,7 +11,10 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "viewer:fixtures": "node viewer/fixtures/build-viewer-bundles.mjs",
+    "viewer:review": "node viewer/scripts/review-export.mjs viewer/public/decision-runs.v1.bundle.json",
+    "build:viewer": "npm run viewer:fixtures && npm run viewer:review && vite build --config vite.viewer.config.ts && node viewer/scripts/inline-viewer.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",
