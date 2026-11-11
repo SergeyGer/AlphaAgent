@@ -1,0 +1,595 @@
+{
+  "brief": {
+    "brief_schema_version": "portfolio_brief.v1",
+    "decision_boundary": "portfolio",
+    "responsibility": "chief_investment_officer",
+    "portfolio_version": "pv-66e79da9ff4deab76d62317f",
+    "snapshot_id": "7601b7b1-4aea-426c-831f-23406a8db2ca",
+    "investment_horizon_days": 30,
+    "equity_usd": "20000.00",
+    "cash": {
+      "weight": "0.50000000",
+      "currency": "USD",
+      "balance_usd": "10000.00",
+      "buffer_required_usd": "2000.00"
+    },
+    "weights": {
+      "JPM": "0",
+      "XYZ": "0",
+      "AAPL": "0.50000000",
+      "CASH": "0.50000000",
+      "MSFT": "0"
+    },
+    "holdings": [
+      {
+        "price": "100.00",
+        "sector": "technology",
+        "ticker": "AAPL",
+        "weight": "0.50000000",
+        "avg_cost": "90.00",
+        "quantity": "100.00000000",
+        "asset_class": "equity",
+        "price_source": "provided_quote",
+        "market_value_usd": "10000.00",
+        "classification_source": "fixture"
+      }
+    ],
+    "exposure": {
+      "sector_exposure": [
+        {
+          "sector": "technology",
+          "weight": "0.50000000",
+          "tickers": [
+            "AAPL"
+          ],
+          "value_usd": "10000.00"
+        }
+      ],
+      "asset_class_exposure": [
+        {
+          "weight": "0.50000000",
+          "tickers": [
+            "AAPL"
+          ],
+          "value_usd": "10000.00",
+          "asset_class": "equity"
+        }
+      ],
+      "unclassified": {
+        "weight": "0",
+        "tickers": [],
+        "value_usd": "0.00"
+      },
+      "coverage": {
+        "status": "complete",
+        "coverage_pct": "100.00",
+        "known_value_usd": "10000.00",
+        "positions_value_usd": "10000.00",
+        "unclassified_value_usd": "0.00"
+      },
+      "note": "Every valued position has an explicit classification."
+    },
+    "limits": {
+      "limits": {
+        "max_turnover": "1.00",
+        "max_name_weight": "0.30",
+        "min_cash_weight": "0.10",
+        "max_sector_weight": "0.40",
+        "max_total_exposure": "0.90",
+        "max_trade_fraction_of_cash": "0.9999"
+      },
+      "execution": {
+        "lot_sizes": {},
+        "price_quantum": "0.01",
+        "default_lot_size": "1",
+        "min_trade_notional_usd": "1"
+      },
+      "policy_version": "portfolio_allocation.v1",
+      "evidence_policy": {
+        "stale_snapshot": "block_new_risk",
+        "unknown_sector": "label_only",
+        "insufficient_evidence": "retain_cash",
+        "missing_correlation_history": "label_only"
+      },
+      "risk_statistics": {
+        "covariance_min_observations": 20,
+        "covariance_max_history_age_days": 7
+      },
+      "investment_horizon_days": 30,
+      "max_snapshot_age_seconds": 900
+    },
+    "transaction_costs": {
+      "bps": "10",
+      "note": "Costs are a planning estimate. Transaction.fee is left NULL because no broker fee was recorded; NULL is not zero.",
+      "source": "declared_assumption_not_broker_quote",
+      "model_version": "linear_bps.v1",
+      "minimum_fee_usd": "0",
+      "fixed_per_trade_usd": "0"
+    },
+    "candidate_cases": [
+      {
+        "ticker": "MSFT",
+        "action": "BUY",
+        "evidence_sufficient": true,
+        "claim_ids": [
+          "phase4-msft-cloud-demand"
+        ],
+        "rationale": "Cloud demand and operating leverage remain strong; the case is favourable but it is a second technology name."
+      },
+      {
+        "ticker": "JPM",
+        "action": "BUY",
+        "evidence_sufficient": true,
+        "claim_ids": [
+          "phase4-jpm-rate-spread"
+        ],
+        "rationale": "Higher-for-longer rates support net interest income; the name diversifies away from technology."
+      },
+      {
+        "ticker": "XYZ",
+        "action": "BUY",
+        "evidence_sufficient": true,
+        "claim_ids": [
+          "phase4-xyz-approval-moat"
+        ],
+        "rationale": "A small healthcare position improves diversification; position size is deliberately small."
+      }
+    ],
+    "risk_statistics": {
+      "method_version": "covariance.sample_daily_returns.v1",
+      "status": "computed",
+      "frequency": "daily",
+      "return_definition": "simple_close_to_close",
+      "history_source": "fixture",
+      "observation_window": {
+        "end": "2026-11-11",
+        "start": "2026-10-03"
+      },
+      "min_observations": 20,
+      "annualisation": null,
+      "pairs": [
+        {
+          "window": {
+            "end": "2026-11-11",
+            "start": "2026-10-03"
+          },
+          "ticker_a": "AAPL",
+          "ticker_b": "JPM",
+          "observations": 39
+        },
+        {
+          "window": {
+            "end": "2026-11-11",
+            "start": "2026-10-03"
+          },
+          "ticker_a": "AAPL",
+          "ticker_b": "MSFT",
+          "observations": 39
+        },
+        {
+          "window": {
+            "end": "2026-11-11",
+            "start": "2026-10-03"
+          },
+          "ticker_a": "AAPL",
+          "ticker_b": "XYZ",
+          "observations": 39
+        },
+        {
+          "window": {
+            "end": "2026-11-11",
+            "start": "2026-10-03"
+          },
+          "ticker_a": "JPM",
+          "ticker_b": "MSFT",
+          "observations": 39
+        },
+        {
+          "window": {
+            "end": "2026-11-11",
+            "start": "2026-10-03"
+          },
+          "ticker_a": "JPM",
+          "ticker_b": "XYZ",
+          "observations": 39
+        },
+        {
+          "window": {
+            "end": "2026-11-11",
+            "start": "2026-10-03"
+          },
+          "ticker_a": "MSFT",
+          "ticker_b": "XYZ",
+          "observations": 39
+        }
+      ],
+      "correlation": [
+        {
+          "value": "0.999879",
+          "window": {
+            "end": "2026-11-11",
+            "start": "2026-10-03"
+          },
+          "quality": "ok",
+          "ticker_a": "AAPL",
+          "ticker_b": "JPM",
+          "observations": 39
+        },
+        {
+          "value": "0.999967",
+          "window": {
+            "end": "2026-11-11",
+            "start": "2026-10-03"
+          },
+          "quality": "ok",
+          "ticker_a": "AAPL",
+          "ticker_b": "MSFT",
+          "observations": 39
+        },
+        {
+          "value": "0.999862",
+          "window": {
+            "end": "2026-11-11",
+            "start": "2026-10-03"
+          },
+          "quality": "ok",
+          "ticker_a": "AAPL",
+          "ticker_b": "XYZ",
+          "observations": 39
+        },
+        {
+          "value": "0.999966",
+          "window": {
+            "end": "2026-11-11",
+            "start": "2026-10-03"
+          },
+          "quality": "ok",
+          "ticker_a": "JPM",
+          "ticker_b": "MSFT",
+          "observations": 39
+        },
+        {
+          "value": "0.999999",
+          "window": {
+            "end": "2026-11-11",
+            "start": "2026-10-03"
+          },
+          "quality": "ok",
+          "ticker_a": "JPM",
+          "ticker_b": "XYZ",
+          "observations": 39
+        },
+        {
+          "value": "0.999955",
+          "window": {
+            "end": "2026-11-11",
+            "start": "2026-10-03"
+          },
+          "quality": "ok",
+          "ticker_a": "MSFT",
+          "ticker_b": "XYZ",
+          "observations": 39
+        }
+      ],
+      "missing_pairs": [],
+      "quality_flags": []
+    },
+    "data_quality": {
+      "flags": [],
+      "snapshot_stale": false,
+      "sector_coverage": {
+        "status": "complete",
+        "coverage_pct": "100.00",
+        "known_value_usd": "10000.00",
+        "positions_value_usd": "10000.00",
+        "unclassified_value_usd": "0.00"
+      },
+      "missing_correlation_history": false,
+      "insufficient_evidence": false,
+      "policy_actions": [],
+      "source": {
+        "prices": "input_snapshot",
+        "sector": "explicit_portfolio_classification_lookup",
+        "theses": "open_position_thesis_rows",
+        "holdings": "input_snapshot",
+        "candidate_cases": "fixture",
+        "risk_statistics": "fixture"
+      }
+    }
+  },
+  "targets": {
+    "requested_target_weights": {
+      "JPM": "0.150000",
+      "XYZ": "0.050000",
+      "AAPL": "0.200000",
+      "CASH": "0.350000",
+      "MSFT": "0.250000"
+    },
+    "requested_sum": "1.000000",
+    "target_weights": {
+      "JPM": "0.150000",
+      "XYZ": "0.050000",
+      "AAPL": "0.200000",
+      "CASH": "0.600000",
+      "MSFT": "0"
+    },
+    "target_weights_sum": "1.000000",
+    "deviations": [
+      {
+        "code": "max_sector_weight_new_risk",
+        "limit": "0.3997000",
+        "detail": "MSFT would open a new position in sector 'technology', which is already over the 0.40 ceiling (effective 0.3997000 after the cost reserve). New risk in that sector was declined; the weight went to cash.",
+        "sector": "technology",
+        "ticker": "MSFT",
+        "applied_weight": "0",
+        "requested_weight": "0.250000"
+      },
+      {
+        "code": "lot_rounding",
+        "detail": "JPM requested 3000.00 of new value; the plan buys 2880.00 because lot_rounding limited it. Cash buffer 2000.00, per-trade budget 15992.40.",
+        "ticker": "JPM",
+        "applied_weight": "0.144",
+        "requested_weight": "0.150000"
+      },
+      {
+        "code": "lot_rounding",
+        "detail": "XYZ requested 1000.00 of new value; the plan buys 990.00 because lot_rounding limited it. Cash buffer 2000.00, per-trade budget 13109.81.",
+        "ticker": "XYZ",
+        "applied_weight": "0.0495",
+        "requested_weight": "0.050000"
+      },
+      {
+        "code": "funding_source_differs",
+        "detail": "The proposal declared funding_source='cash_and_sales', but the executable plan uses 'cash'."
+      }
+    ]
+  },
+  "plan": {
+    "plan_id": "63bbc597-19a5-4d98-b660-4cbffdd22b0f",
+    "status": "applied",
+    "protocol_version": "portfolio_allocation.v1",
+    "policy_version": "portfolio_allocation.v1",
+    "proposal_portfolio_version": "pv-66e79da9ff4deab76d62317f",
+    "evaluated_portfolio_version": "pv-66e79da9ff4deab76d62317f",
+    "requested_target_weights": {
+      "JPM": "0.150000",
+      "XYZ": "0.050000",
+      "AAPL": "0.200000",
+      "CASH": "0.350000",
+      "MSFT": "0.250000"
+    },
+    "target_weights": {
+      "JPM": "0.150000",
+      "XYZ": "0.050000",
+      "AAPL": "0.200000",
+      "CASH": "0.600000",
+      "MSFT": "0"
+    },
+    "target_weights_sum": "1.000000",
+    "funding_source": "cash_and_sales",
+    "funding": {
+      "note": "Buy legs are funded from the planned sell proceeds in sequence. At apply time every selling leg is revalidated and applied before any buying leg; a failed sale halts the plan and its proceeds are not treated as available.",
+      "source": "cash",
+      "min_cash_usd": "2000.00",
+      "buy_spend_usd": "3873.87",
+      "ending_cash_usd": "12120.13",
+      "sell_proceeds_usd": "5994.00",
+      "starting_cash_usd": "10000.00",
+      "estimated_costs_usd": "9.87",
+      "assumes_sell_proceeds": true
+    },
+    "deviations": [
+      {
+        "code": "max_sector_weight_new_risk",
+        "limit": "0.3997000",
+        "detail": "MSFT would open a new position in sector 'technology', which is already over the 0.40 ceiling (effective 0.3997000 after the cost reserve). New risk in that sector was declined; the weight went to cash.",
+        "sector": "technology",
+        "ticker": "MSFT",
+        "applied_weight": "0",
+        "requested_weight": "0.250000"
+      },
+      {
+        "code": "lot_rounding",
+        "detail": "JPM requested 3000.00 of new value; the plan buys 2880.00 because lot_rounding limited it. Cash buffer 2000.00, per-trade budget 15992.40.",
+        "ticker": "JPM",
+        "applied_weight": "0.144",
+        "requested_weight": "0.150000"
+      },
+      {
+        "code": "lot_rounding",
+        "detail": "XYZ requested 1000.00 of new value; the plan buys 990.00 because lot_rounding limited it. Cash buffer 2000.00, per-trade budget 13109.81.",
+        "ticker": "XYZ",
+        "applied_weight": "0.0495",
+        "requested_weight": "0.050000"
+      },
+      {
+        "code": "funding_source_differs",
+        "detail": "The proposal declared funding_source='cash_and_sales', but the executable plan uses 'cash'."
+      }
+    ],
+    "constraints": {
+      "method_version": "deterministic_constrained_projection.v1",
+      "objective_version": "constrained_capital_allocation.v1",
+      "solver": {
+        "note": "The model proposes weights; this layer projects them into the feasible set. There is no mean-variance or expected-return objective.",
+        "type": "deterministic_projection",
+        "method": "deterministic_constrained_projection.v1",
+        "not_an_optimizer": true
+      },
+      "covariance_method_version": "covariance.sample_daily_returns.v1",
+      "checks": {
+        "cash_buffer": {
+          "status": "pass",
+          "min_cash_weight": "0.1006750",
+          "observed_cash_weight": "0.600000",
+          "policy_min_cash_weight": "0.10"
+        },
+        "max_turnover": {
+          "limit": "1.00",
+          "status": "pass",
+          "observed": "0.500000"
+        },
+        "max_name_weight": {
+          "limit": "0.2997750",
+          "status": "pass",
+          "per_name": [
+            {
+              "limit": "0.2997750",
+              "status": "pass",
+              "ticker": "AAPL",
+              "observed": "0.200000",
+              "policy_limit": "0.30"
+            },
+            {
+              "limit": "0.2997750",
+              "status": "pass",
+              "ticker": "JPM",
+              "observed": "0.150000",
+              "policy_limit": "0.30"
+            },
+            {
+              "limit": "0.2997750",
+              "status": "pass",
+              "ticker": "MSFT",
+              "observed": "0",
+              "policy_limit": "0.30"
+            },
+            {
+              "limit": "0.2997750",
+              "status": "pass",
+              "ticker": "XYZ",
+              "observed": "0.050000",
+              "policy_limit": "0.30"
+            }
+          ],
+          "policy_limit": "0.30"
+        },
+        "max_sector_weight": {
+          "limit": "0.3997000",
+          "status": "pass",
+          "per_sector": [
+            {
+              "limit": "0.3997000",
+              "sector": "financials",
+              "status": "pass",
+              "observed": "0.150000",
+              "policy_limit": "0.40"
+            },
+            {
+              "limit": "0.3997000",
+              "sector": "healthcare",
+              "status": "pass",
+              "observed": "0.050000",
+              "policy_limit": "0.40"
+            },
+            {
+              "limit": "0.3997000",
+              "sector": "technology",
+              "status": "pass",
+              "observed": "0.200000",
+              "policy_limit": "0.40"
+            }
+          ],
+          "policy_limit": "0.40",
+          "not_evaluated": []
+        },
+        "max_total_exposure": {
+          "limit": "0.90",
+          "status": "pass",
+          "observed": "0.400000",
+          "effective_limit": "0.8993250"
+        }
+      },
+      "cost_reserve_fraction": "0.00075"
+    },
+    "equity_usd": "20000.00",
+    "cash_usd": "10000.00",
+    "min_cash_usd": "2000.00",
+    "estimated_cost_usd": "9.87",
+    "estimated_turnover_pct": "49.3500",
+    "revalidation_required": false,
+    "legs": [
+      {
+        "leg_id": 52,
+        "sequence": 1,
+        "ticker": "AAPL",
+        "side": "SELL",
+        "quantity": "60.00000000",
+        "price": "100.00000000",
+        "notional_usd": "6000.00",
+        "estimated_cost_usd": "6.00",
+        "priority": "risk_reducing",
+        "sector": "technology",
+        "asset_class": "equity",
+        "status": "applied",
+        "transaction_id": 95,
+        "reason": "Approved SELL of 60.00000000 AAPL."
+      },
+      {
+        "leg_id": 53,
+        "sequence": 2,
+        "ticker": "JPM",
+        "side": "BUY",
+        "quantity": "18.00000000",
+        "price": "160.00000000",
+        "notional_usd": "2880.00",
+        "estimated_cost_usd": "2.88",
+        "priority": "new_risk",
+        "sector": "financials",
+        "asset_class": "equity",
+        "status": "applied",
+        "transaction_id": 96,
+        "reason": "Approved BUY of 18.00000000 JPM."
+      },
+      {
+        "leg_id": 54,
+        "sequence": 3,
+        "ticker": "XYZ",
+        "side": "BUY",
+        "quantity": "11.00000000",
+        "price": "90.00000000",
+        "notional_usd": "990.00",
+        "estimated_cost_usd": "0.99",
+        "priority": "new_risk",
+        "sector": "healthcare",
+        "asset_class": "equity",
+        "status": "applied",
+        "transaction_id": 97,
+        "reason": "Approved BUY of 11.00000000 XYZ."
+      }
+    ],
+    "model_metadata": {
+      "provider": "stub",
+      "model": "stub-model",
+      "prompt_template_version": "portfolio_targets.v1",
+      "cost_reported": false,
+      "input_tokens": 4728,
+      "output_tokens": 555,
+      "repair_attempts": 0
+    }
+  },
+  "application": {
+    "plan_status": "applied",
+    "transaction_ids": [
+      95,
+      96,
+      97
+    ],
+    "portfolio_cash_after": "12130.00",
+    "holdings_after": [
+      {
+        "ticker": "AAPL",
+        "quantity": "40.00000000"
+      },
+      {
+        "ticker": "JPM",
+        "quantity": "18.00000000"
+      },
+      {
+        "ticker": "XYZ",
+        "quantity": "11.00000000"
+      }
+    ],
+    "ledger_rows_for_portfolio": 3
+  }
+}

@@ -22,7 +22,26 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-__all__ = ["canonical_json", "content_hash", "json_safe", "sha256_hex", "utc_iso"]
+__all__ = [
+    "canonical_json",
+    "content_hash",
+    "decimal_string",
+    "json_safe",
+    "sha256_hex",
+    "utc_iso",
+]
+
+
+def decimal_string(value: Decimal) -> str:
+    """Fixed-point decimal text, with zero always rendered as ``"0"``.
+
+    ``str(Decimal("0E-8"))`` is ``"0E-8"``, which is a valid Decimal but a poor
+    wire value for a weight and a poor thing to show a reviewer. Quantising zero
+    to eight places should read as zero, not as an exponent.
+    """
+    if value == 0:
+        return "0"
+    return format(value, "f")
 
 
 def json_safe(value: Any) -> Any:

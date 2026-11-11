@@ -58,6 +58,7 @@ ignore = [
 "core/decision_views.py" = ["RUF012"]
 "core/experiment_views.py" = ["RUF012"]
 "core/measurement_models.py" = ["RUF012", "DJ001"]
+"core/allocation_models.py" = ["RUF012", "DJ001"]
 "core/serializers.py" = ["RUF012"]
 "core/views.py" = ["RUF012"]
 "core/admin.py" = ["RUF012"]

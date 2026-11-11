@@ -420,6 +420,56 @@ DEBATE_CONFIG = {
     "MAX_EVIDENCE_ITEMS": env_int("AI_DEBATE_MAX_EVIDENCE_ITEMS", 20),
 }
 
+# ---------------------------------------------------------------------------
+# Phase 4 - portfolio allocation policy (PORT-01 - PORT-05)
+#
+# The arithmetic limits that are specific to one portfolio live on ``Portfolio``
+# (``max_sector_concentration_pct``, ``max_turnover_pct``,
+# ``min_cash_buffer_pct``) so a holder can see and change them. The values here
+# are the estimation and evidence-policy defaults, not portfolio limits:
+#
+#   COST_BPS / FIXED_COST_USD
+#       Declared transaction-cost assumptions. They are an *estimate* used for
+#       sizing and funding. The execution guard has no broker-fee source, so a
+#       fill's ``Transaction.fee`` stays NULL; a planning estimate is never
+#       written as a measured fee.
+#   COVARIANCE_MIN_OBSERVATIONS
+#       Below this, a pair's correlation/covariance is null with a quality flag.
+#       The number is a judgement, not a derived statistic; it is published in
+#       every brief so a reader can see how many observations produced a value.
+#   *_POLICY
+#       What a data-quality flag does to the deterministic layer. A stale
+#       snapshot blocks new risk; missing correlation history and insufficient
+#       evidence can retain cash or block new risk. The policy is recorded on the
+#       plan, so a reader can tell whether cash was retained by policy or by the
+#       model's choice.
+# ---------------------------------------------------------------------------
+ALLOCATION_CONFIG = {
+    "COST_MODEL": "linear_bps.v1",
+    "COST_BPS": str(env_decimal("AI_ALLOCATION_COST_BPS", "10")),
+    "FIXED_COST_USD": str(env_decimal("AI_ALLOCATION_FIXED_COST_USD", "0")),
+    "MIN_TRADE_NOTIONAL_USD": str(env_decimal("AI_ALLOCATION_MIN_TRADE_NOTIONAL_USD", "1")),
+    "DEFAULT_LOT_SIZE": str(env_decimal("AI_ALLOCATION_DEFAULT_LOT_SIZE", "1")),
+    "COVARIANCE_MIN_OBSERVATIONS": env_int("AI_ALLOCATION_COVARIANCE_MIN_OBSERVATIONS", 20),
+    "COVARIANCE_MAX_HISTORY_AGE_DAYS": env_int("AI_ALLOCATION_COVARIANCE_MAX_HISTORY_AGE_DAYS", 7),
+    "MAX_SNAPSHOT_AGE_SECONDS": env_int("AI_ALLOCATION_MAX_SNAPSHOT_AGE_SECONDS", 900),
+    "INVESTMENT_HORIZON_DAYS": env_int("AI_ALLOCATION_INVESTMENT_HORIZON_DAYS", 30),
+    "STALE_SNAPSHOT_POLICY": os.environ.get(
+        "AI_ALLOCATION_STALE_SNAPSHOT_POLICY", "block_new_risk"
+    ).strip(),
+    "MISSING_CORRELATION_POLICY": os.environ.get(
+        "AI_ALLOCATION_MISSING_CORRELATION_POLICY", "label_only"
+    ).strip(),
+    "INSUFFICIENT_EVIDENCE_POLICY": os.environ.get(
+        "AI_ALLOCATION_INSUFFICIENT_EVIDENCE_POLICY", "retain_cash"
+    ).strip(),
+    "UNKNOWN_SECTOR_POLICY": os.environ.get(
+        "AI_ALLOCATION_UNKNOWN_SECTOR_POLICY", "label_only"
+    ).strip(),
+    "MAX_CANDIDATE_CASES": env_int("AI_ALLOCATION_MAX_CANDIDATE_CASES", 20),
+    "MAX_CLAIMS_PER_CASE": env_int("AI_ALLOCATION_MAX_CLAIMS_PER_CASE", 10),
+}
+
 # USD per 1M tokens, used to populate AgentDecisionLog.api_cost_usd.
 # USD per million tokens, used only to show an approximate cost on the dashboard.
 # Matched by exact id first, then by longest prefix, so dated variants such as
