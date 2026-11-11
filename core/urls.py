@@ -15,6 +15,9 @@ Decision runs
     GET  /api/decision-runs/<id>/events/       ordered event window (after_seq)
     GET  /api/decision-runs/<id>/export/       redacted versioned JSON bundle
 
+Experiments
+    GET  /api/experiments/<id>/report/         versioned report, built from stored output
+
 Human-in-the-loop
     POST /api/portfolio/analyse/               advisory sweep (no execution)
     GET  /api/portfolio/recommendations/       proposals awaiting a decision
@@ -40,6 +43,7 @@ from core.decision_views import (
     DecisionRunListView,
     DecisionRunMetadataView,
 )
+from core.experiment_views import ExperimentReportView
 from core.views import (
     AdvisorySweepView,
     AgentDecisionLogListView,
@@ -125,6 +129,12 @@ urlpatterns = [
         "decision-runs/<str:run_id>/export/",
         DecisionRunExportView.as_view(),
         name="decision-run-export",
+    ),
+    # -- experiments (Phase 3) -------------------------------------------
+    path(
+        "experiments/<str:experiment_id>/report/",
+        ExperimentReportView.as_view(),
+        name="experiment-report",
     ),
     # -- market data ------------------------------------------------------
     path("market/news/", MarketNewsView.as_view(), name="market-news"),

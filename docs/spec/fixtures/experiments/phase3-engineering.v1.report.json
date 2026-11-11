@@ -1,0 +1,4282 @@
+{
+  "fairness": {
+    "checks": [
+      {
+        "check": "instruments",
+        "status": "match",
+        "declared": [
+          "AAPL",
+          "MSFT",
+          "TSLA"
+        ],
+        "observed": [
+          "AAPL",
+          "MSFT",
+          "TSLA"
+        ]
+      },
+      {
+        "check": "dates",
+        "status": "match",
+        "declared": {
+          "end": "2026-02-11T00:00:00Z",
+          "start": "2026-02-03T00:00:00Z"
+        },
+        "observed_run_count": 3,
+        "runs_outside_window": []
+      },
+      {
+        "basis": "manifest_accounting_fixture",
+        "check": "portfolio_starting_state",
+        "status": "match",
+        "declared": {
+          "cash": "10000.00",
+          "positions": {}
+        },
+        "observed": {
+          "cash": "10000.00",
+          "positions": {}
+        }
+      },
+      {
+        "note": "Compared with the portfolio's current configuration. Historical risk configuration is not versioned, so a match here is necessary but not sufficient for historical equality.",
+        "check": "risk_rules",
+        "status": "match",
+        "declared": {
+          "daily_loss_limit_usd": "500.00",
+          "max_trade_allocation_pct": "5.00",
+          "max_portfolio_exposure_pct": "90.00",
+          "max_ticker_concentration_pct": "30.00"
+        },
+        "observed": {
+          "daily_loss_limit_usd": "500.00",
+          "max_trade_allocation_pct": "5.00",
+          "max_portfolio_exposure_pct": "90.00",
+          "max_ticker_concentration_pct": "30.00"
+        },
+        "mismatched_fields": []
+      },
+      {
+        "check": "execution_assumptions",
+        "status": "match",
+        "declared": {
+          "fee_model": "recorded fees only; NULL means unrecorded",
+          "fill_rule": "first_executable_mark_at_or_after_decision.v1",
+          "slippage_bps": "0",
+          "guard_policy_version": "guard.v1"
+        },
+        "observed_guard_policy_versions": [
+          "guard.v1"
+        ]
+      },
+      {
+        "note": null,
+        "check": "benchmark",
+        "status": "match",
+        "declared": {
+          "ticker": "SPY",
+          "asset_class": "equity",
+          "selection_rule": "declared_equity_benchmark"
+        },
+        "observed_tickers": [
+          "SPY"
+        ]
+      },
+      {
+        "check": "snapshots",
+        "status": "match",
+        "declared": {
+          "uncertainty-msft-2026-02-05": "cd42ab0216409643920567cbe12f3326dfe356e67d8acc77bd03e511536da892",
+          "disagreement-tsla-2026-02-04": "85a1617a86466af62ab8c881eb14f9a234048356c923eb48ac0a5ae0eb25828b",
+          "risk-intervention-aapl-2026-02-03": "1f34b80fa9dd90c9be3b81adad320d5c50c1d999b2a08e02f6c25610fb9eb52e"
+        },
+        "mismatches": []
+      }
+    ],
+    "frozen": {
+      "dates": {
+        "end": "2026-02-11T00:00:00Z",
+        "start": "2026-02-03T00:00:00Z"
+      },
+      "risk_rules": {
+        "daily_loss_limit_usd": "500.00",
+        "max_trade_allocation_pct": "5.00",
+        "max_portfolio_exposure_pct": "90.00",
+        "max_ticker_concentration_pct": "30.00"
+      },
+      "instruments": [
+        "AAPL",
+        "MSFT",
+        "TSLA"
+      ],
+      "snapshot_hashes": {
+        "uncertainty-msft-2026-02-05": "cd42ab0216409643920567cbe12f3326dfe356e67d8acc77bd03e511536da892",
+        "disagreement-tsla-2026-02-04": "85a1617a86466af62ab8c881eb14f9a234048356c923eb48ac0a5ae0eb25828b",
+        "risk-intervention-aapl-2026-02-03": "1f34b80fa9dd90c9be3b81adad320d5c50c1d999b2a08e02f6c25610fb9eb52e"
+      },
+      "trade_opportunities": "One scheduled decision per variant; V0 has no stored deterministic baseline, so its schedule is deliberately not executed.",
+      "execution_assumptions": {
+        "fee_model": "recorded fees only; NULL means unrecorded",
+        "fill_rule": "first_executable_mark_at_or_after_decision.v1",
+        "slippage_bps": "0",
+        "guard_policy_version": "guard.v1"
+      },
+      "starting_portfolio_state": {
+        "cash": "10000.00",
+        "positions": {}
+      }
+    },
+    "reasons": [],
+    "comparable": true,
+    "mismatches": [],
+    "equal_budget": {
+      "note": "Equal budget compares declared caps, not observed spend; a variant that spent less did not necessarily have the same opportunity.",
+      "declared": {
+        "V0": {
+          "max_cost_usd": "1.00",
+          "max_input_tokens": 100000,
+          "max_output_tokens": 20000
+        },
+        "V1": {
+          "max_cost_usd": "1.00",
+          "max_input_tokens": 100000,
+          "max_output_tokens": 20000
+        },
+        "V2": {
+          "max_cost_usd": "1.00",
+          "max_input_tokens": 100000,
+          "max_output_tokens": 20000
+        },
+        "V3": {
+          "max_cost_usd": "1.00",
+          "max_input_tokens": 100000,
+          "max_output_tokens": 20000
+        },
+        "V4": {
+          "max_cost_usd": "1.00",
+          "max_input_tokens": 100000,
+          "max_output_tokens": 20000
+        }
+      },
+      "declared_equal": true,
+      "observed_cost_usd": {
+        "V0": null,
+        "V1": null,
+        "V2": null,
+        "V3": null,
+        "V4": null
+      }
+    },
+    "equal_opportunity": {
+      "note": "Equal opportunity means every implemented variant was scheduled on the same number of independent trade opportunities. Unimplemented variants (V4) are declared and excluded rather than counted as zero opportunities.",
+      "basis": "scheduled_runs_per_implemented_variant",
+      "equal": true,
+      "scheduled": {
+        "V0": 1,
+        "V1": 1,
+        "V2": 1,
+        "V3": 1
+      }
+    },
+    "synthetic_content": true,
+    "model_configuration_checks": [
+      {
+        "status": "not_verifiable",
+        "variant": "V1",
+        "declared": {
+          "model": "synthetic.v1",
+          "provider": "synthetic",
+          "parameters": {}
+        },
+        "recorded": {},
+        "mismatched_fields": []
+      },
+      {
+        "status": "not_verifiable",
+        "variant": "V2",
+        "declared": {
+          "model": "synthetic.v1",
+          "provider": "synthetic",
+          "parameters": {}
+        },
+        "recorded": {},
+        "mismatched_fields": []
+      },
+      {
+        "status": "not_verifiable",
+        "variant": "V3",
+        "declared": {
+          "model": "synthetic.v1",
+          "provider": "synthetic",
+          "parameters": {}
+        },
+        "recorded": {},
+        "mismatched_fields": []
+      }
+    ],
+    "comparable_for_protocol_claims": false
+  },
+  "manifest": {
+    "honesty": {
+      "why": "The three stored decision runs are the Phase 1 synthetic fixtures; no live protocol produced them and no model was called to build this report.",
+      "accounting_note": "The ledger is an explicitly synthetic accounting fixture declared in the manifest. It is not the realised history of the demo account and must not be read as such.",
+      "comparison_note": "Variant labels exercise the harness. They do not compare protocol quality.",
+      "survivorship_bias": "Three large-cap US equities were selected by hand. Delisted, acquired and failed companies are absent, so the sample is survivorship-biased.",
+      "all_runs_synthetic": true,
+      "pretraining_contamination": "Unknown and unmeasured: no LLM was called for these stored runs, and no model/pretraining window is recorded.",
+      "accounting_fixture_synthetic": true
+    },
+    "checksum": "5e984b5a949d18c0f42e32f8c77e6a8dfd19499e2c89ad801aee8592c7bb3284",
+    "benchmark": {
+      "ticker": "SPY",
+      "asset_class": "equity",
+      "selection_rule": "declared_equity_benchmark"
+    },
+    "source_path": "docs/spec/fixtures/experiments/phase3-engineering.v1.json",
+    "schema_version": "1.0",
+    "manifest_version": 1,
+    "accounting_source": "manifest_fixture"
+  },
+  "variants": [
+    {
+      "key": "V0",
+      "label": "Deterministic baseline",
+      "notes": [
+        "Signal results are variant-level; portfolio performance is not.",
+        "A variant with zero completed runs has distinct null results, not zero results."
+      ],
+      "budget": {
+        "max_cost_usd": "1.00",
+        "max_input_tokens": 100000,
+        "max_output_tokens": 20000
+      },
+      "counts": {
+        "failed": 0,
+        "attempted": 0,
+        "cancelled": 0,
+        "completed": 0,
+        "scheduled": 1,
+        "not_executed": 1
+      },
+      "engine": "deterministic_baseline",
+      "status": "no_completed_runs",
+      "evidence": {
+        "note": "Coverage is pooled over claims, not averaged over runs: an average of run-level ratios gives a one-claim run the same weight as a ten-claim run.",
+        "total_claims": 0,
+        "claims_with_evidence": 0,
+        "claims_without_evidence": 0,
+        "evidence_coverage_ratio": null,
+        "unsupported_claim_flags": [],
+        "claims_citing_evidence_unavailable_at_cutoff": []
+      },
+      "turnover": {
+        "note": "Trades are attributed to a variant only through the linked decision log's transaction. A variant did not have an isolated account, so turnover uses the shared experiment average equity as its denominator.",
+        "trade_count": 0,
+        "turnover_basis": "shared_experiment_average_equity",
+        "turnover_ratio": "0.0000",
+        "traded_notional_usd": "0.00"
+      },
+      "denominator": {
+        "rule": "all_scheduled_runs",
+        "scheduled": 1
+      },
+      "description": "No LLM. The deterministic engine's proposal is the baseline every model variant has to beat.",
+      "implemented": true,
+      "operational": {
+        "tokens": {
+          "input": null,
+          "output": null,
+          "missing_runs": 1,
+          "reported_runs": 0
+        },
+        "latency_ms": {
+          "max": null,
+          "mean": null,
+          "missing_runs": 1,
+          "reported_runs": 0
+        },
+        "api_cost_usd": null,
+        "cost_complete": false,
+        "failure_codes": {},
+        "attempted_runs": 0,
+        "cost_missing_runs": 1,
+        "cost_reported_runs": 0,
+        "completed_runs_used": 0
+      },
+      "status_reason": "Scheduled runs exist but none completed.",
+      "primary_metric": {
+        "id": "mean_action_score_pct",
+        "note": "The interval is a seeded time-block bootstrap over dependent observations. It is a sampling interval, not a promise of future profitability.",
+        "unit": "pct",
+        "value": null,
+        "family": "signal_diagnostics",
+        "interval": {
+          "seed": 20260210,
+          "lower": null,
+          "upper": null,
+          "method": "time_block_bootstrap",
+          "reason": "fewer_than_two_observations",
+          "resamples": 0,
+          "statistic": "mean",
+          "block_size": 2,
+          "confidence": "0.95"
+        },
+        "direction": "higher_is_better",
+        "description": "Mean signed action score at the 7-day horizon (BUY=forward, SELL=-forward, HOLD=0 by convention).",
+        "horizon_days": 7,
+        "observations": 0,
+        "pre_registered": true,
+        "interval_reason": "fewer_than_two_observations",
+        "sample_sufficient": false,
+        "interval_established": false,
+        "minimum_observations": 2,
+        "profitability_threshold": null
+      },
+      "failure_rate_pct": "0.0",
+      "protocol_version": "heuristic_fallback.v1",
+      "requires_rebuttals": false,
+      "signal_diagnostics": {
+        "note": "Forward returns and hit rates are analytical measures of decision quality. They are not portfolio performance and are not additive.",
+        "rows_count": 0,
+        "unresolved": {
+          "runs": [],
+          "count": 0,
+          "by_maturity": {},
+          "runs_without_outcomes": 0
+        },
+        "method_version": "signal_diagnostics.v1",
+        "summary_by_horizon": {
+          "1": {
+            "hits": 0,
+            "cohort": null,
+            "pending": 0,
+            "summable": false,
+            "by_action": {
+              "BUY": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "HOLD": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": true
+              },
+              "SELL": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "OTHER": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              }
+            },
+            "evaluated": 0,
+            "hold_rows": 0,
+            "unavailable": 0,
+            "hit_rate_pct": null,
+            "horizon_days": 1,
+            "not_recorded": 0,
+            "observations": 0,
+            "metric_family": "signal_diagnostics",
+            "method_versions": [],
+            "directional_calls": 0,
+            "execution_statuses": {},
+            "sum_rejected_reason": "Per-decision scores cover overlapping windows and unequal position sizes; their sum is not a portfolio return and no total is provided.",
+            "hit_rate_denominator": 0,
+            "mean_action_score_pct": null,
+            "include_counterfactual": false,
+            "action_score_definition": "BUY score = forward return; SELL score = -forward return; HOLD score = 0 by convention and makes no directional claim.",
+            "hold_zero_is_convention": true,
+            "matched_benchmark_pairs": 0,
+            "mean_forward_return_pct": null,
+            "mean_benchmark_return_pct": null,
+            "mean_action_relative_return_pct": null,
+            "mean_relative_forward_return_pct": null,
+            "mean_directional_action_score_pct": null,
+            "unmatched_benchmark_rows_excluded": 0,
+            "mean_action_score_includes_hold_zero_rows": true
+          },
+          "7": {
+            "hits": 0,
+            "cohort": null,
+            "pending": 0,
+            "summable": false,
+            "by_action": {
+              "BUY": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "HOLD": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": true
+              },
+              "SELL": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "OTHER": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              }
+            },
+            "evaluated": 0,
+            "hold_rows": 0,
+            "unavailable": 0,
+            "hit_rate_pct": null,
+            "horizon_days": 7,
+            "not_recorded": 0,
+            "observations": 0,
+            "metric_family": "signal_diagnostics",
+            "method_versions": [],
+            "directional_calls": 0,
+            "execution_statuses": {},
+            "sum_rejected_reason": "Per-decision scores cover overlapping windows and unequal position sizes; their sum is not a portfolio return and no total is provided.",
+            "hit_rate_denominator": 0,
+            "mean_action_score_pct": null,
+            "include_counterfactual": false,
+            "action_score_definition": "BUY score = forward return; SELL score = -forward return; HOLD score = 0 by convention and makes no directional claim.",
+            "hold_zero_is_convention": true,
+            "matched_benchmark_pairs": 0,
+            "mean_forward_return_pct": null,
+            "mean_benchmark_return_pct": null,
+            "mean_action_relative_return_pct": null,
+            "mean_relative_forward_return_pct": null,
+            "mean_directional_action_score_pct": null,
+            "unmatched_benchmark_rows_excluded": 0,
+            "mean_action_score_includes_hold_zero_rows": true
+          },
+          "30": {
+            "hits": 0,
+            "cohort": null,
+            "pending": 0,
+            "summable": false,
+            "by_action": {
+              "BUY": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "HOLD": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": true
+              },
+              "SELL": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "OTHER": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              }
+            },
+            "evaluated": 0,
+            "hold_rows": 0,
+            "unavailable": 0,
+            "hit_rate_pct": null,
+            "horizon_days": 30,
+            "not_recorded": 0,
+            "observations": 0,
+            "metric_family": "signal_diagnostics",
+            "method_versions": [],
+            "directional_calls": 0,
+            "execution_statuses": {},
+            "sum_rejected_reason": "Per-decision scores cover overlapping windows and unequal position sizes; their sum is not a portfolio return and no total is provided.",
+            "hit_rate_denominator": 0,
+            "mean_action_score_pct": null,
+            "include_counterfactual": false,
+            "action_score_definition": "BUY score = forward return; SELL score = -forward return; HOLD score = 0 by convention and makes no directional claim.",
+            "hold_zero_is_convention": true,
+            "matched_benchmark_pairs": 0,
+            "mean_forward_return_pct": null,
+            "mean_benchmark_return_pct": null,
+            "mean_action_relative_return_pct": null,
+            "mean_relative_forward_return_pct": null,
+            "mean_directional_action_score_pct": null,
+            "unmatched_benchmark_rows_excluded": 0,
+            "mean_action_score_includes_hold_zero_rows": true
+          }
+        },
+        "counterfactual_rows": 0,
+        "proposal_vs_executed": {
+          "counts": [],
+          "hold_observations": 0,
+          "executed_observations": 0,
+          "rejected_counterfactual_rows": 0,
+          "directional_not_executed_observations": 0
+        }
+      },
+      "completion_rate_pct": "0.0",
+      "model_configuration": {
+        "note": "Every LLM variant names its provider, model and parameters in the manifest so a comparison cannot silently change model mid-experiment.",
+        "source": "not_declared",
+        "declared": {}
+      },
+      "unimplemented_reason": null,
+      "portfolio_performance": {
+        "value": null,
+        "reason": "Variants were not executed in isolated accounts, and per-decision scores cannot be summed into a portfolio return. Portfolio performance is published once for the experiment account and is not attributed to a variant.",
+        "available": false,
+        "experiment_level_reference": "portfolio_performance"
+      },
+      "recorded_model_configuration": {},
+      "action_changes_after_rebuttal": {
+        "note": "The protocol does not store a pre-rebuttal action, so this is a declared proxy: the final action differs from the initial cases' directional lean and at least one rebuttal declared a position change. It is not a recorded action diff.",
+        "basis": "final_action_vs_initial_case_lean.v1",
+        "affected_runs": [],
+        "runs_with_rebuttals": 0,
+        "declared_position_changes": 0,
+        "action_changes_after_rebuttal": 0
+      }
+    },
+    {
+      "key": "V1",
+      "label": "One analyst",
+      "notes": [
+        "Signal results are variant-level; portfolio performance is not.",
+        "A variant with zero completed runs has distinct null results, not zero results."
+      ],
+      "budget": {
+        "max_cost_usd": "1.00",
+        "max_input_tokens": 100000,
+        "max_output_tokens": 20000
+      },
+      "counts": {
+        "failed": 0,
+        "attempted": 1,
+        "cancelled": 0,
+        "completed": 1,
+        "scheduled": 1,
+        "not_executed": 0
+      },
+      "engine": "single_agent",
+      "status": "measured",
+      "evidence": {
+        "note": "Coverage is pooled over claims, not averaged over runs: an average of run-level ratios gives a one-claim run the same weight as a ten-claim run.",
+        "total_claims": 3,
+        "claims_with_evidence": 3,
+        "claims_without_evidence": 0,
+        "evidence_coverage_ratio": "1.0000",
+        "unsupported_claim_flags": [],
+        "claims_citing_evidence_unavailable_at_cutoff": []
+      },
+      "turnover": {
+        "note": "Trades are attributed to a variant only through the linked decision log's transaction. A variant did not have an isolated account, so turnover uses the shared experiment average equity as its denominator.",
+        "trade_count": 0,
+        "turnover_basis": "shared_experiment_average_equity",
+        "turnover_ratio": "0.0000",
+        "traded_notional_usd": "0.00"
+      },
+      "denominator": {
+        "rule": "all_scheduled_runs",
+        "scheduled": 1
+      },
+      "description": "One analyst, validated proposal, no adversarial round.",
+      "implemented": true,
+      "operational": {
+        "tokens": {
+          "input": null,
+          "output": null,
+          "missing_runs": 1,
+          "reported_runs": 0
+        },
+        "latency_ms": {
+          "max": 75000,
+          "mean": "75000.00",
+          "missing_runs": 0,
+          "reported_runs": 1
+        },
+        "api_cost_usd": null,
+        "cost_complete": false,
+        "failure_codes": {},
+        "attempted_runs": 1,
+        "cost_missing_runs": 1,
+        "cost_reported_runs": 0,
+        "completed_runs_used": 1
+      },
+      "status_reason": null,
+      "primary_metric": {
+        "id": "mean_action_score_pct",
+        "note": "The interval is a seeded time-block bootstrap over dependent observations. It is a sampling interval, not a promise of future profitability.",
+        "unit": "pct",
+        "value": null,
+        "family": "signal_diagnostics",
+        "interval": {
+          "seed": 20260210,
+          "lower": null,
+          "upper": null,
+          "method": "time_block_bootstrap",
+          "reason": "fewer_than_two_observations",
+          "resamples": 0,
+          "statistic": "mean",
+          "block_size": 2,
+          "confidence": "0.95"
+        },
+        "direction": "higher_is_better",
+        "description": "Mean signed action score at the 7-day horizon (BUY=forward, SELL=-forward, HOLD=0 by convention).",
+        "horizon_days": 7,
+        "observations": 0,
+        "pre_registered": true,
+        "interval_reason": "fewer_than_two_observations",
+        "sample_sufficient": false,
+        "interval_established": false,
+        "minimum_observations": 2,
+        "profitability_threshold": null
+      },
+      "failure_rate_pct": "0.0",
+      "protocol_version": "single_agent_baseline.v1",
+      "requires_rebuttals": false,
+      "signal_diagnostics": {
+        "note": "Forward returns and hit rates are analytical measures of decision quality. They are not portfolio performance and are not additive.",
+        "rows_count": 1,
+        "unresolved": {
+          "runs": [
+            "uncertainty-msft-2026-02-05"
+          ],
+          "count": 1,
+          "by_maturity": {
+            "unavailable": 1
+          },
+          "runs_without_outcomes": 0
+        },
+        "method_version": "signal_diagnostics.v1",
+        "summary_by_horizon": {
+          "1": {
+            "hits": 0,
+            "cohort": null,
+            "pending": 0,
+            "summable": false,
+            "by_action": {
+              "BUY": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "HOLD": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 1,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": true
+              },
+              "SELL": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "OTHER": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              }
+            },
+            "evaluated": 0,
+            "hold_rows": 0,
+            "unavailable": 1,
+            "hit_rate_pct": null,
+            "horizon_days": 1,
+            "not_recorded": 0,
+            "observations": 1,
+            "metric_family": "signal_diagnostics",
+            "method_versions": [
+              "attribution.synthetic.v1"
+            ],
+            "directional_calls": 0,
+            "execution_statuses": {
+              "hold_no_trade": 1
+            },
+            "sum_rejected_reason": "Per-decision scores cover overlapping windows and unequal position sizes; their sum is not a portfolio return and no total is provided.",
+            "hit_rate_denominator": 0,
+            "mean_action_score_pct": null,
+            "include_counterfactual": false,
+            "action_score_definition": "BUY score = forward return; SELL score = -forward return; HOLD score = 0 by convention and makes no directional claim.",
+            "hold_zero_is_convention": true,
+            "matched_benchmark_pairs": 0,
+            "mean_forward_return_pct": null,
+            "mean_benchmark_return_pct": null,
+            "mean_action_relative_return_pct": null,
+            "mean_relative_forward_return_pct": null,
+            "mean_directional_action_score_pct": null,
+            "unmatched_benchmark_rows_excluded": 0,
+            "mean_action_score_includes_hold_zero_rows": true
+          },
+          "7": {
+            "hits": 0,
+            "cohort": null,
+            "pending": 0,
+            "summable": false,
+            "by_action": {
+              "BUY": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "HOLD": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": true
+              },
+              "SELL": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "OTHER": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              }
+            },
+            "evaluated": 0,
+            "hold_rows": 0,
+            "unavailable": 0,
+            "hit_rate_pct": null,
+            "horizon_days": 7,
+            "not_recorded": 0,
+            "observations": 0,
+            "metric_family": "signal_diagnostics",
+            "method_versions": [],
+            "directional_calls": 0,
+            "execution_statuses": {},
+            "sum_rejected_reason": "Per-decision scores cover overlapping windows and unequal position sizes; their sum is not a portfolio return and no total is provided.",
+            "hit_rate_denominator": 0,
+            "mean_action_score_pct": null,
+            "include_counterfactual": false,
+            "action_score_definition": "BUY score = forward return; SELL score = -forward return; HOLD score = 0 by convention and makes no directional claim.",
+            "hold_zero_is_convention": true,
+            "matched_benchmark_pairs": 0,
+            "mean_forward_return_pct": null,
+            "mean_benchmark_return_pct": null,
+            "mean_action_relative_return_pct": null,
+            "mean_relative_forward_return_pct": null,
+            "mean_directional_action_score_pct": null,
+            "unmatched_benchmark_rows_excluded": 0,
+            "mean_action_score_includes_hold_zero_rows": true
+          },
+          "30": {
+            "hits": 0,
+            "cohort": null,
+            "pending": 0,
+            "summable": false,
+            "by_action": {
+              "BUY": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "HOLD": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": true
+              },
+              "SELL": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "OTHER": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              }
+            },
+            "evaluated": 0,
+            "hold_rows": 0,
+            "unavailable": 0,
+            "hit_rate_pct": null,
+            "horizon_days": 30,
+            "not_recorded": 0,
+            "observations": 0,
+            "metric_family": "signal_diagnostics",
+            "method_versions": [],
+            "directional_calls": 0,
+            "execution_statuses": {},
+            "sum_rejected_reason": "Per-decision scores cover overlapping windows and unequal position sizes; their sum is not a portfolio return and no total is provided.",
+            "hit_rate_denominator": 0,
+            "mean_action_score_pct": null,
+            "include_counterfactual": false,
+            "action_score_definition": "BUY score = forward return; SELL score = -forward return; HOLD score = 0 by convention and makes no directional claim.",
+            "hold_zero_is_convention": true,
+            "matched_benchmark_pairs": 0,
+            "mean_forward_return_pct": null,
+            "mean_benchmark_return_pct": null,
+            "mean_action_relative_return_pct": null,
+            "mean_relative_forward_return_pct": null,
+            "mean_directional_action_score_pct": null,
+            "unmatched_benchmark_rows_excluded": 0,
+            "mean_action_score_includes_hold_zero_rows": true
+          }
+        },
+        "counterfactual_rows": 0,
+        "proposal_vs_executed": {
+          "counts": [
+            {
+              "count": 1,
+              "executed_action": "NONE",
+              "proposal_action": "HOLD"
+            }
+          ],
+          "hold_observations": 1,
+          "executed_observations": 0,
+          "rejected_counterfactual_rows": 0,
+          "directional_not_executed_observations": 0
+        }
+      },
+      "completion_rate_pct": "100.0",
+      "model_configuration": {
+        "note": "Every LLM variant names its provider, model and parameters in the manifest so a comparison cannot silently change model mid-experiment.",
+        "source": "manifest",
+        "declared": {
+          "model": "synthetic.v1",
+          "provider": "synthetic",
+          "parameters": {}
+        }
+      },
+      "unimplemented_reason": null,
+      "portfolio_performance": {
+        "value": null,
+        "reason": "Variants were not executed in isolated accounts, and per-decision scores cannot be summed into a portfolio return. Portfolio performance is published once for the experiment account and is not attributed to a variant.",
+        "available": false,
+        "experiment_level_reference": "portfolio_performance"
+      },
+      "recorded_model_configuration": {},
+      "action_changes_after_rebuttal": {
+        "note": "The protocol does not store a pre-rebuttal action, so this is a declared proxy: the final action differs from the initial cases' directional lean and at least one rebuttal declared a position change. It is not a recorded action diff.",
+        "basis": "final_action_vs_initial_case_lean.v1",
+        "affected_runs": [],
+        "runs_with_rebuttals": 0,
+        "declared_position_changes": 0,
+        "action_changes_after_rebuttal": 0
+      }
+    },
+    {
+      "key": "V2",
+      "label": "Current pipeline",
+      "notes": [
+        "Signal results are variant-level; portfolio performance is not.",
+        "A variant with zero completed runs has distinct null results, not zero results."
+      ],
+      "budget": {
+        "max_cost_usd": "1.00",
+        "max_input_tokens": 100000,
+        "max_output_tokens": 20000
+      },
+      "counts": {
+        "failed": 0,
+        "attempted": 1,
+        "cancelled": 0,
+        "completed": 1,
+        "scheduled": 1,
+        "not_executed": 0
+      },
+      "engine": "debate",
+      "status": "measured",
+      "evidence": {
+        "note": "Coverage is pooled over claims, not averaged over runs: an average of run-level ratios gives a one-claim run the same weight as a ten-claim run.",
+        "total_claims": 4,
+        "claims_with_evidence": 4,
+        "claims_without_evidence": 0,
+        "evidence_coverage_ratio": "1.0000",
+        "unsupported_claim_flags": [],
+        "claims_citing_evidence_unavailable_at_cutoff": []
+      },
+      "turnover": {
+        "note": "Trades are attributed to a variant only through the linked decision log's transaction. A variant did not have an isolated account, so turnover uses the shared experiment average equity as its denominator.",
+        "trade_count": 0,
+        "turnover_basis": "shared_experiment_average_equity",
+        "turnover_ratio": "0.0000",
+        "traded_notional_usd": "0.00"
+      },
+      "denominator": {
+        "rule": "all_scheduled_runs",
+        "scheduled": 1
+      },
+      "description": "The production debate protocol as currently shipped.",
+      "implemented": true,
+      "operational": {
+        "tokens": {
+          "input": null,
+          "output": null,
+          "missing_runs": 1,
+          "reported_runs": 0
+        },
+        "latency_ms": {
+          "max": 80000,
+          "mean": "80000.00",
+          "missing_runs": 0,
+          "reported_runs": 1
+        },
+        "api_cost_usd": null,
+        "cost_complete": false,
+        "failure_codes": {},
+        "attempted_runs": 1,
+        "cost_missing_runs": 1,
+        "cost_reported_runs": 0,
+        "completed_runs_used": 1
+      },
+      "status_reason": null,
+      "primary_metric": {
+        "id": "mean_action_score_pct",
+        "note": "The interval is a seeded time-block bootstrap over dependent observations. It is a sampling interval, not a promise of future profitability.",
+        "unit": "pct",
+        "value": "-2.0000",
+        "family": "signal_diagnostics",
+        "interval": {
+          "seed": 20260210,
+          "lower": null,
+          "upper": null,
+          "method": "time_block_bootstrap",
+          "reason": "fewer_than_two_observations",
+          "resamples": 0,
+          "statistic": "mean",
+          "block_size": 2,
+          "confidence": "0.95"
+        },
+        "direction": "higher_is_better",
+        "description": "Mean signed action score at the 7-day horizon (BUY=forward, SELL=-forward, HOLD=0 by convention).",
+        "horizon_days": 7,
+        "observations": 1,
+        "pre_registered": true,
+        "interval_reason": "fewer_than_two_observations",
+        "sample_sufficient": false,
+        "interval_established": false,
+        "minimum_observations": 2,
+        "profitability_threshold": null
+      },
+      "failure_rate_pct": "0.0",
+      "protocol_version": "debate.v1",
+      "requires_rebuttals": false,
+      "signal_diagnostics": {
+        "note": "Forward returns and hit rates are analytical measures of decision quality. They are not portfolio performance and are not additive.",
+        "rows_count": 2,
+        "unresolved": {
+          "runs": [
+            "risk-intervention-aapl-2026-02-03"
+          ],
+          "count": 1,
+          "by_maturity": {
+            "pending": 1
+          },
+          "runs_without_outcomes": 0
+        },
+        "method_version": "signal_diagnostics.v1",
+        "summary_by_horizon": {
+          "1": {
+            "hits": 0,
+            "cohort": null,
+            "pending": 1,
+            "summable": false,
+            "by_action": {
+              "BUY": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 1,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "HOLD": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": true
+              },
+              "SELL": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "OTHER": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              }
+            },
+            "evaluated": 0,
+            "hold_rows": 0,
+            "unavailable": 0,
+            "hit_rate_pct": null,
+            "horizon_days": 1,
+            "not_recorded": 0,
+            "observations": 1,
+            "metric_family": "signal_diagnostics",
+            "method_versions": [
+              "attribution.synthetic.v1"
+            ],
+            "directional_calls": 0,
+            "execution_statuses": {
+              "execution_not_recorded": 1
+            },
+            "sum_rejected_reason": "Per-decision scores cover overlapping windows and unequal position sizes; their sum is not a portfolio return and no total is provided.",
+            "hit_rate_denominator": 0,
+            "mean_action_score_pct": null,
+            "include_counterfactual": false,
+            "action_score_definition": "BUY score = forward return; SELL score = -forward return; HOLD score = 0 by convention and makes no directional claim.",
+            "hold_zero_is_convention": true,
+            "matched_benchmark_pairs": 0,
+            "mean_forward_return_pct": null,
+            "mean_benchmark_return_pct": null,
+            "mean_action_relative_return_pct": null,
+            "mean_relative_forward_return_pct": null,
+            "mean_directional_action_score_pct": null,
+            "unmatched_benchmark_rows_excluded": 0,
+            "mean_action_score_includes_hold_zero_rows": true
+          },
+          "7": {
+            "hits": 0,
+            "cohort": null,
+            "pending": 0,
+            "summable": false,
+            "by_action": {
+              "BUY": {
+                "hits": 0,
+                "evaluated": 1,
+                "hit_rate_pct": "0.0",
+                "observations": 1,
+                "directional_calls": 1,
+                "mean_action_score_pct": "-2.0000",
+                "zero_score_is_convention": false
+              },
+              "HOLD": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": true
+              },
+              "SELL": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "OTHER": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              }
+            },
+            "evaluated": 1,
+            "hold_rows": 0,
+            "unavailable": 0,
+            "hit_rate_pct": "0.0",
+            "horizon_days": 7,
+            "not_recorded": 0,
+            "observations": 1,
+            "metric_family": "signal_diagnostics",
+            "method_versions": [
+              "attribution.synthetic.v1"
+            ],
+            "directional_calls": 1,
+            "execution_statuses": {
+              "execution_not_recorded": 1
+            },
+            "sum_rejected_reason": "Per-decision scores cover overlapping windows and unequal position sizes; their sum is not a portfolio return and no total is provided.",
+            "hit_rate_denominator": 1,
+            "mean_action_score_pct": "-2.0000",
+            "include_counterfactual": false,
+            "action_score_definition": "BUY score = forward return; SELL score = -forward return; HOLD score = 0 by convention and makes no directional claim.",
+            "hold_zero_is_convention": true,
+            "matched_benchmark_pairs": 1,
+            "mean_forward_return_pct": "-2.0000",
+            "mean_benchmark_return_pct": "-0.4000",
+            "mean_action_relative_return_pct": "-1.6000",
+            "mean_relative_forward_return_pct": "-1.6000",
+            "mean_directional_action_score_pct": "-2.0000",
+            "unmatched_benchmark_rows_excluded": 0,
+            "mean_action_score_includes_hold_zero_rows": true
+          },
+          "30": {
+            "hits": 0,
+            "cohort": null,
+            "pending": 0,
+            "summable": false,
+            "by_action": {
+              "BUY": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "HOLD": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": true
+              },
+              "SELL": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "OTHER": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              }
+            },
+            "evaluated": 0,
+            "hold_rows": 0,
+            "unavailable": 0,
+            "hit_rate_pct": null,
+            "horizon_days": 30,
+            "not_recorded": 0,
+            "observations": 0,
+            "metric_family": "signal_diagnostics",
+            "method_versions": [],
+            "directional_calls": 0,
+            "execution_statuses": {},
+            "sum_rejected_reason": "Per-decision scores cover overlapping windows and unequal position sizes; their sum is not a portfolio return and no total is provided.",
+            "hit_rate_denominator": 0,
+            "mean_action_score_pct": null,
+            "include_counterfactual": false,
+            "action_score_definition": "BUY score = forward return; SELL score = -forward return; HOLD score = 0 by convention and makes no directional claim.",
+            "hold_zero_is_convention": true,
+            "matched_benchmark_pairs": 0,
+            "mean_forward_return_pct": null,
+            "mean_benchmark_return_pct": null,
+            "mean_action_relative_return_pct": null,
+            "mean_relative_forward_return_pct": null,
+            "mean_directional_action_score_pct": null,
+            "unmatched_benchmark_rows_excluded": 0,
+            "mean_action_score_includes_hold_zero_rows": true
+          }
+        },
+        "counterfactual_rows": 0,
+        "proposal_vs_executed": {
+          "counts": [
+            {
+              "count": 2,
+              "executed_action": "NONE",
+              "proposal_action": "BUY"
+            }
+          ],
+          "hold_observations": 0,
+          "executed_observations": 0,
+          "rejected_counterfactual_rows": 0,
+          "directional_not_executed_observations": 2
+        }
+      },
+      "completion_rate_pct": "100.0",
+      "model_configuration": {
+        "note": "Every LLM variant names its provider, model and parameters in the manifest so a comparison cannot silently change model mid-experiment.",
+        "source": "manifest",
+        "declared": {
+          "model": "synthetic.v1",
+          "provider": "synthetic",
+          "parameters": {}
+        }
+      },
+      "unimplemented_reason": null,
+      "portfolio_performance": {
+        "value": null,
+        "reason": "Variants were not executed in isolated accounts, and per-decision scores cannot be summed into a portfolio return. Portfolio performance is published once for the experiment account and is not attributed to a variant.",
+        "available": false,
+        "experiment_level_reference": "portfolio_performance"
+      },
+      "recorded_model_configuration": {},
+      "action_changes_after_rebuttal": {
+        "note": "The protocol does not store a pre-rebuttal action, so this is a declared proxy: the final action differs from the initial cases' directional lean and at least one rebuttal declared a position change. It is not a recorded action diff.",
+        "basis": "final_action_vs_initial_case_lean.v1",
+        "affected_runs": [],
+        "runs_with_rebuttals": 0,
+        "declared_position_changes": 0,
+        "action_changes_after_rebuttal": 0
+      }
+    },
+    {
+      "key": "V3",
+      "label": "Explicit rebuttal",
+      "notes": [
+        "Signal results are variant-level; portfolio performance is not.",
+        "A variant with zero completed runs has distinct null results, not zero results."
+      ],
+      "budget": {
+        "max_cost_usd": "1.00",
+        "max_input_tokens": 100000,
+        "max_output_tokens": 20000
+      },
+      "counts": {
+        "failed": 0,
+        "attempted": 1,
+        "cancelled": 0,
+        "completed": 1,
+        "scheduled": 1,
+        "not_executed": 0
+      },
+      "engine": "debate_with_rebuttal",
+      "status": "measured",
+      "evidence": {
+        "note": "Coverage is pooled over claims, not averaged over runs: an average of run-level ratios gives a one-claim run the same weight as a ten-claim run.",
+        "total_claims": 4,
+        "claims_with_evidence": 4,
+        "claims_without_evidence": 0,
+        "evidence_coverage_ratio": "1.0000",
+        "unsupported_claim_flags": [],
+        "claims_citing_evidence_unavailable_at_cutoff": []
+      },
+      "turnover": {
+        "note": "Trades are attributed to a variant only through the linked decision log's transaction. A variant did not have an isolated account, so turnover uses the shared experiment average equity as its denominator.",
+        "trade_count": 0,
+        "turnover_basis": "shared_experiment_average_equity",
+        "turnover_ratio": "0.0000",
+        "traded_notional_usd": "0.00"
+      },
+      "denominator": {
+        "rule": "all_scheduled_runs",
+        "scheduled": 1
+      },
+      "description": "Runs whose recorded rebuttal round is present.",
+      "implemented": true,
+      "operational": {
+        "tokens": {
+          "input": null,
+          "output": null,
+          "missing_runs": 1,
+          "reported_runs": 0
+        },
+        "latency_ms": {
+          "max": 90000,
+          "mean": "90000.00",
+          "missing_runs": 0,
+          "reported_runs": 1
+        },
+        "api_cost_usd": null,
+        "cost_complete": false,
+        "failure_codes": {},
+        "attempted_runs": 1,
+        "cost_missing_runs": 1,
+        "cost_reported_runs": 0,
+        "completed_runs_used": 1
+      },
+      "status_reason": null,
+      "primary_metric": {
+        "id": "mean_action_score_pct",
+        "note": "The interval is a seeded time-block bootstrap over dependent observations. It is a sampling interval, not a promise of future profitability.",
+        "unit": "pct",
+        "value": null,
+        "family": "signal_diagnostics",
+        "interval": {
+          "seed": 20260210,
+          "lower": null,
+          "upper": null,
+          "method": "time_block_bootstrap",
+          "reason": "fewer_than_two_observations",
+          "resamples": 0,
+          "statistic": "mean",
+          "block_size": 2,
+          "confidence": "0.95"
+        },
+        "direction": "higher_is_better",
+        "description": "Mean signed action score at the 7-day horizon (BUY=forward, SELL=-forward, HOLD=0 by convention).",
+        "horizon_days": 7,
+        "observations": 0,
+        "pre_registered": true,
+        "interval_reason": "fewer_than_two_observations",
+        "sample_sufficient": false,
+        "interval_established": false,
+        "minimum_observations": 2,
+        "profitability_threshold": null
+      },
+      "failure_rate_pct": "0.0",
+      "protocol_version": "debate.v1",
+      "requires_rebuttals": true,
+      "signal_diagnostics": {
+        "note": "Forward returns and hit rates are analytical measures of decision quality. They are not portfolio performance and are not additive.",
+        "rows_count": 1,
+        "unresolved": {
+          "runs": [
+            "disagreement-tsla-2026-02-04"
+          ],
+          "count": 1,
+          "by_maturity": {
+            "pending": 1
+          },
+          "runs_without_outcomes": 0
+        },
+        "method_version": "signal_diagnostics.v1",
+        "summary_by_horizon": {
+          "1": {
+            "hits": 0,
+            "cohort": null,
+            "pending": 0,
+            "summable": false,
+            "by_action": {
+              "BUY": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "HOLD": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": true
+              },
+              "SELL": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "OTHER": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              }
+            },
+            "evaluated": 0,
+            "hold_rows": 0,
+            "unavailable": 0,
+            "hit_rate_pct": null,
+            "horizon_days": 1,
+            "not_recorded": 0,
+            "observations": 0,
+            "metric_family": "signal_diagnostics",
+            "method_versions": [],
+            "directional_calls": 0,
+            "execution_statuses": {},
+            "sum_rejected_reason": "Per-decision scores cover overlapping windows and unequal position sizes; their sum is not a portfolio return and no total is provided.",
+            "hit_rate_denominator": 0,
+            "mean_action_score_pct": null,
+            "include_counterfactual": false,
+            "action_score_definition": "BUY score = forward return; SELL score = -forward return; HOLD score = 0 by convention and makes no directional claim.",
+            "hold_zero_is_convention": true,
+            "matched_benchmark_pairs": 0,
+            "mean_forward_return_pct": null,
+            "mean_benchmark_return_pct": null,
+            "mean_action_relative_return_pct": null,
+            "mean_relative_forward_return_pct": null,
+            "mean_directional_action_score_pct": null,
+            "unmatched_benchmark_rows_excluded": 0,
+            "mean_action_score_includes_hold_zero_rows": true
+          },
+          "7": {
+            "hits": 0,
+            "cohort": null,
+            "pending": 1,
+            "summable": false,
+            "by_action": {
+              "BUY": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "HOLD": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 1,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": true
+              },
+              "SELL": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "OTHER": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              }
+            },
+            "evaluated": 0,
+            "hold_rows": 0,
+            "unavailable": 0,
+            "hit_rate_pct": null,
+            "horizon_days": 7,
+            "not_recorded": 0,
+            "observations": 1,
+            "metric_family": "signal_diagnostics",
+            "method_versions": [
+              "attribution.synthetic.v1"
+            ],
+            "directional_calls": 0,
+            "execution_statuses": {
+              "hold_no_trade": 1
+            },
+            "sum_rejected_reason": "Per-decision scores cover overlapping windows and unequal position sizes; their sum is not a portfolio return and no total is provided.",
+            "hit_rate_denominator": 0,
+            "mean_action_score_pct": null,
+            "include_counterfactual": false,
+            "action_score_definition": "BUY score = forward return; SELL score = -forward return; HOLD score = 0 by convention and makes no directional claim.",
+            "hold_zero_is_convention": true,
+            "matched_benchmark_pairs": 0,
+            "mean_forward_return_pct": null,
+            "mean_benchmark_return_pct": null,
+            "mean_action_relative_return_pct": null,
+            "mean_relative_forward_return_pct": null,
+            "mean_directional_action_score_pct": null,
+            "unmatched_benchmark_rows_excluded": 0,
+            "mean_action_score_includes_hold_zero_rows": true
+          },
+          "30": {
+            "hits": 0,
+            "cohort": null,
+            "pending": 0,
+            "summable": false,
+            "by_action": {
+              "BUY": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "HOLD": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": true
+              },
+              "SELL": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "OTHER": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              }
+            },
+            "evaluated": 0,
+            "hold_rows": 0,
+            "unavailable": 0,
+            "hit_rate_pct": null,
+            "horizon_days": 30,
+            "not_recorded": 0,
+            "observations": 0,
+            "metric_family": "signal_diagnostics",
+            "method_versions": [],
+            "directional_calls": 0,
+            "execution_statuses": {},
+            "sum_rejected_reason": "Per-decision scores cover overlapping windows and unequal position sizes; their sum is not a portfolio return and no total is provided.",
+            "hit_rate_denominator": 0,
+            "mean_action_score_pct": null,
+            "include_counterfactual": false,
+            "action_score_definition": "BUY score = forward return; SELL score = -forward return; HOLD score = 0 by convention and makes no directional claim.",
+            "hold_zero_is_convention": true,
+            "matched_benchmark_pairs": 0,
+            "mean_forward_return_pct": null,
+            "mean_benchmark_return_pct": null,
+            "mean_action_relative_return_pct": null,
+            "mean_relative_forward_return_pct": null,
+            "mean_directional_action_score_pct": null,
+            "unmatched_benchmark_rows_excluded": 0,
+            "mean_action_score_includes_hold_zero_rows": true
+          }
+        },
+        "counterfactual_rows": 0,
+        "proposal_vs_executed": {
+          "counts": [
+            {
+              "count": 1,
+              "executed_action": "NONE",
+              "proposal_action": "HOLD"
+            }
+          ],
+          "hold_observations": 1,
+          "executed_observations": 0,
+          "rejected_counterfactual_rows": 0,
+          "directional_not_executed_observations": 0
+        }
+      },
+      "completion_rate_pct": "100.0",
+      "model_configuration": {
+        "note": "Every LLM variant names its provider, model and parameters in the manifest so a comparison cannot silently change model mid-experiment.",
+        "source": "manifest",
+        "declared": {
+          "model": "synthetic.v1",
+          "provider": "synthetic",
+          "parameters": {}
+        }
+      },
+      "unimplemented_reason": null,
+      "portfolio_performance": {
+        "value": null,
+        "reason": "Variants were not executed in isolated accounts, and per-decision scores cannot be summed into a portfolio return. Portfolio performance is published once for the experiment account and is not attributed to a variant.",
+        "available": false,
+        "experiment_level_reference": "portfolio_performance"
+      },
+      "recorded_model_configuration": {},
+      "action_changes_after_rebuttal": {
+        "note": "The protocol does not store a pre-rebuttal action, so this is a declared proxy: the final action differs from the initial cases' directional lean and at least one rebuttal declared a position change. It is not a recorded action diff.",
+        "basis": "final_action_vs_initial_case_lean.v1",
+        "affected_runs": [],
+        "runs_with_rebuttals": 1,
+        "declared_position_changes": 2,
+        "action_changes_after_rebuttal": 0
+      }
+    },
+    {
+      "key": "V4",
+      "label": "Portfolio allocation",
+      "notes": [
+        "Signal results are variant-level; portfolio performance is not.",
+        "A variant with zero completed runs has distinct null results, not zero results."
+      ],
+      "budget": {
+        "max_cost_usd": "1.00",
+        "max_input_tokens": 100000,
+        "max_output_tokens": 20000
+      },
+      "counts": {
+        "failed": 0,
+        "attempted": 0,
+        "cancelled": 0,
+        "completed": 0,
+        "scheduled": 0,
+        "not_executed": 0
+      },
+      "engine": "portfolio_allocation",
+      "status": "unimplemented",
+      "evidence": {
+        "note": "Coverage is pooled over claims, not averaged over runs: an average of run-level ratios gives a one-claim run the same weight as a ten-claim run.",
+        "total_claims": 0,
+        "claims_with_evidence": 0,
+        "claims_without_evidence": 0,
+        "evidence_coverage_ratio": null,
+        "unsupported_claim_flags": [],
+        "claims_citing_evidence_unavailable_at_cutoff": []
+      },
+      "turnover": {
+        "note": "Trades are attributed to a variant only through the linked decision log's transaction. A variant did not have an isolated account, so turnover uses the shared experiment average equity as its denominator.",
+        "trade_count": 0,
+        "turnover_basis": "shared_experiment_average_equity",
+        "turnover_ratio": "0.0000",
+        "traded_notional_usd": "0.00"
+      },
+      "denominator": {
+        "rule": "all_scheduled_runs",
+        "scheduled": 0
+      },
+      "description": "Portfolio-level allocation across instruments. Not implemented here.",
+      "implemented": false,
+      "operational": {
+        "tokens": {
+          "input": null,
+          "output": null,
+          "missing_runs": 0,
+          "reported_runs": 0
+        },
+        "latency_ms": {
+          "max": null,
+          "mean": null,
+          "missing_runs": 0,
+          "reported_runs": 0
+        },
+        "api_cost_usd": null,
+        "cost_complete": true,
+        "failure_codes": {},
+        "attempted_runs": 0,
+        "cost_missing_runs": 0,
+        "cost_reported_runs": 0,
+        "completed_runs_used": 0
+      },
+      "status_reason": "Portfolio allocation is Phase 4 scope. The variant is declared and not measured in Phase 3.",
+      "primary_metric": {
+        "id": "mean_action_score_pct",
+        "note": "The interval is a seeded time-block bootstrap over dependent observations. It is a sampling interval, not a promise of future profitability.",
+        "unit": "pct",
+        "value": null,
+        "family": "signal_diagnostics",
+        "interval": {
+          "seed": 20260210,
+          "lower": null,
+          "upper": null,
+          "method": "time_block_bootstrap",
+          "reason": "fewer_than_two_observations",
+          "resamples": 0,
+          "statistic": "mean",
+          "block_size": 2,
+          "confidence": "0.95"
+        },
+        "direction": "higher_is_better",
+        "description": "Mean signed action score at the 7-day horizon (BUY=forward, SELL=-forward, HOLD=0 by convention).",
+        "horizon_days": 7,
+        "observations": 0,
+        "pre_registered": true,
+        "interval_reason": "fewer_than_two_observations",
+        "sample_sufficient": false,
+        "interval_established": false,
+        "minimum_observations": 2,
+        "profitability_threshold": null
+      },
+      "failure_rate_pct": null,
+      "protocol_version": "",
+      "requires_rebuttals": false,
+      "signal_diagnostics": {
+        "note": "Forward returns and hit rates are analytical measures of decision quality. They are not portfolio performance and are not additive.",
+        "rows_count": 0,
+        "unresolved": {
+          "runs": [],
+          "count": 0,
+          "by_maturity": {},
+          "runs_without_outcomes": 0
+        },
+        "method_version": "signal_diagnostics.v1",
+        "summary_by_horizon": {
+          "1": {
+            "hits": 0,
+            "cohort": null,
+            "pending": 0,
+            "summable": false,
+            "by_action": {
+              "BUY": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "HOLD": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": true
+              },
+              "SELL": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "OTHER": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              }
+            },
+            "evaluated": 0,
+            "hold_rows": 0,
+            "unavailable": 0,
+            "hit_rate_pct": null,
+            "horizon_days": 1,
+            "not_recorded": 0,
+            "observations": 0,
+            "metric_family": "signal_diagnostics",
+            "method_versions": [],
+            "directional_calls": 0,
+            "execution_statuses": {},
+            "sum_rejected_reason": "Per-decision scores cover overlapping windows and unequal position sizes; their sum is not a portfolio return and no total is provided.",
+            "hit_rate_denominator": 0,
+            "mean_action_score_pct": null,
+            "include_counterfactual": false,
+            "action_score_definition": "BUY score = forward return; SELL score = -forward return; HOLD score = 0 by convention and makes no directional claim.",
+            "hold_zero_is_convention": true,
+            "matched_benchmark_pairs": 0,
+            "mean_forward_return_pct": null,
+            "mean_benchmark_return_pct": null,
+            "mean_action_relative_return_pct": null,
+            "mean_relative_forward_return_pct": null,
+            "mean_directional_action_score_pct": null,
+            "unmatched_benchmark_rows_excluded": 0,
+            "mean_action_score_includes_hold_zero_rows": true
+          },
+          "7": {
+            "hits": 0,
+            "cohort": null,
+            "pending": 0,
+            "summable": false,
+            "by_action": {
+              "BUY": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "HOLD": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": true
+              },
+              "SELL": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "OTHER": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              }
+            },
+            "evaluated": 0,
+            "hold_rows": 0,
+            "unavailable": 0,
+            "hit_rate_pct": null,
+            "horizon_days": 7,
+            "not_recorded": 0,
+            "observations": 0,
+            "metric_family": "signal_diagnostics",
+            "method_versions": [],
+            "directional_calls": 0,
+            "execution_statuses": {},
+            "sum_rejected_reason": "Per-decision scores cover overlapping windows and unequal position sizes; their sum is not a portfolio return and no total is provided.",
+            "hit_rate_denominator": 0,
+            "mean_action_score_pct": null,
+            "include_counterfactual": false,
+            "action_score_definition": "BUY score = forward return; SELL score = -forward return; HOLD score = 0 by convention and makes no directional claim.",
+            "hold_zero_is_convention": true,
+            "matched_benchmark_pairs": 0,
+            "mean_forward_return_pct": null,
+            "mean_benchmark_return_pct": null,
+            "mean_action_relative_return_pct": null,
+            "mean_relative_forward_return_pct": null,
+            "mean_directional_action_score_pct": null,
+            "unmatched_benchmark_rows_excluded": 0,
+            "mean_action_score_includes_hold_zero_rows": true
+          },
+          "30": {
+            "hits": 0,
+            "cohort": null,
+            "pending": 0,
+            "summable": false,
+            "by_action": {
+              "BUY": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "HOLD": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": true
+              },
+              "SELL": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "OTHER": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              }
+            },
+            "evaluated": 0,
+            "hold_rows": 0,
+            "unavailable": 0,
+            "hit_rate_pct": null,
+            "horizon_days": 30,
+            "not_recorded": 0,
+            "observations": 0,
+            "metric_family": "signal_diagnostics",
+            "method_versions": [],
+            "directional_calls": 0,
+            "execution_statuses": {},
+            "sum_rejected_reason": "Per-decision scores cover overlapping windows and unequal position sizes; their sum is not a portfolio return and no total is provided.",
+            "hit_rate_denominator": 0,
+            "mean_action_score_pct": null,
+            "include_counterfactual": false,
+            "action_score_definition": "BUY score = forward return; SELL score = -forward return; HOLD score = 0 by convention and makes no directional claim.",
+            "hold_zero_is_convention": true,
+            "matched_benchmark_pairs": 0,
+            "mean_forward_return_pct": null,
+            "mean_benchmark_return_pct": null,
+            "mean_action_relative_return_pct": null,
+            "mean_relative_forward_return_pct": null,
+            "mean_directional_action_score_pct": null,
+            "unmatched_benchmark_rows_excluded": 0,
+            "mean_action_score_includes_hold_zero_rows": true
+          }
+        },
+        "counterfactual_rows": 0,
+        "proposal_vs_executed": {
+          "counts": [],
+          "hold_observations": 0,
+          "executed_observations": 0,
+          "rejected_counterfactual_rows": 0,
+          "directional_not_executed_observations": 0
+        }
+      },
+      "completion_rate_pct": null,
+      "model_configuration": {
+        "note": "Every LLM variant names its provider, model and parameters in the manifest so a comparison cannot silently change model mid-experiment.",
+        "source": "not_declared",
+        "declared": {}
+      },
+      "unimplemented_reason": "Portfolio allocation is Phase 4 scope. The variant is declared and not measured in Phase 3.",
+      "portfolio_performance": {
+        "value": null,
+        "reason": "Variants were not executed in isolated accounts, and per-decision scores cannot be summed into a portfolio return. Portfolio performance is published once for the experiment account and is not attributed to a variant.",
+        "available": false,
+        "experiment_level_reference": "portfolio_performance"
+      },
+      "recorded_model_configuration": {},
+      "action_changes_after_rebuttal": {
+        "note": "The protocol does not store a pre-rebuttal action, so this is a declared proxy: the final action differs from the initial cases' directional lean and at least one rebuttal declared a position change. It is not a recorded action diff.",
+        "basis": "final_action_vs_initial_case_lean.v1",
+        "affected_runs": [],
+        "runs_with_rebuttals": 0,
+        "declared_position_changes": 0,
+        "action_changes_after_rebuttal": 0
+      }
+    }
+  ],
+  "experiment": {
+    "label": "Phase 3 measurement harness - engineering validation",
+    "frozen": true,
+    "declared_at": "2026-02-10T00:00:00Z",
+    "description": "A synthetic measurement fixture that exercises the Phase 3 report end to end: separate signal-diagnostics and portfolio-performance families, every EXP-01 variant declared, a scheduled run with no stored output, an unknown fee, an external deposit, an explicit net-of-LLM series, and a pre-registered signal-diagnostics primary metric. It is not a protocol comparison and makes no profitability claim.",
+    "experiment_id": "phase3-engineering.v1",
+    "evaluation_mode": "historical",
+    "experiment_uuid": "40f9400e-eca9-4aad-ab9e-b7b997b7b20a",
+    "observation_window": {
+      "end": "2026-02-11T00:00:00Z",
+      "start": "2026-02-03T00:00:00Z"
+    }
+  },
+  "limitations": [
+    {
+      "code": "per_decision_not_summable",
+      "detail": "Per-decision signal scores cover overlapping windows and unequal sizes; they are never summed into portfolio performance.",
+      "impact": "metric-family separation"
+    },
+    {
+      "code": "approximate_twr",
+      "detail": "TWR is approximate: fees_unrecorded_for_some_fills",
+      "impact": "recorded fees/marks are incomplete, so even the exact chain is approximate"
+    },
+    {
+      "code": "fees_unrecorded",
+      "detail": "1 fill(s) have no recorded fee",
+      "impact": "net equity excludes unknown fees and is flagged approximate"
+    },
+    {
+      "code": "not_strict_historical",
+      "detail": "Strict historical claims are ineligible: at least one stored run is a synthetic fixture",
+      "impact": "results are engineering evidence, not proof of historical performance"
+    },
+    {
+      "code": "synthetic_content",
+      "detail": "Stored runs or accounting inputs are synthetic fixtures",
+      "impact": "no comparative or profitability claim may be drawn from this report"
+    },
+    {
+      "code": "sample_below_minimum",
+      "detail": "The scheduled/completed sample is below the pre-registered minimum",
+      "impact": "engineering validation only; variant estimates are unstable"
+    },
+    {
+      "code": "variant_V4_unimplemented",
+      "detail": "Portfolio allocation is Phase 4 scope. The variant is declared and not measured in Phase 3.",
+      "impact": "V4 result is null, not a measured zero"
+    }
+  ],
+  "uncertainty": {
+    "note": "Intervals are published for every estimated metric. A small sample can validate the engineering, not a profit claim; no fixed profitability threshold is asserted.",
+    "gates": {
+      "cost": {
+        "status": "within",
+        "ceiling_usd": "1.00",
+        "observed_usd": "0.250000"
+      },
+      "sample": {
+        "note": "Below this, the report is engineering validation only; it is not a comparative result.",
+        "status": "not_met",
+        "minimum_observations": 2,
+        "minimum_completed_runs": 3,
+        "minimum_scheduled_runs": 4
+      },
+      "drawdown": {
+        "status": "within",
+        "observed_pct": "0.5250",
+        "acceptable_pct": "10.00"
+      }
+    },
+    "method": {
+      "seed": 20260210,
+      "method": "time_block_bootstrap.v1",
+      "resamples": 500,
+      "block_size": 2,
+      "confidence": "0.95",
+      "why_time_blocks": "Adjacent decisions share market conditions and some windows overlap, so individual observations are dependent. Resampling contiguous blocks keeps that dependence instead of pretending the sample is independent."
+    },
+    "primary_metric": {
+      "id": "mean_action_score_pct",
+      "note": "The interval is a seeded time-block bootstrap over dependent observations. It is a sampling interval, not a promise of future profitability.",
+      "unit": "pct",
+      "value": "-2.0000",
+      "family": "signal_diagnostics",
+      "interval": {
+        "seed": 20260210,
+        "lower": null,
+        "upper": null,
+        "method": "time_block_bootstrap",
+        "reason": "fewer_than_two_observations",
+        "resamples": 0,
+        "statistic": "mean",
+        "block_size": 2,
+        "confidence": "0.95"
+      },
+      "direction": "higher_is_better",
+      "description": "Mean signed action score at the 7-day horizon (BUY=forward, SELL=-forward, HOLD=0 by convention).",
+      "horizon_days": 7,
+      "observations": 1,
+      "pre_registered": true,
+      "interval_reason": "fewer_than_two_observations",
+      "sample_sufficient": false,
+      "interval_established": false,
+      "minimum_observations": 2,
+      "profitability_threshold": null
+    },
+    "pre_registration": {
+      "primary_metric": {
+        "id": "mean_action_score_pct",
+        "family": "signal_diagnostics",
+        "direction": "higher_is_better",
+        "description": "Mean signed action score at the 7-day horizon (BUY=forward, SELL=-forward, HOLD=0 by convention).",
+        "horizon_days": 7
+      },
+      "cost_ceiling_usd": "1.00",
+      "observation_window": {
+        "end": "2026-02-11T00:00:00Z",
+        "start": "2026-02-03T00:00:00Z"
+      },
+      "minimum_usable_sample": {
+        "note": "Below this, the report is engineering validation only; it is not a comparative result.",
+        "minimum_observations": 2,
+        "minimum_completed_runs": 3,
+        "minimum_scheduled_runs": 4
+      },
+      "acceptable_drawdown_pct": "10.00",
+      "declared_before_results": true
+    },
+    "profitability_threshold": null,
+    "no_fixed_profitability_threshold": true
+  },
+  "generated_at": "2026-11-11T08:20:40.697178Z",
+  "report_version": 6,
+  "counterfactuals": {
+    "note": "A rejected proposal is measured only as a counterfactual under a declared holding/exit rule. Without one, loss prevention is not established.",
+    "rows": [],
+    "rule": {
+      "exit_rule": "first_known_mark_at_or_after_horizon.v1",
+      "include_fees": false,
+      "horizons_days": [
+        1,
+        7,
+        30
+      ],
+      "quantity_basis": "requested_quantity",
+      "holding_period_days": 7
+    },
+    "established_count": 0,
+    "not_established_count": 0,
+    "rejected_proposal_count": 0
+  },
+  "metric_families": {
+    "separation": "The two families are published in separate blocks with separate method versions. No field in this report is a sum of per-decision scores presented as account return.",
+    "signal_diagnostics": {
+      "source": "stored DecisionRun outcomes",
+      "summable": false,
+      "analytical": true,
+      "description": "Forward returns, signed action scores and directional hit rates.",
+      "method_version": "signal_diagnostics.v1",
+      "sum_rejected_reason": "Overlapping windows and unequal position sizes make per-decision scores non-additive; this family can never produce portfolio performance."
+    },
+    "portfolio_performance": {
+      "source": "ledger/fixture replay; never per-decision scores",
+      "analytical": false,
+      "description": "Marked-to-market equity from cash, holdings, fills, fees and flows.",
+      "method_version": "portfolio_accounting.v1",
+      "summable_within_family": true
+    }
+  },
+  "sample_integrity": {
+    "note": "Counts, date range, asset universe, source mode and unresolved observations travel with every result so a reader can judge the sample before the number.",
+    "counts": {
+      "failed": 0,
+      "attempted": 3,
+      "cancelled": 0,
+      "completed": 3,
+      "scheduled": 4,
+      "not_executed": 1
+    },
+    "cohorts": {
+      "llm": 0,
+      "heuristic": 0,
+      "synthetic": 3
+    },
+    "date_range": {
+      "window_end": "2026-02-11T00:00:00Z",
+      "window_start": "2026-02-03T00:00:00Z",
+      "decisions_last": "2026-02-05T14:00:00Z",
+      "scheduled_last": "2026-02-05T14:30:00Z",
+      "decisions_first": "2026-02-03T14:30:00Z",
+      "scheduled_first": "2026-02-03T14:30:00Z"
+    },
+    "denominator": {
+      "note": "Every scheduled run remains in the completion, failure and cost denominator, including deliberate failures and runs that produced no stored output.",
+      "rule": "all_scheduled_runs",
+      "scheduled": 4
+    },
+    "eligibility": {
+      "note": "A strict historical claim needs point-in-time snapshots and no evidence that became available after the run's cutoff. Missing as-of evidence makes the run ineligible rather than merely imprecise.",
+      "reasons": [
+        "at least one stored run is a synthetic fixture"
+      ],
+      "snapshot_checks": [
+        {
+          "status": "ok",
+          "run_key": "risk-intervention-aapl-2026-02-03",
+          "decision_at": "2026-02-03T14:31:05Z",
+          "analysis_cutoff": "2026-02-03T14:30:20Z",
+          "late_evidence_count": 0
+        },
+        {
+          "status": "ok",
+          "run_key": "disagreement-tsla-2026-02-04",
+          "decision_at": "2026-02-04T15:01:20Z",
+          "analysis_cutoff": "2026-02-04T15:00:20Z",
+          "late_evidence_count": 0
+        },
+        {
+          "status": "ok",
+          "run_key": "uncertainty-msft-2026-02-05",
+          "decision_at": "2026-02-05T14:01:05Z",
+          "analysis_cutoff": "2026-02-05T14:00:20Z",
+          "late_evidence_count": 0
+        }
+      ],
+      "survivorship_bias": "Three large-cap US equities were selected by hand. Delisted, acquired and failed companies are absent, so the sample is survivorship-biased.",
+      "missing_as_of_evidence": 0,
+      "strict_historical_claims": false,
+      "pretraining_contamination": "Unknown and unmeasured: no LLM was called for these stored runs, and no model/pretraining window is recorded."
+    },
+    "mode_counts": {
+      "synthetic": 3
+    },
+    "source_mode": "synthetic",
+    "source_counts": {
+      "fixture": 3
+    },
+    "asset_universe": [
+      "AAPL",
+      "MSFT",
+      "TSLA"
+    ],
+    "failure_rate_pct": "0.0",
+    "counts_by_variant": {
+      "V0": {
+        "failed": 0,
+        "cancelled": 0,
+        "completed": 0,
+        "scheduled": 1,
+        "not_executed": 1,
+        "failure_rate_pct": "0.0",
+        "completion_rate_pct": "0.0"
+      },
+      "V1": {
+        "failed": 0,
+        "cancelled": 0,
+        "completed": 1,
+        "scheduled": 1,
+        "not_executed": 0,
+        "failure_rate_pct": "0.0",
+        "completion_rate_pct": "100.0"
+      },
+      "V2": {
+        "failed": 0,
+        "cancelled": 0,
+        "completed": 1,
+        "scheduled": 1,
+        "not_executed": 0,
+        "failure_rate_pct": "0.0",
+        "completion_rate_pct": "100.0"
+      },
+      "V3": {
+        "failed": 0,
+        "cancelled": 0,
+        "completed": 1,
+        "scheduled": 1,
+        "not_executed": 0,
+        "failure_rate_pct": "0.0",
+        "completion_rate_pct": "100.0"
+      },
+      "V4": {
+        "failed": 0,
+        "cancelled": 0,
+        "completed": 0,
+        "scheduled": 0,
+        "not_executed": 0,
+        "failure_rate_pct": null,
+        "completion_rate_pct": null
+      }
+    },
+    "completion_rate_pct": "75.0",
+    "minimum_usable_sample": {
+      "met": false,
+      "note": "Below this, the report is engineering validation only; it is not a comparative result.",
+      "completed_met": true,
+      "scheduled_met": true,
+      "observations_met": false,
+      "minimum_observations": 2,
+      "minimum_completed_runs": 3,
+      "minimum_scheduled_runs": 4,
+      "observations_available": 1
+    },
+    "not_executed_rate_pct": "25.0",
+    "runs_without_outcomes": 0,
+    "unresolved_by_maturity": {
+      "pending": 2,
+      "unavailable": 1
+    },
+    "unresolved_observations": 3
+  },
+  "signal_diagnostics": {
+    "note": "Forward returns and hit rates are analytical measures of decision quality. They are not portfolio performance and are not additive.",
+    "rows": [
+      {
+        "mode": "synthetic",
+        "note": "This is an analytical signal observation. It is not a portfolio return and overlapping windows must not be summed.",
+        "flags": [
+          "synthetic_fixture",
+          "price_timestamp_unverified"
+        ],
+        "cohort": "synthetic",
+        "run_id": "d400cdb2-edb2-4add-a5a8-6b95a8785ef3",
+        "source": "fixture",
+        "ticker": "AAPL",
+        "run_key": "current-pipeline-aapl-2026-02-03",
+        "maturity": "pending",
+        "benchmark": {
+          "ticker": "SPY",
+          "matched": false,
+          "return_pct": null,
+          "interval_verified": false
+        },
+        "decision_at": "2026-02-03T14:31:05Z",
+        "measurement": "signal",
+        "evaluated_at": null,
+        "horizon_days": 1,
+        "method_version": "attribution.synthetic.v1",
+        "stored_run_key": "risk-intervention-aapl-2026-02-03",
+        "directional_hit": null,
+        "executed_action": null,
+        "proposal_action": "BUY",
+        "action_score_pct": null,
+        "execution_status": "execution_not_recorded",
+        "forward_return_pct": null,
+        "unavailable_reason": null,
+        "action_score_convention": null,
+        "price_timestamp_verified": false,
+        "action_relative_return_pct": null,
+        "relative_forward_return_pct": null
+      },
+      {
+        "mode": "synthetic",
+        "note": "This is an analytical signal observation. It is not a portfolio return and overlapping windows must not be summed.",
+        "flags": [
+          "synthetic_fixture"
+        ],
+        "cohort": "synthetic",
+        "run_id": "d400cdb2-edb2-4add-a5a8-6b95a8785ef3",
+        "source": "fixture",
+        "ticker": "AAPL",
+        "run_key": "current-pipeline-aapl-2026-02-03",
+        "maturity": "evaluated",
+        "benchmark": {
+          "ticker": "SPY",
+          "matched": true,
+          "return_pct": "-0.4000",
+          "interval_verified": false
+        },
+        "decision_at": "2026-02-03T14:31:05Z",
+        "measurement": "signal",
+        "evaluated_at": "2026-02-10T21:00:00Z",
+        "horizon_days": 7,
+        "method_version": "attribution.synthetic.v1",
+        "stored_run_key": "risk-intervention-aapl-2026-02-03",
+        "directional_hit": false,
+        "executed_action": null,
+        "proposal_action": "BUY",
+        "action_score_pct": "-2.0000",
+        "execution_status": "execution_not_recorded",
+        "forward_return_pct": "-2.0000",
+        "unavailable_reason": null,
+        "action_score_convention": null,
+        "price_timestamp_verified": true,
+        "action_relative_return_pct": "-1.6000",
+        "relative_forward_return_pct": "-1.6000"
+      },
+      {
+        "mode": "synthetic",
+        "note": "This is an analytical signal observation. It is not a portfolio return and overlapping windows must not be summed.",
+        "flags": [
+          "synthetic_fixture",
+          "price_timestamp_unverified"
+        ],
+        "cohort": "synthetic",
+        "run_id": "80c7c20e-40ba-41b9-9b46-66a0e86b44e8",
+        "source": "fixture",
+        "ticker": "TSLA",
+        "run_key": "explicit-rebuttal-tsla-2026-02-04",
+        "maturity": "pending",
+        "benchmark": {
+          "ticker": "SPY",
+          "matched": false,
+          "return_pct": null,
+          "interval_verified": false
+        },
+        "decision_at": "2026-02-04T15:01:20Z",
+        "measurement": "signal",
+        "evaluated_at": null,
+        "horizon_days": 7,
+        "method_version": "attribution.synthetic.v1",
+        "stored_run_key": "disagreement-tsla-2026-02-04",
+        "directional_hit": null,
+        "executed_action": null,
+        "proposal_action": "HOLD",
+        "action_score_pct": null,
+        "execution_status": "hold_no_trade",
+        "forward_return_pct": null,
+        "unavailable_reason": null,
+        "action_score_convention": "hold_zero_convention.v1",
+        "price_timestamp_verified": false,
+        "action_relative_return_pct": null,
+        "relative_forward_return_pct": null
+      },
+      {
+        "mode": "synthetic",
+        "note": "This is an analytical signal observation. It is not a portfolio return and overlapping windows must not be summed.",
+        "flags": [
+          "synthetic_fixture",
+          "price_timestamp_unverified"
+        ],
+        "cohort": "synthetic",
+        "run_id": "4dd2e62d-6f9c-4bd6-8e3a-793d92a18fc1",
+        "source": "fixture",
+        "ticker": "MSFT",
+        "run_key": "single-analyst-msft-2026-02-05",
+        "maturity": "unavailable",
+        "benchmark": {
+          "ticker": "SPY",
+          "matched": false,
+          "return_pct": null,
+          "interval_verified": false
+        },
+        "decision_at": "2026-02-05T14:01:05Z",
+        "measurement": "signal",
+        "evaluated_at": null,
+        "horizon_days": 1,
+        "method_version": "attribution.synthetic.v1",
+        "stored_run_key": "uncertainty-msft-2026-02-05",
+        "directional_hit": null,
+        "executed_action": null,
+        "proposal_action": "HOLD",
+        "action_score_pct": null,
+        "execution_status": "hold_no_trade",
+        "forward_return_pct": null,
+        "unavailable_reason": "No closing price was recorded for the decision date in the synthetic snapshot. Scoring it would require inventing one, so the outcome is recorded as unavailable rather than zero.",
+        "action_score_convention": "hold_zero_convention.v1",
+        "price_timestamp_verified": false,
+        "action_relative_return_pct": null,
+        "relative_forward_return_pct": null
+      }
+    ],
+    "flags": [
+      "price_timestamp_unverified",
+      "synthetic_fixture"
+    ],
+    "cohorts": {
+      "llm": {
+        "note": "Heuristic fallback attempts are reported separately from LLM runs; they are not the same producer and must not be pooled.",
+        "runs": 0,
+        "summaries": {
+          "1": {
+            "hits": 0,
+            "cohort": "llm",
+            "pending": 0,
+            "summable": false,
+            "by_action": {
+              "BUY": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "HOLD": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": true
+              },
+              "SELL": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "OTHER": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              }
+            },
+            "evaluated": 0,
+            "hold_rows": 0,
+            "unavailable": 0,
+            "hit_rate_pct": null,
+            "horizon_days": 1,
+            "not_recorded": 0,
+            "observations": 0,
+            "metric_family": "signal_diagnostics",
+            "method_versions": [],
+            "directional_calls": 0,
+            "execution_statuses": {},
+            "sum_rejected_reason": "Per-decision scores cover overlapping windows and unequal position sizes; their sum is not a portfolio return and no total is provided.",
+            "hit_rate_denominator": 0,
+            "mean_action_score_pct": null,
+            "include_counterfactual": false,
+            "action_score_definition": "BUY score = forward return; SELL score = -forward return; HOLD score = 0 by convention and makes no directional claim.",
+            "hold_zero_is_convention": true,
+            "matched_benchmark_pairs": 0,
+            "mean_forward_return_pct": null,
+            "mean_benchmark_return_pct": null,
+            "mean_action_relative_return_pct": null,
+            "mean_relative_forward_return_pct": null,
+            "mean_directional_action_score_pct": null,
+            "unmatched_benchmark_rows_excluded": 0,
+            "mean_action_score_includes_hold_zero_rows": true
+          },
+          "7": {
+            "hits": 0,
+            "cohort": "llm",
+            "pending": 0,
+            "summable": false,
+            "by_action": {
+              "BUY": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "HOLD": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": true
+              },
+              "SELL": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "OTHER": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              }
+            },
+            "evaluated": 0,
+            "hold_rows": 0,
+            "unavailable": 0,
+            "hit_rate_pct": null,
+            "horizon_days": 7,
+            "not_recorded": 0,
+            "observations": 0,
+            "metric_family": "signal_diagnostics",
+            "method_versions": [],
+            "directional_calls": 0,
+            "execution_statuses": {},
+            "sum_rejected_reason": "Per-decision scores cover overlapping windows and unequal position sizes; their sum is not a portfolio return and no total is provided.",
+            "hit_rate_denominator": 0,
+            "mean_action_score_pct": null,
+            "include_counterfactual": false,
+            "action_score_definition": "BUY score = forward return; SELL score = -forward return; HOLD score = 0 by convention and makes no directional claim.",
+            "hold_zero_is_convention": true,
+            "matched_benchmark_pairs": 0,
+            "mean_forward_return_pct": null,
+            "mean_benchmark_return_pct": null,
+            "mean_action_relative_return_pct": null,
+            "mean_relative_forward_return_pct": null,
+            "mean_directional_action_score_pct": null,
+            "unmatched_benchmark_rows_excluded": 0,
+            "mean_action_score_includes_hold_zero_rows": true
+          },
+          "30": {
+            "hits": 0,
+            "cohort": "llm",
+            "pending": 0,
+            "summable": false,
+            "by_action": {
+              "BUY": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "HOLD": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": true
+              },
+              "SELL": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "OTHER": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              }
+            },
+            "evaluated": 0,
+            "hold_rows": 0,
+            "unavailable": 0,
+            "hit_rate_pct": null,
+            "horizon_days": 30,
+            "not_recorded": 0,
+            "observations": 0,
+            "metric_family": "signal_diagnostics",
+            "method_versions": [],
+            "directional_calls": 0,
+            "execution_statuses": {},
+            "sum_rejected_reason": "Per-decision scores cover overlapping windows and unequal position sizes; their sum is not a portfolio return and no total is provided.",
+            "hit_rate_denominator": 0,
+            "mean_action_score_pct": null,
+            "include_counterfactual": false,
+            "action_score_definition": "BUY score = forward return; SELL score = -forward return; HOLD score = 0 by convention and makes no directional claim.",
+            "hold_zero_is_convention": true,
+            "matched_benchmark_pairs": 0,
+            "mean_forward_return_pct": null,
+            "mean_benchmark_return_pct": null,
+            "mean_action_relative_return_pct": null,
+            "mean_relative_forward_return_pct": null,
+            "mean_directional_action_score_pct": null,
+            "unmatched_benchmark_rows_excluded": 0,
+            "mean_action_score_includes_hold_zero_rows": true
+          }
+        },
+        "observations": 0
+      },
+      "heuristic": {
+        "note": "Heuristic fallback attempts are reported separately from LLM runs; they are not the same producer and must not be pooled.",
+        "runs": 0,
+        "summaries": {
+          "1": {
+            "hits": 0,
+            "cohort": "heuristic",
+            "pending": 0,
+            "summable": false,
+            "by_action": {
+              "BUY": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "HOLD": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": true
+              },
+              "SELL": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "OTHER": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              }
+            },
+            "evaluated": 0,
+            "hold_rows": 0,
+            "unavailable": 0,
+            "hit_rate_pct": null,
+            "horizon_days": 1,
+            "not_recorded": 0,
+            "observations": 0,
+            "metric_family": "signal_diagnostics",
+            "method_versions": [],
+            "directional_calls": 0,
+            "execution_statuses": {},
+            "sum_rejected_reason": "Per-decision scores cover overlapping windows and unequal position sizes; their sum is not a portfolio return and no total is provided.",
+            "hit_rate_denominator": 0,
+            "mean_action_score_pct": null,
+            "include_counterfactual": false,
+            "action_score_definition": "BUY score = forward return; SELL score = -forward return; HOLD score = 0 by convention and makes no directional claim.",
+            "hold_zero_is_convention": true,
+            "matched_benchmark_pairs": 0,
+            "mean_forward_return_pct": null,
+            "mean_benchmark_return_pct": null,
+            "mean_action_relative_return_pct": null,
+            "mean_relative_forward_return_pct": null,
+            "mean_directional_action_score_pct": null,
+            "unmatched_benchmark_rows_excluded": 0,
+            "mean_action_score_includes_hold_zero_rows": true
+          },
+          "7": {
+            "hits": 0,
+            "cohort": "heuristic",
+            "pending": 0,
+            "summable": false,
+            "by_action": {
+              "BUY": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "HOLD": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": true
+              },
+              "SELL": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "OTHER": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              }
+            },
+            "evaluated": 0,
+            "hold_rows": 0,
+            "unavailable": 0,
+            "hit_rate_pct": null,
+            "horizon_days": 7,
+            "not_recorded": 0,
+            "observations": 0,
+            "metric_family": "signal_diagnostics",
+            "method_versions": [],
+            "directional_calls": 0,
+            "execution_statuses": {},
+            "sum_rejected_reason": "Per-decision scores cover overlapping windows and unequal position sizes; their sum is not a portfolio return and no total is provided.",
+            "hit_rate_denominator": 0,
+            "mean_action_score_pct": null,
+            "include_counterfactual": false,
+            "action_score_definition": "BUY score = forward return; SELL score = -forward return; HOLD score = 0 by convention and makes no directional claim.",
+            "hold_zero_is_convention": true,
+            "matched_benchmark_pairs": 0,
+            "mean_forward_return_pct": null,
+            "mean_benchmark_return_pct": null,
+            "mean_action_relative_return_pct": null,
+            "mean_relative_forward_return_pct": null,
+            "mean_directional_action_score_pct": null,
+            "unmatched_benchmark_rows_excluded": 0,
+            "mean_action_score_includes_hold_zero_rows": true
+          },
+          "30": {
+            "hits": 0,
+            "cohort": "heuristic",
+            "pending": 0,
+            "summable": false,
+            "by_action": {
+              "BUY": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "HOLD": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": true
+              },
+              "SELL": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "OTHER": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              }
+            },
+            "evaluated": 0,
+            "hold_rows": 0,
+            "unavailable": 0,
+            "hit_rate_pct": null,
+            "horizon_days": 30,
+            "not_recorded": 0,
+            "observations": 0,
+            "metric_family": "signal_diagnostics",
+            "method_versions": [],
+            "directional_calls": 0,
+            "execution_statuses": {},
+            "sum_rejected_reason": "Per-decision scores cover overlapping windows and unequal position sizes; their sum is not a portfolio return and no total is provided.",
+            "hit_rate_denominator": 0,
+            "mean_action_score_pct": null,
+            "include_counterfactual": false,
+            "action_score_definition": "BUY score = forward return; SELL score = -forward return; HOLD score = 0 by convention and makes no directional claim.",
+            "hold_zero_is_convention": true,
+            "matched_benchmark_pairs": 0,
+            "mean_forward_return_pct": null,
+            "mean_benchmark_return_pct": null,
+            "mean_action_relative_return_pct": null,
+            "mean_relative_forward_return_pct": null,
+            "mean_directional_action_score_pct": null,
+            "unmatched_benchmark_rows_excluded": 0,
+            "mean_action_score_includes_hold_zero_rows": true
+          }
+        },
+        "observations": 0
+      },
+      "synthetic": {
+        "note": "Heuristic fallback attempts are reported separately from LLM runs; they are not the same producer and must not be pooled.",
+        "runs": 3,
+        "summaries": {
+          "1": {
+            "hits": 0,
+            "cohort": "synthetic",
+            "pending": 1,
+            "summable": false,
+            "by_action": {
+              "BUY": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 1,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "HOLD": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 1,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": true
+              },
+              "SELL": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "OTHER": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              }
+            },
+            "evaluated": 0,
+            "hold_rows": 0,
+            "unavailable": 1,
+            "hit_rate_pct": null,
+            "horizon_days": 1,
+            "not_recorded": 0,
+            "observations": 2,
+            "metric_family": "signal_diagnostics",
+            "method_versions": [
+              "attribution.synthetic.v1"
+            ],
+            "directional_calls": 0,
+            "execution_statuses": {
+              "hold_no_trade": 1,
+              "execution_not_recorded": 1
+            },
+            "sum_rejected_reason": "Per-decision scores cover overlapping windows and unequal position sizes; their sum is not a portfolio return and no total is provided.",
+            "hit_rate_denominator": 0,
+            "mean_action_score_pct": null,
+            "include_counterfactual": false,
+            "action_score_definition": "BUY score = forward return; SELL score = -forward return; HOLD score = 0 by convention and makes no directional claim.",
+            "hold_zero_is_convention": true,
+            "matched_benchmark_pairs": 0,
+            "mean_forward_return_pct": null,
+            "mean_benchmark_return_pct": null,
+            "mean_action_relative_return_pct": null,
+            "mean_relative_forward_return_pct": null,
+            "mean_directional_action_score_pct": null,
+            "unmatched_benchmark_rows_excluded": 0,
+            "mean_action_score_includes_hold_zero_rows": true
+          },
+          "7": {
+            "hits": 0,
+            "cohort": "synthetic",
+            "pending": 1,
+            "summable": false,
+            "by_action": {
+              "BUY": {
+                "hits": 0,
+                "evaluated": 1,
+                "hit_rate_pct": "0.0",
+                "observations": 1,
+                "directional_calls": 1,
+                "mean_action_score_pct": "-2.0000",
+                "zero_score_is_convention": false
+              },
+              "HOLD": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 1,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": true
+              },
+              "SELL": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "OTHER": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              }
+            },
+            "evaluated": 1,
+            "hold_rows": 0,
+            "unavailable": 0,
+            "hit_rate_pct": "0.0",
+            "horizon_days": 7,
+            "not_recorded": 0,
+            "observations": 2,
+            "metric_family": "signal_diagnostics",
+            "method_versions": [
+              "attribution.synthetic.v1"
+            ],
+            "directional_calls": 1,
+            "execution_statuses": {
+              "hold_no_trade": 1,
+              "execution_not_recorded": 1
+            },
+            "sum_rejected_reason": "Per-decision scores cover overlapping windows and unequal position sizes; their sum is not a portfolio return and no total is provided.",
+            "hit_rate_denominator": 1,
+            "mean_action_score_pct": "-2.0000",
+            "include_counterfactual": false,
+            "action_score_definition": "BUY score = forward return; SELL score = -forward return; HOLD score = 0 by convention and makes no directional claim.",
+            "hold_zero_is_convention": true,
+            "matched_benchmark_pairs": 1,
+            "mean_forward_return_pct": "-2.0000",
+            "mean_benchmark_return_pct": "-0.4000",
+            "mean_action_relative_return_pct": "-1.6000",
+            "mean_relative_forward_return_pct": "-1.6000",
+            "mean_directional_action_score_pct": "-2.0000",
+            "unmatched_benchmark_rows_excluded": 0,
+            "mean_action_score_includes_hold_zero_rows": true
+          },
+          "30": {
+            "hits": 0,
+            "cohort": "synthetic",
+            "pending": 0,
+            "summable": false,
+            "by_action": {
+              "BUY": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "HOLD": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": true
+              },
+              "SELL": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              },
+              "OTHER": {
+                "hits": 0,
+                "evaluated": 0,
+                "hit_rate_pct": null,
+                "observations": 0,
+                "directional_calls": 0,
+                "mean_action_score_pct": null,
+                "zero_score_is_convention": false
+              }
+            },
+            "evaluated": 0,
+            "hold_rows": 0,
+            "unavailable": 0,
+            "hit_rate_pct": null,
+            "horizon_days": 30,
+            "not_recorded": 0,
+            "observations": 0,
+            "metric_family": "signal_diagnostics",
+            "method_versions": [],
+            "directional_calls": 0,
+            "execution_statuses": {},
+            "sum_rejected_reason": "Per-decision scores cover overlapping windows and unequal position sizes; their sum is not a portfolio return and no total is provided.",
+            "hit_rate_denominator": 0,
+            "mean_action_score_pct": null,
+            "include_counterfactual": false,
+            "action_score_definition": "BUY score = forward return; SELL score = -forward return; HOLD score = 0 by convention and makes no directional claim.",
+            "hold_zero_is_convention": true,
+            "matched_benchmark_pairs": 0,
+            "mean_forward_return_pct": null,
+            "mean_benchmark_return_pct": null,
+            "mean_action_relative_return_pct": null,
+            "mean_relative_forward_return_pct": null,
+            "mean_directional_action_score_pct": null,
+            "unmatched_benchmark_rows_excluded": 0,
+            "mean_action_score_includes_hold_zero_rows": true
+          }
+        },
+        "observations": 4
+      }
+    },
+    "definition": {
+      "summable": false,
+      "action_score": "BUY score = forward return; SELL score = -forward return; HOLD score = 0 by convention and makes no directional claim.",
+      "hold_zero_note": "A HOLD's zero is a reporting convention. It is not a claim about P&L and a HOLD has no directional hit.",
+      "sum_rejected_reason": "Overlapping windows and unequal position sizes make per-decision scores non-additive; this family can never produce portfolio performance.",
+      "proposal_vs_executed": "proposal_action is what the CIO proposed; executed_action is what reached the ledger. Rejected proposals are counterfactuals.",
+      "hold_zero_is_convention": true
+    },
+    "unresolved": {
+      "runs": [
+        "explicit-rebuttal-tsla-2026-02-04",
+        "current-pipeline-aapl-2026-02-03",
+        "single-analyst-msft-2026-02-05"
+      ],
+      "count": 3,
+      "by_maturity": {
+        "pending": 2,
+        "unavailable": 1
+      },
+      "runs_without_outcomes": 0
+    },
+    "generated_at": "2026-11-11T08:20:40.697178Z",
+    "metric_family": "signal_diagnostics",
+    "counterfactual": {
+      "note": "Rejected proposals are analytical counterfactuals, never executed performance. They are excluded from the headline aggregates.",
+      "rows": [],
+      "summaries": {
+        "1": {
+          "hits": 0,
+          "cohort": null,
+          "pending": 0,
+          "summable": false,
+          "by_action": {
+            "BUY": {
+              "hits": 0,
+              "evaluated": 0,
+              "hit_rate_pct": null,
+              "observations": 0,
+              "directional_calls": 0,
+              "mean_action_score_pct": null,
+              "zero_score_is_convention": false
+            },
+            "HOLD": {
+              "hits": 0,
+              "evaluated": 0,
+              "hit_rate_pct": null,
+              "observations": 0,
+              "directional_calls": 0,
+              "mean_action_score_pct": null,
+              "zero_score_is_convention": true
+            },
+            "SELL": {
+              "hits": 0,
+              "evaluated": 0,
+              "hit_rate_pct": null,
+              "observations": 0,
+              "directional_calls": 0,
+              "mean_action_score_pct": null,
+              "zero_score_is_convention": false
+            },
+            "OTHER": {
+              "hits": 0,
+              "evaluated": 0,
+              "hit_rate_pct": null,
+              "observations": 0,
+              "directional_calls": 0,
+              "mean_action_score_pct": null,
+              "zero_score_is_convention": false
+            }
+          },
+          "evaluated": 0,
+          "hold_rows": 0,
+          "unavailable": 0,
+          "hit_rate_pct": null,
+          "horizon_days": 1,
+          "not_recorded": 0,
+          "observations": 0,
+          "metric_family": "signal_diagnostics",
+          "method_versions": [],
+          "directional_calls": 0,
+          "execution_statuses": {},
+          "sum_rejected_reason": "Per-decision scores cover overlapping windows and unequal position sizes; their sum is not a portfolio return and no total is provided.",
+          "hit_rate_denominator": 0,
+          "mean_action_score_pct": null,
+          "include_counterfactual": true,
+          "action_score_definition": "BUY score = forward return; SELL score = -forward return; HOLD score = 0 by convention and makes no directional claim.",
+          "hold_zero_is_convention": true,
+          "matched_benchmark_pairs": 0,
+          "mean_forward_return_pct": null,
+          "mean_benchmark_return_pct": null,
+          "mean_action_relative_return_pct": null,
+          "mean_relative_forward_return_pct": null,
+          "mean_directional_action_score_pct": null,
+          "unmatched_benchmark_rows_excluded": 0,
+          "mean_action_score_includes_hold_zero_rows": true
+        },
+        "7": {
+          "hits": 0,
+          "cohort": null,
+          "pending": 0,
+          "summable": false,
+          "by_action": {
+            "BUY": {
+              "hits": 0,
+              "evaluated": 0,
+              "hit_rate_pct": null,
+              "observations": 0,
+              "directional_calls": 0,
+              "mean_action_score_pct": null,
+              "zero_score_is_convention": false
+            },
+            "HOLD": {
+              "hits": 0,
+              "evaluated": 0,
+              "hit_rate_pct": null,
+              "observations": 0,
+              "directional_calls": 0,
+              "mean_action_score_pct": null,
+              "zero_score_is_convention": true
+            },
+            "SELL": {
+              "hits": 0,
+              "evaluated": 0,
+              "hit_rate_pct": null,
+              "observations": 0,
+              "directional_calls": 0,
+              "mean_action_score_pct": null,
+              "zero_score_is_convention": false
+            },
+            "OTHER": {
+              "hits": 0,
+              "evaluated": 0,
+              "hit_rate_pct": null,
+              "observations": 0,
+              "directional_calls": 0,
+              "mean_action_score_pct": null,
+              "zero_score_is_convention": false
+            }
+          },
+          "evaluated": 0,
+          "hold_rows": 0,
+          "unavailable": 0,
+          "hit_rate_pct": null,
+          "horizon_days": 7,
+          "not_recorded": 0,
+          "observations": 0,
+          "metric_family": "signal_diagnostics",
+          "method_versions": [],
+          "directional_calls": 0,
+          "execution_statuses": {},
+          "sum_rejected_reason": "Per-decision scores cover overlapping windows and unequal position sizes; their sum is not a portfolio return and no total is provided.",
+          "hit_rate_denominator": 0,
+          "mean_action_score_pct": null,
+          "include_counterfactual": true,
+          "action_score_definition": "BUY score = forward return; SELL score = -forward return; HOLD score = 0 by convention and makes no directional claim.",
+          "hold_zero_is_convention": true,
+          "matched_benchmark_pairs": 0,
+          "mean_forward_return_pct": null,
+          "mean_benchmark_return_pct": null,
+          "mean_action_relative_return_pct": null,
+          "mean_relative_forward_return_pct": null,
+          "mean_directional_action_score_pct": null,
+          "unmatched_benchmark_rows_excluded": 0,
+          "mean_action_score_includes_hold_zero_rows": true
+        },
+        "30": {
+          "hits": 0,
+          "cohort": null,
+          "pending": 0,
+          "summable": false,
+          "by_action": {
+            "BUY": {
+              "hits": 0,
+              "evaluated": 0,
+              "hit_rate_pct": null,
+              "observations": 0,
+              "directional_calls": 0,
+              "mean_action_score_pct": null,
+              "zero_score_is_convention": false
+            },
+            "HOLD": {
+              "hits": 0,
+              "evaluated": 0,
+              "hit_rate_pct": null,
+              "observations": 0,
+              "directional_calls": 0,
+              "mean_action_score_pct": null,
+              "zero_score_is_convention": true
+            },
+            "SELL": {
+              "hits": 0,
+              "evaluated": 0,
+              "hit_rate_pct": null,
+              "observations": 0,
+              "directional_calls": 0,
+              "mean_action_score_pct": null,
+              "zero_score_is_convention": false
+            },
+            "OTHER": {
+              "hits": 0,
+              "evaluated": 0,
+              "hit_rate_pct": null,
+              "observations": 0,
+              "directional_calls": 0,
+              "mean_action_score_pct": null,
+              "zero_score_is_convention": false
+            }
+          },
+          "evaluated": 0,
+          "hold_rows": 0,
+          "unavailable": 0,
+          "hit_rate_pct": null,
+          "horizon_days": 30,
+          "not_recorded": 0,
+          "observations": 0,
+          "metric_family": "signal_diagnostics",
+          "method_versions": [],
+          "directional_calls": 0,
+          "execution_statuses": {},
+          "sum_rejected_reason": "Per-decision scores cover overlapping windows and unequal position sizes; their sum is not a portfolio return and no total is provided.",
+          "hit_rate_denominator": 0,
+          "mean_action_score_pct": null,
+          "include_counterfactual": true,
+          "action_score_definition": "BUY score = forward return; SELL score = -forward return; HOLD score = 0 by convention and makes no directional claim.",
+          "hold_zero_is_convention": true,
+          "matched_benchmark_pairs": 0,
+          "mean_forward_return_pct": null,
+          "mean_benchmark_return_pct": null,
+          "mean_action_relative_return_pct": null,
+          "mean_relative_forward_return_pct": null,
+          "mean_directional_action_score_pct": null,
+          "unmatched_benchmark_rows_excluded": 0,
+          "mean_action_score_includes_hold_zero_rows": true
+        }
+      }
+    },
+    "horizon_policy": {
+      "note": "Weekend and holiday targets use the first subsequent session; the shift is recorded per row. No earlier price is substituted.",
+      "version": "horizons.1_7_30.v1",
+      "timezone": "UTC",
+      "horizons_days": [
+        1,
+        7,
+        30
+      ],
+      "session_policy": "first_mark_at_or_after_target_session.v1"
+    },
+    "method_version": "signal_diagnostics.v1",
+    "method_versions": [
+      "attribution.synthetic.v1"
+    ],
+    "benchmark_policy": {
+      "rules": {
+        "mixed": {
+          "ticker": null,
+          "selection": "declared_asset_appropriate_benchmark"
+        },
+        "equity": {
+          "ticker": "SPY",
+          "selection": "declared_equity_benchmark"
+        }
+      },
+      "declared": {
+        "ticker": "SPY",
+        "asset_class": "equity",
+        "selection_rule": "declared_equity_benchmark"
+      }
+    },
+    "summary_by_horizon": {
+      "1": {
+        "hits": 0,
+        "cohort": null,
+        "pending": 1,
+        "summable": false,
+        "by_action": {
+          "BUY": {
+            "hits": 0,
+            "evaluated": 0,
+            "hit_rate_pct": null,
+            "observations": 1,
+            "directional_calls": 0,
+            "mean_action_score_pct": null,
+            "zero_score_is_convention": false
+          },
+          "HOLD": {
+            "hits": 0,
+            "evaluated": 0,
+            "hit_rate_pct": null,
+            "observations": 1,
+            "directional_calls": 0,
+            "mean_action_score_pct": null,
+            "zero_score_is_convention": true
+          },
+          "SELL": {
+            "hits": 0,
+            "evaluated": 0,
+            "hit_rate_pct": null,
+            "observations": 0,
+            "directional_calls": 0,
+            "mean_action_score_pct": null,
+            "zero_score_is_convention": false
+          },
+          "OTHER": {
+            "hits": 0,
+            "evaluated": 0,
+            "hit_rate_pct": null,
+            "observations": 0,
+            "directional_calls": 0,
+            "mean_action_score_pct": null,
+            "zero_score_is_convention": false
+          }
+        },
+        "evaluated": 0,
+        "hold_rows": 0,
+        "unavailable": 1,
+        "hit_rate_pct": null,
+        "horizon_days": 1,
+        "not_recorded": 0,
+        "observations": 2,
+        "metric_family": "signal_diagnostics",
+        "method_versions": [
+          "attribution.synthetic.v1"
+        ],
+        "directional_calls": 0,
+        "execution_statuses": {
+          "hold_no_trade": 1,
+          "execution_not_recorded": 1
+        },
+        "sum_rejected_reason": "Per-decision scores cover overlapping windows and unequal position sizes; their sum is not a portfolio return and no total is provided.",
+        "hit_rate_denominator": 0,
+        "mean_action_score_pct": null,
+        "include_counterfactual": false,
+        "action_score_definition": "BUY score = forward return; SELL score = -forward return; HOLD score = 0 by convention and makes no directional claim.",
+        "hold_zero_is_convention": true,
+        "matched_benchmark_pairs": 0,
+        "mean_forward_return_pct": null,
+        "mean_benchmark_return_pct": null,
+        "mean_action_relative_return_pct": null,
+        "mean_relative_forward_return_pct": null,
+        "mean_directional_action_score_pct": null,
+        "unmatched_benchmark_rows_excluded": 0,
+        "mean_action_score_includes_hold_zero_rows": true
+      },
+      "7": {
+        "hits": 0,
+        "cohort": null,
+        "pending": 1,
+        "summable": false,
+        "by_action": {
+          "BUY": {
+            "hits": 0,
+            "evaluated": 1,
+            "hit_rate_pct": "0.0",
+            "observations": 1,
+            "directional_calls": 1,
+            "mean_action_score_pct": "-2.0000",
+            "zero_score_is_convention": false
+          },
+          "HOLD": {
+            "hits": 0,
+            "evaluated": 0,
+            "hit_rate_pct": null,
+            "observations": 1,
+            "directional_calls": 0,
+            "mean_action_score_pct": null,
+            "zero_score_is_convention": true
+          },
+          "SELL": {
+            "hits": 0,
+            "evaluated": 0,
+            "hit_rate_pct": null,
+            "observations": 0,
+            "directional_calls": 0,
+            "mean_action_score_pct": null,
+            "zero_score_is_convention": false
+          },
+          "OTHER": {
+            "hits": 0,
+            "evaluated": 0,
+            "hit_rate_pct": null,
+            "observations": 0,
+            "directional_calls": 0,
+            "mean_action_score_pct": null,
+            "zero_score_is_convention": false
+          }
+        },
+        "evaluated": 1,
+        "hold_rows": 0,
+        "unavailable": 0,
+        "hit_rate_pct": "0.0",
+        "horizon_days": 7,
+        "not_recorded": 0,
+        "observations": 2,
+        "metric_family": "signal_diagnostics",
+        "method_versions": [
+          "attribution.synthetic.v1"
+        ],
+        "directional_calls": 1,
+        "execution_statuses": {
+          "hold_no_trade": 1,
+          "execution_not_recorded": 1
+        },
+        "sum_rejected_reason": "Per-decision scores cover overlapping windows and unequal position sizes; their sum is not a portfolio return and no total is provided.",
+        "hit_rate_denominator": 1,
+        "mean_action_score_pct": "-2.0000",
+        "include_counterfactual": false,
+        "action_score_definition": "BUY score = forward return; SELL score = -forward return; HOLD score = 0 by convention and makes no directional claim.",
+        "hold_zero_is_convention": true,
+        "matched_benchmark_pairs": 1,
+        "mean_forward_return_pct": "-2.0000",
+        "mean_benchmark_return_pct": "-0.4000",
+        "mean_action_relative_return_pct": "-1.6000",
+        "mean_relative_forward_return_pct": "-1.6000",
+        "mean_directional_action_score_pct": "-2.0000",
+        "unmatched_benchmark_rows_excluded": 0,
+        "mean_action_score_includes_hold_zero_rows": true
+      },
+      "30": {
+        "hits": 0,
+        "cohort": null,
+        "pending": 0,
+        "summable": false,
+        "by_action": {
+          "BUY": {
+            "hits": 0,
+            "evaluated": 0,
+            "hit_rate_pct": null,
+            "observations": 0,
+            "directional_calls": 0,
+            "mean_action_score_pct": null,
+            "zero_score_is_convention": false
+          },
+          "HOLD": {
+            "hits": 0,
+            "evaluated": 0,
+            "hit_rate_pct": null,
+            "observations": 0,
+            "directional_calls": 0,
+            "mean_action_score_pct": null,
+            "zero_score_is_convention": true
+          },
+          "SELL": {
+            "hits": 0,
+            "evaluated": 0,
+            "hit_rate_pct": null,
+            "observations": 0,
+            "directional_calls": 0,
+            "mean_action_score_pct": null,
+            "zero_score_is_convention": false
+          },
+          "OTHER": {
+            "hits": 0,
+            "evaluated": 0,
+            "hit_rate_pct": null,
+            "observations": 0,
+            "directional_calls": 0,
+            "mean_action_score_pct": null,
+            "zero_score_is_convention": false
+          }
+        },
+        "evaluated": 0,
+        "hold_rows": 0,
+        "unavailable": 0,
+        "hit_rate_pct": null,
+        "horizon_days": 30,
+        "not_recorded": 0,
+        "observations": 0,
+        "metric_family": "signal_diagnostics",
+        "method_versions": [],
+        "directional_calls": 0,
+        "execution_statuses": {},
+        "sum_rejected_reason": "Per-decision scores cover overlapping windows and unequal position sizes; their sum is not a portfolio return and no total is provided.",
+        "hit_rate_denominator": 0,
+        "mean_action_score_pct": null,
+        "include_counterfactual": false,
+        "action_score_definition": "BUY score = forward return; SELL score = -forward return; HOLD score = 0 by convention and makes no directional claim.",
+        "hold_zero_is_convention": true,
+        "matched_benchmark_pairs": 0,
+        "mean_forward_return_pct": null,
+        "mean_benchmark_return_pct": null,
+        "mean_action_relative_return_pct": null,
+        "mean_relative_forward_return_pct": null,
+        "mean_directional_action_score_pct": null,
+        "unmatched_benchmark_rows_excluded": 0,
+        "mean_action_score_includes_hold_zero_rows": true
+      }
+    },
+    "benchmark_match_rule": "pairwise_same_horizon_forward_returns.v1",
+    "primary_horizon_days": 7,
+    "proposal_vs_executed": {
+      "counts": [
+        {
+          "count": 2,
+          "executed_action": "NONE",
+          "proposal_action": "BUY"
+        },
+        {
+          "count": 2,
+          "executed_action": "NONE",
+          "proposal_action": "HOLD"
+        }
+      ],
+      "hold_observations": 2,
+      "executed_observations": 0,
+      "rejected_counterfactual_rows": 0,
+      "directional_not_executed_observations": 2
+    },
+    "benchmark_interval_note": "Stored outcomes carry a benchmark return but not benchmark observation timestamps. The same-horizon rule is declared and the method_version is displayed; interval matching cannot be independently re-derived from the rows.",
+    "benchmark_interval_rule": "stored_benchmark_return_uses_the_same_decision_and_horizon_as_the_strategy.v1",
+    "benchmark_interval_verified": false
+  },
+  "portfolio_performance": {
+    "twr": {
+      "note": "Each sub-period ends at an external flow boundary; the flow changes the next base but is not itself a return.",
+      "method": "flow_boundary_chain.v1",
+      "reasons": [
+        "fees_unrecorded_for_some_fills"
+      ],
+      "return_pct": "1.3737",
+      "approximate": true,
+      "method_version": "portfolio_accounting.v1",
+      "flow_boundary_count": 1,
+      "subperiod_returns_pct": [
+        "0.6750",
+        "0.6940"
+      ]
+    },
+    "fees": {
+      "note": "NULL fee means no fee was recorded for that fill, not that the fee was zero. The equity series uses recorded fees only and is marked approximate when any fill in the window is unknown.",
+      "policy": "recorded_fees_only.v1",
+      "fill_count": 3,
+      "fees_complete": false,
+      "recorded_fees_usd": "3.75",
+      "unknown_fee_fill_count": 1,
+      "unknown_fee_fill_sources": [
+        "manifest_fixture:fill:1"
+      ]
+    },
+    "fills": [
+      {
+        "at": "2026-02-03T15:00:00Z",
+        "side": "BUY",
+        "source": "manifest_fixture:fill:0",
+        "ticker": "AAPL",
+        "fee_usd": "2.50",
+        "quantity": "10",
+        "price_usd": "100.00",
+        "executed_by": null,
+        "fee_recorded": true,
+        "notional_usd": "1000.00"
+      },
+      {
+        "at": "2026-02-04T15:00:00Z",
+        "side": "BUY",
+        "source": "manifest_fixture:fill:1",
+        "ticker": "MSFT",
+        "fee_usd": null,
+        "quantity": "2",
+        "price_usd": "410.00",
+        "executed_by": null,
+        "fee_recorded": false,
+        "notional_usd": "820.00"
+      },
+      {
+        "at": "2026-02-06T15:00:00Z",
+        "side": "SELL",
+        "source": "manifest_fixture:fill:2",
+        "ticker": "AAPL",
+        "fee_usd": "1.25",
+        "quantity": "5",
+        "price_usd": "110.00",
+        "executed_by": null,
+        "fee_recorded": true,
+        "notional_usd": "550.00"
+      }
+    ],
+    "flags": [
+      "fees_incomplete"
+    ],
+    "window": {
+      "end": "2026-02-11T00:00:00Z",
+      "start": "2026-02-03T00:00:00Z",
+      "timezone": "UTC"
+    },
+    "net_twr": {
+      "note": "Each sub-period ends at an external flow boundary; the flow changes the next base but is not itself a return.",
+      "method": "flow_boundary_chain.v1",
+      "reasons": [
+        "fees_unrecorded_for_some_fills"
+      ],
+      "return_pct": "1.3712",
+      "approximate": true,
+      "method_version": "portfolio_accounting.v1",
+      "flow_boundary_count": 1,
+      "subperiod_returns_pct": [
+        "0.6725",
+        "0.6940"
+      ]
+    },
+    "currency": "USD",
+    "drawdown": {
+      "peak_at": "2026-02-03T00:00:00Z",
+      "trough_at": "2026-02-04T15:00:00Z",
+      "definition": "maximum decline from a prior equity peak over priced observations",
+      "observations": 10,
+      "sample_limited": false,
+      "peak_equity_usd": "10000.00",
+      "max_drawdown_pct": "-0.5250",
+      "trough_equity_usd": "9947.50"
+    },
+    "exposure": {
+      "formula": "sum(quantity * mark_price) / equity",
+      "observations": 9,
+      "end_gross_pct": "11.7272",
+      "average_gross_pct": "11.9660"
+    },
+    "turnover": {
+      "pct": "21.3983",
+      "ratio": "0.2140",
+      "formula": "sum(abs(quantity * fill_price)) / ((opening_equity + closing_equity) / 2)",
+      "trade_count": 3,
+      "average_equity_usd": "11075.62",
+      "traded_notional_usd": "2370.00",
+      "average_equity_basis": "mean_of_opening_and_closing_equity",
+      "fees_included_in_notional": false
+    },
+    "llm_costs": {
+      "note": "LLM/API costs are not portfolio cash flows. They are deducted only in the net series, so they are not also subtracted from the gross equity.",
+      "method": "explicit_net_of_llm_equity_series.v1",
+      "funding": "external_provider_account",
+      "cost_events": [
+        {
+          "at": "2026-02-04T18:00:00Z",
+          "source": "declared_measurement_fixture",
+          "run_key": null,
+          "amount_usd": "0.250000"
+        }
+      ],
+      "costs_complete": true,
+      "double_counted": false,
+      "net_return_pct": "1.3712",
+      "cost_event_count": 1,
+      "net_return_reason": null,
+      "recorded_cost_usd": "0.250000",
+      "missing_cost_run_count": 0,
+      "net_return_established": true,
+      "equity_series_net_of_llm": [
+        {
+          "at": "2026-02-03T00:00:00Z",
+          "equity_net_of_llm_usd": "10000.00"
+        },
+        {
+          "at": "2026-02-03T15:00:00Z",
+          "equity_net_of_llm_usd": "9997.50"
+        },
+        {
+          "at": "2026-02-04T15:00:00Z",
+          "equity_net_of_llm_usd": "9947.50"
+        },
+        {
+          "at": "2026-02-04T18:00:00Z",
+          "equity_net_of_llm_usd": "9947.25"
+        },
+        {
+          "at": "2026-02-05T15:00:00Z",
+          "equity_net_of_llm_usd": "12067.25"
+        },
+        {
+          "at": "2026-02-06T15:00:00Z",
+          "equity_net_of_llm_usd": "12116.00"
+        },
+        {
+          "at": "2026-02-07T15:00:00Z",
+          "equity_net_of_llm_usd": "12122.00"
+        },
+        {
+          "at": "2026-02-10T00:00:00Z",
+          "equity_net_of_llm_usd": "12151.00"
+        },
+        {
+          "at": "2026-02-11T00:00:00Z",
+          "equity_net_of_llm_usd": "12151.00"
+        }
+      ],
+      "known_cost_only_return_pct": "1.3712",
+      "deducted_from_portfolio_cash": false
+    },
+    "synthetic": true,
+    "provenance": {
+      "note": "portfolio performance is computed from the ledger/fixture, never from per-decision signal scores.",
+      "source": "manifest_fixture",
+      "synthetic": true
+    },
+    "approximate": true,
+    "methodology": {
+      "version": "portfolio_accounting.v1",
+      "twr_note": "Each sub-period ends at an external flow boundary; the flow changes the next base but is not itself a return.",
+      "fill_rule": "first_executable_mark_at_or_after_decision.v1",
+      "cash_basis": "manifest_accounting_fixture",
+      "fee_policy": "recorded_fees_only.v1",
+      "fill_count": 3,
+      "flow_count": 1,
+      "twr_method": "flow_boundary_chain.v1",
+      "approximate": true,
+      "mark_policy": "latest_known_mark_at_or_before_valuation.v1",
+      "mark_sources": {
+        "fill": 3,
+        "fixture_mark": 14
+      },
+      "observations": 9,
+      "short_policy": "A SELL may only close or reduce a long. An oversell is refused rather than silently treated as a short.",
+      "position_basis": "full_ledger_replay_from_portfolio_inception",
+      "llm_cost_policy": "explicit_net_of_llm_equity_series.v1",
+      "cash_basis_flags": [
+        "synthetic_accounting_fixture"
+      ],
+      "opening_cash_usd": "10000.00",
+      "turnover_formula": "sum(abs(quantity * fill_price)) / ((opening_equity + closing_equity) / 2)",
+      "valuation_timing": "End of timestamp: external flows are applied before fills at the same instant.",
+      "equity_definition": "E(t) = cash(t) + sum(quantity(i,t) * price(i,t))",
+      "opening_positions": {},
+      "approximate_reasons": [
+        "fees_unrecorded_for_some_fills"
+      ],
+      "drawdown_definition": "maximum decline from a prior equity peak over priced observations",
+      "mark_staleness_days": 7,
+      "priced_observations": 9,
+      "unpriced_observations": 0
+    },
+    "trade_count": 3,
+    "equity_series": [
+      {
+        "at": "2026-02-03T00:00:00Z",
+        "events": [],
+        "cash_usd": "10000.00",
+        "equity_usd": "10000.00",
+        "mark_sources": {},
+        "fees_paid_usd": "0.00",
+        "unpriced_tickers": [],
+        "gross_exposure_pct": "0.0000",
+        "position_values_usd": {},
+        "positions_value_usd": "0.00",
+        "oldest_mark_age_days": null,
+        "equity_net_of_llm_usd": "10000.00",
+        "llm_cost_cumulative_usd": "0.000000"
+      },
+      {
+        "at": "2026-02-03T15:00:00Z",
+        "events": [
+          "BUY 10 AAPL @ 100.00"
+        ],
+        "cash_usd": "8997.50",
+        "equity_usd": "9997.50",
+        "mark_sources": {
+          "AAPL": "fill"
+        },
+        "fees_paid_usd": "2.50",
+        "unpriced_tickers": [],
+        "gross_exposure_pct": "10.0025",
+        "position_values_usd": {
+          "AAPL": "1000.00"
+        },
+        "positions_value_usd": "1000.00",
+        "oldest_mark_age_days": "0.0",
+        "equity_net_of_llm_usd": "9997.50",
+        "llm_cost_cumulative_usd": "0.000000"
+      },
+      {
+        "at": "2026-02-04T15:00:00Z",
+        "events": [
+          "BUY 2 MSFT @ 410.00 (fee unrecorded)"
+        ],
+        "cash_usd": "8177.50",
+        "equity_usd": "9947.50",
+        "mark_sources": {
+          "AAPL": "fixture_mark",
+          "MSFT": "fill"
+        },
+        "fees_paid_usd": "2.50",
+        "unpriced_tickers": [],
+        "gross_exposure_pct": "17.7934",
+        "position_values_usd": {
+          "AAPL": "950.00",
+          "MSFT": "820.00"
+        },
+        "positions_value_usd": "1770.00",
+        "oldest_mark_age_days": "0.0",
+        "equity_net_of_llm_usd": "9947.50",
+        "llm_cost_cumulative_usd": "0.000000"
+      },
+      {
+        "at": "2026-02-04T18:00:00Z",
+        "events": [],
+        "cash_usd": "8177.50",
+        "equity_usd": "9947.50",
+        "mark_sources": {
+          "AAPL": "fixture_mark",
+          "MSFT": "fill"
+        },
+        "fees_paid_usd": "2.50",
+        "unpriced_tickers": [],
+        "gross_exposure_pct": "17.7934",
+        "position_values_usd": {
+          "AAPL": "950.00",
+          "MSFT": "820.00"
+        },
+        "positions_value_usd": "1770.00",
+        "oldest_mark_age_days": "0.1",
+        "equity_net_of_llm_usd": "9947.25",
+        "llm_cost_cumulative_usd": "0.250000"
+      },
+      {
+        "at": "2026-02-05T15:00:00Z",
+        "events": [
+          "FLOW DEPOSIT 2000.00"
+        ],
+        "cash_usd": "10177.50",
+        "equity_usd": "12067.50",
+        "mark_sources": {
+          "AAPL": "fixture_mark",
+          "MSFT": "fixture_mark"
+        },
+        "fees_paid_usd": "2.50",
+        "unpriced_tickers": [],
+        "gross_exposure_pct": "15.6619",
+        "position_values_usd": {
+          "AAPL": "1080.00",
+          "MSFT": "810.00"
+        },
+        "positions_value_usd": "1890.00",
+        "oldest_mark_age_days": "0.0",
+        "equity_net_of_llm_usd": "12067.25",
+        "llm_cost_cumulative_usd": "0.250000"
+      },
+      {
+        "at": "2026-02-06T15:00:00Z",
+        "events": [
+          "SELL 5 AAPL @ 110.00"
+        ],
+        "cash_usd": "10726.25",
+        "equity_usd": "12116.25",
+        "mark_sources": {
+          "AAPL": "fixture_mark",
+          "MSFT": "fixture_mark"
+        },
+        "fees_paid_usd": "3.75",
+        "unpriced_tickers": [],
+        "gross_exposure_pct": "11.4722",
+        "position_values_usd": {
+          "AAPL": "550.00",
+          "MSFT": "840.00"
+        },
+        "positions_value_usd": "1390.00",
+        "oldest_mark_age_days": "0.0",
+        "equity_net_of_llm_usd": "12116.00",
+        "llm_cost_cumulative_usd": "0.250000"
+      },
+      {
+        "at": "2026-02-07T15:00:00Z",
+        "events": [],
+        "cash_usd": "10726.25",
+        "equity_usd": "12122.25",
+        "mark_sources": {
+          "AAPL": "fixture_mark",
+          "MSFT": "fixture_mark"
+        },
+        "fees_paid_usd": "3.75",
+        "unpriced_tickers": [],
+        "gross_exposure_pct": "11.5160",
+        "position_values_usd": {
+          "AAPL": "560.00",
+          "MSFT": "836.00"
+        },
+        "positions_value_usd": "1396.00",
+        "oldest_mark_age_days": "0.0",
+        "equity_net_of_llm_usd": "12122.00",
+        "llm_cost_cumulative_usd": "0.250000"
+      },
+      {
+        "at": "2026-02-10T00:00:00Z",
+        "events": [],
+        "cash_usd": "10726.25",
+        "equity_usd": "12151.25",
+        "mark_sources": {
+          "AAPL": "fixture_mark",
+          "MSFT": "fixture_mark"
+        },
+        "fees_paid_usd": "3.75",
+        "unpriced_tickers": [],
+        "gross_exposure_pct": "11.7272",
+        "position_values_usd": {
+          "AAPL": "575.00",
+          "MSFT": "850.00"
+        },
+        "positions_value_usd": "1425.00",
+        "oldest_mark_age_days": "0.0",
+        "equity_net_of_llm_usd": "12151.00",
+        "llm_cost_cumulative_usd": "0.250000"
+      },
+      {
+        "at": "2026-02-11T00:00:00Z",
+        "events": [],
+        "cash_usd": "10726.25",
+        "equity_usd": "12151.25",
+        "mark_sources": {
+          "AAPL": "fixture_mark",
+          "MSFT": "fixture_mark"
+        },
+        "fees_paid_usd": "3.75",
+        "unpriced_tickers": [],
+        "gross_exposure_pct": "11.7272",
+        "position_values_usd": {
+          "AAPL": "575.00",
+          "MSFT": "850.00"
+        },
+        "positions_value_usd": "1425.00",
+        "oldest_mark_age_days": "0.0",
+        "equity_net_of_llm_usd": "12151.00",
+        "llm_cost_cumulative_usd": "0.250000"
+      }
+    ],
+    "metric_family": "portfolio_performance",
+    "risk_adjusted": {
+      "sharpe": {
+        "value": null,
+        "reason": "The valuation frequency is event-driven, not a fixed daily series. A Sharpe ratio needs a declared frequency, annualisation and risk-free rate; this report does not fabricate them.",
+        "included": false,
+        "frequency": "event_driven",
+        "observations": 2,
+        "annualization": null,
+        "sample_limits": "2 sub-period return(s); fewer than the 30 a stable Sharpe would need, and the spacing is not uniform.",
+        "risk_free_rate": null
+      }
+    },
+    "external_flows": [
+      {
+        "at": "2026-02-05T15:00:00Z",
+        "source": "manifest_fixture:flow:0",
+        "currency": "USD",
+        "flow_type": "DEPOSIT",
+        "amount_usd": "2000.00",
+        "signed_usd": "2000.00"
+      }
+    ],
+    "method_version": "portfolio_accounting.v1",
+    "reconciliation": {
+      "note": "A PortfolioSnapshot stores aggregate cash and positions value, not per-instrument quantities. It can reconcile a replay total; it cannot value a historical position on its own.",
+      "status": "no_snapshot",
+      "anchors": [],
+      "input_snapshots": {
+        "note": "The experiment uses a manifest-declared accounting fixture, not the ledger.",
+        "runs": [],
+        "status": "not_applicable"
+      },
+      "snapshot_detail": "aggregate_only"
+    },
+    "flow_boundaries": [
+      {
+        "at": "2026-02-05T15:00:00Z",
+        "barrier": "external_flow",
+        "flow_usd": "2000.00",
+        "valuation_exact": true,
+        "equity_after_usd": "12067.50",
+        "equity_before_usd": "10067.50",
+        "net_equity_after_usd": "12067.25",
+        "net_equity_before_usd": "10067.25"
+      }
+    ],
+    "closing_cash_usd": "10726.25",
+    "max_drawdown_pct": "-0.5250",
+    "net_equity_series": [
+      {
+        "at": "2026-02-03T00:00:00Z",
+        "equity_net_of_llm_usd": "10000.00"
+      },
+      {
+        "at": "2026-02-03T15:00:00Z",
+        "equity_net_of_llm_usd": "9997.50"
+      },
+      {
+        "at": "2026-02-04T15:00:00Z",
+        "equity_net_of_llm_usd": "9947.50"
+      },
+      {
+        "at": "2026-02-04T18:00:00Z",
+        "equity_net_of_llm_usd": "9947.25"
+      },
+      {
+        "at": "2026-02-05T15:00:00Z",
+        "equity_net_of_llm_usd": "12067.25"
+      },
+      {
+        "at": "2026-02-06T15:00:00Z",
+        "equity_net_of_llm_usd": "12116.00"
+      },
+      {
+        "at": "2026-02-07T15:00:00Z",
+        "equity_net_of_llm_usd": "12122.00"
+      },
+      {
+        "at": "2026-02-10T00:00:00Z",
+        "equity_net_of_llm_usd": "12151.00"
+      },
+      {
+        "at": "2026-02-11T00:00:00Z",
+        "equity_net_of_llm_usd": "12151.00"
+      }
+    ],
+    "closing_equity_usd": "12151.25",
+    "opening_equity_usd": "10000.00",
+    "cash_reconciliation": {
+      "note": "Unknown fees are not guessed; they are counted. A matched result with an unknown fee means the known movements reconcile, not that the fee was zero.",
+      "status": "matched_with_unrecorded_fees",
+      "formula": "opening_cash + deposits - withdrawals - buy_notional + sell_notional - recorded_fees",
+      "deposits_usd": "2000.00",
+      "tolerance_usd": "0.01",
+      "difference_usd": "0.00",
+      "withdrawals_usd": "0.00",
+      "buy_notional_usd": "1820.00",
+      "opening_cash_usd": "10000.00",
+      "fees_recorded_usd": "3.75",
+      "sell_notional_usd": "550.00",
+      "unknown_fee_fill_count": 1,
+      "computed_closing_cash_usd": "10726.25",
+      "expected_closing_cash_usd": "10726.25"
+    },
+    "net_max_drawdown_pct": "-0.5275",
+    "contribution_analysis": {
+      "note": "Contribution is additive within a position over this window: closing value minus opening value minus net invested cash minus recorded fees. It is computed from the ledger, not from per-decision scores. Unknown fees make the reconciliation optimistic and are counted.",
+      "rows": [
+        {
+          "exits": [
+            {
+              "at": "2026-02-06T15:00:00Z",
+              "side": "SELL",
+              "source": "manifest_fixture:fill:2",
+              "ticker": "AAPL",
+              "fee_usd": "1.25",
+              "quantity": "5",
+              "price_usd": "110.00",
+              "executed_by": null,
+              "fee_recorded": true,
+              "notional_usd": "550.00",
+              "capital_weight_pct": "4.5394"
+            }
+          ],
+          "ticker": "AAPL",
+          "entries": [
+            {
+              "at": "2026-02-03T15:00:00Z",
+              "side": "BUY",
+              "source": "manifest_fixture:fill:0",
+              "ticker": "AAPL",
+              "fee_usd": "2.50",
+              "quantity": "10",
+              "price_usd": "100.00",
+              "executed_by": null,
+              "fee_recorded": true,
+              "notional_usd": "1000.00",
+              "capital_weight_pct": "10.0025"
+            }
+          ],
+          "buy_notional_usd": "1000.00",
+          "closing_quantity": "5",
+          "opening_quantity": "0",
+          "closing_price_usd": "115.00",
+          "fees_recorded_usd": "3.75",
+          "opening_price_usd": "100.00",
+          "sell_notional_usd": "550.00",
+          "net_quantity_change": "5",
+          "unknown_fee_fill_count": 0,
+          "pnl_pct_of_opening_equity": "1.2125",
+          "average_capital_weight_pct": "7.0844",
+          "realised_and_unrealised_pnl_usd": "121.25"
+        },
+        {
+          "exits": [],
+          "ticker": "MSFT",
+          "entries": [
+            {
+              "at": "2026-02-04T15:00:00Z",
+              "side": "BUY",
+              "source": "manifest_fixture:fill:1",
+              "ticker": "MSFT",
+              "fee_usd": null,
+              "quantity": "2",
+              "price_usd": "410.00",
+              "executed_by": null,
+              "fee_recorded": false,
+              "notional_usd": "820.00",
+              "capital_weight_pct": "8.2433"
+            }
+          ],
+          "buy_notional_usd": "820.00",
+          "closing_quantity": "2",
+          "opening_quantity": "0",
+          "closing_price_usd": "425.00",
+          "fees_recorded_usd": "0.00",
+          "opening_price_usd": "410.00",
+          "sell_notional_usd": "0.00",
+          "net_quantity_change": "2",
+          "unknown_fee_fill_count": 1,
+          "pnl_pct_of_opening_equity": "0.3000",
+          "average_capital_weight_pct": "7.2883",
+          "realised_and_unrealised_pnl_usd": "30.00"
+        }
+      ],
+      "basis": "fills_and_marks.v1",
+      "total_pnl_usd": "151.25",
+      "reconciles_to_equity_change": true,
+      "reconciliation_tolerance_usd": "0.01",
+      "equity_change_excluding_flows_usd": "151.25"
+    },
+    "cumulative_return_pct": "21.5125",
+    "net_of_llm_return_pct": "1.3712",
+    "time_weighted_return_pct": "1.3737",
+    "closing_positions_value_usd": "1425.00"
+  },
+  "report_schema_version": "1.0",
+  "no_profitability_claim": true,
+  "profitability_threshold": null,
+  "engineering_validation_only": true
+}
