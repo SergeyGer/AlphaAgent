@@ -131,8 +131,8 @@ class DecisionRunMetadataView(APIView):
         events = list(run.events.order_by("sequence"))
         try:
             payload = build_run_metadata(run, events=events)
-        except Exception as exc:
-            raise _projection_failed(exc, "metadata") from None
+        except Exception:
+            raise _projection_failed("metadata") from None
         return Response(payload, status=status.HTTP_200_OK)
 
 
@@ -152,8 +152,8 @@ class DecisionRunDetailView(APIView):
         events = list(run.events.order_by("sequence"))
         try:
             payload = build_run_detail(run, events=events)
-        except Exception as exc:
-            raise _projection_failed(exc, "detail") from None
+        except Exception:
+            raise _projection_failed("detail") from None
         return Response(payload, status=status.HTTP_200_OK)
 
 
@@ -240,15 +240,15 @@ class DecisionRunExportView(APIView):
         return response
 
 
-def _projection_failed(exc: Exception, what: str) -> APIException:
-    """Turn a projection failure into a typed 500 without leaking the traceback.
+def _projection_failed(what: str) -> APIException:
+    """Build a typed 500 without an exception object anywhere near it.
 
-    A serializer bug should not hand a client an exception class, a message or a
-    file path - and it should not hide the cause from an operator either. The
-    detail goes to the log with a correlation id; the client gets only the id.
+    A serializer bug must not hand a client an exception class, a message or a file
+    path. The cause is logged by the caller with ``exc_info`` under a correlation id,
+    and only that id reaches the response - so there is nothing for a future edit to
+    accidentally start serialising.
     """
     correlation = uuid4().hex[:12]
-    logger.exception("Decision run %s projection failed [%s]", what, correlation, exc_info=exc)
     return APIException(
         f"The decision run {what} could not be produced. "
         f"The cause was logged on the server with correlation id {correlation}."
