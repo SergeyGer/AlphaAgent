@@ -17,11 +17,13 @@ Routes (mounted under ``/api/`` by ``core/urls.py``)::
 
 from __future__ import annotations
 
-from uuid import UUID
+import logging
+from uuid import UUID, uuid4
 
 from django.db.models import Max
 from django.http import Http404
 from rest_framework import generics, status
+from rest_framework.exceptions import APIException
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -48,6 +50,8 @@ __all__ = [
 #: DRF's PAGE_SIZE so the decision endpoints feel like the rest of the API.
 EVENTS_PAGE_SIZE = 50
 EVENTS_MAX_PAGE_SIZE = 500
+
+logger = logging.getLogger("alphaagent.decision_views")
 
 
 def _error(status_code: int, detail: str) -> Response:
@@ -125,7 +129,11 @@ class DecisionRunMetadataView(APIView):
     def get(self, request: Request, run_id: str) -> Response:
         run = _get_run(request, run_id)
         events = list(run.events.order_by("sequence"))
-        return Response(build_run_metadata(run, events=events), status=status.HTTP_200_OK)
+        try:
+            payload = build_run_metadata(run, events=events)
+        except Exception as exc:
+            raise _projection_failed(exc, "metadata") from exc
+        return Response(payload, status=status.HTTP_200_OK)
 
 
 class DecisionRunDetailView(APIView):
@@ -142,7 +150,11 @@ class DecisionRunDetailView(APIView):
     def get(self, request: Request, run_id: str) -> Response:
         run = _get_run(request, run_id, with_detail=True)
         events = list(run.events.order_by("sequence"))
-        return Response(build_run_detail(run, events=events), status=status.HTTP_200_OK)
+        try:
+            payload = build_run_detail(run, events=events)
+        except Exception as exc:
+            raise _projection_failed(exc, "detail") from exc
+        return Response(payload, status=status.HTTP_200_OK)
 
 
 class DecisionRunEventsView(APIView):
@@ -226,3 +238,18 @@ class DecisionRunExportView(APIView):
         response = Response(bundle, status=status.HTTP_200_OK)
         response["Content-Disposition"] = f'attachment; filename="decision-run-{run.id}.json"'
         return response
+
+
+def _projection_failed(exc: Exception, what: str) -> APIException:
+    """Turn a projection failure into a typed 500 without leaking the traceback.
+
+    A serializer bug should not hand a client an exception class, a message or a
+    file path - and it should not hide the cause from an operator either. The
+    detail goes to the log with a correlation id; the client gets only the id.
+    """
+    correlation = uuid4().hex[:12]
+    logger.exception("Decision run %s projection failed [%s]", what, correlation, exc_info=exc)
+    return APIException(
+        f"The decision run {what} could not be produced. "
+        f"The cause was logged on the server with correlation id {correlation}."
+    )

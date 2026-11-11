@@ -20,12 +20,8 @@ matching legacy log / run pair to bridge.
 
 from __future__ import annotations
 
-import logging
-
 from core.decision_models import DecisionRun, OutcomeMaturity, OutcomeRecord
 from core.models import DecisionOutcome
-
-logger = logging.getLogger("alphaagent.decision_outcomes")
 
 __all__ = ["OUTCOME_METHOD_VERSION", "sync_outcome", "sync_outcomes_for_run"]
 

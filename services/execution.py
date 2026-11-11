@@ -20,7 +20,6 @@ revalidates rather than trusting a hand-built ``GuardDecision``).
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -44,9 +43,9 @@ if TYPE_CHECKING:  # pragma: no cover - typing only, avoids importing CrewAI
     from ai_agent import TradeProposal
     from services.ledger import PositionState
 
-logger = logging.getLogger("alphaagent.execution")
-
-# Deliberately no module-level logger: the guard is a pure function and
+# Deliberately no module-level logger: the guard is a pure function and does
+# not log. A module-level `logger` here was flagged as py/unused-global-variable,
+# which was correct.
 # performs no I/O, so it has nothing to log. Callers log the reasons it returns.
 # (An unused logger here was flagged as py/unused-global-variable.)
 
