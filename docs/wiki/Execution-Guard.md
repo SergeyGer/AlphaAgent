@@ -50,6 +50,10 @@ every deviation between what the model asked for and what was permitted.
 
 `evaluate_proposal(portfolio, proposal, price, position, realised_pnl_today)`
 
+The guard's docstring groups these as seven enforced rules. The table splits the
+BUY and SELL branches so an audit reader can see each outcome; it is the same
+implementation, not a second list.
+
 | # | Rule | Outcome when violated |
 | --- | --- | --- |
 | 1 | `HOLD` requires no execution | Returns not-approved with a benign reason; nothing is written |
@@ -147,8 +151,8 @@ integration tests with mocks. See [[Quality-and-Testing]].
 
 The rules above are **per trade**. ADR-0001 recorded the consequence in its own
 words: *"a deliberate sequence of individually-permitted trades is unbounded."*
-Beat sweeps every fifteen minutes, so twenty 5%-of-cash buys reach fully invested
-without any single decision looking wrong.
+Beat sweeps every fifteen minutes, so a sequence of individually-permitted
+5%-of-cash buys compounds exposure without any single decision looking wrong.
 
 Two ceilings close that, both expressed as a percentage of **equity** (cash plus
 positions at market) rather than of cash — a percentage of cash would let a
@@ -191,9 +195,10 @@ so they arrive as an `Exposure` value object built by
 > **Omitting `exposure` skips both limits.** It is not a required parameter,
 > because the guard is called from paths that do not have market values to hand,
 > so this is a real gap rather than a graceful default. `ExposureWiringTests`
-> asserts the two production callers supply it — a test standing in for a type.
-> The Streamlit demo also builds and passes one, so the public playground drives
-> the whole guard rather than half of it.
+> asserts the scheduled-run and approval callers supply it, and the Phase 4
+> `apply_plan` path also builds one — a test standing in for a type. The
+> Streamlit demo builds and passes one too, so the public playground drives the
+> whole guard rather than half of it.
 
 ### A refusal names the limit that refused it
 
@@ -232,7 +237,7 @@ reached` row to this same audit log, so "why did the agent stop?" is answerable 
 one place.
 
 Because it is not part of this guard, a run that begins just below the ceiling can
-overshoot it by the cost of that run (around $0.15). See
+overshoot it by the cost of that run. See
 [Configuration](Configuration) for `AI_DAILY_SPEND_LIMIT_USD` and
 [ADR-0012](https://github.com/SergeyGer/AlphaAgent/blob/main/docs/adr/0012-daily-ai-spend-ceiling.md)
 for the reasoning.

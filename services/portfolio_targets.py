@@ -942,8 +942,9 @@ def constrain_targets(
     if not converged:
         # Last-resort safe action: hold the current portfolio. This can still be
         # outside a limit that was already breached, which is recorded below.
+        # Cash is not assigned here: ``_normalise_exact`` derives it from the
+        # weights that survive rounding, and that is the value returned below.
         weights = {ticker: current.get(ticker, ZERO) for ticker in weights}
-        cash = ONE - sum(weights.values(), ZERO)
         _add_deviation(
             deviations,
             code="constrained_projection_no_feasible_change",

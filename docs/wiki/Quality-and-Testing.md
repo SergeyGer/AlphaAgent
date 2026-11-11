@@ -1,43 +1,59 @@
 # Quality and Testing
 
-AlphaAgent is verified by one Django/unittest suite in `core/tests/`, three CI jobs, and a
-small set of static and secret-hygiene checks. There is no pytest, no coverage gate and no
-separate integration harness — the suite is run with the Django test runner and CI runs the
-same command a developer runs locally.
+AlphaAgent is verified by one Django/unittest suite in `core/tests/`, a separate Vitest
+suite in `frontend/`, four CI jobs in `ci.yml`, and a small set of static and
+secret-hygiene checks. There is no pytest and no separate integration harness — the
+backend suite is run with the Django test runner, and CI runs the same command a
+developer runs locally. A backend coverage floor of 70% is enforced.
 
 Measured on this checkout:
 
 | Metric | Value | How it was measured |
 | --- | --- | --- |
-| Test modules | 14 (`test_*.py`) plus `helpers.py` | `ls core/tests/` |
-| Test methods | **382** | `venv/bin/python manage.py test core.tests` |
-| Result | `Ran the test tiers described below` → `OK` | same command, PostgreSQL backend |
+| Backend test modules | 28 (`test_*.py`) plus `helpers.py` | `ls core/tests/` |
+| Backend test methods | **716** at the Phase 0-4 baseline (the runner prints the current total) | `venv/bin/python manage.py test core.tests` |
+| Frontend test files / tests | 16 / **178** | `cd frontend && npm test` |
+| Result | `OK` | both commands, PostgreSQL backend for the Django suite |
 | Lint status | `All checks passed!` | `venv/bin/ruff check .` |
-| Format status | `68 files already formatted` | `venv/bin/ruff format --check .` |
-| Linter version | ruff 0.16.9 | `requirements-dev.txt`, pinned identically in `.pre-commit-config.yaml` |
+| Format status | clean | `venv/bin/ruff format --check .` |
+| Linter version | pinned in `requirements-dev.txt` | `.pre-commit-config.yaml` pins the hook's own version |
 
 ## Test modules
 
-Counts are `def test_*` methods per module, verified by AST walk and consistent with the
-runner's total of 382.
+Counts are `def test_*` methods per module at the Phase 0-4 baseline, verified by AST
+walk and consistent with the runner's total of 716. The authoritative number is
+the total the runner prints on the commit being reviewed.
 
-| Module | Classes | Tests | What it actually covers |
-| --- | --- | --- | --- |
-| `test_ai_agent.py` | 6 | 33 | `TradeProposal` payload contract, JSON extraction from prose/fenced output, heuristic engine sizing, token cost accounting, and real CrewAI crew construction (guardrail annotation contract, tool schemas). |
-| `test_api.py` | 5 | 19 | REST auth, portfolio payload + bounded query count, graceful market-data degradation, autonomy toggle confirmation rules, decision-log filtering/scoping, transaction listing, `/healthz`, token issuance. |
-| `test_dashboard_api.py` | 7 | 29 | Equity snapshot series and hour filtering, recommendation list/approve/reject (incl. 409 on a second decision and 500-not-crash on failure), advisory sweep dispatch, SPA serving (no build → 404, `index.html` no-cache, path traversal blocked), API-over-SPA route precedence. |
-| `test_guardrails.py` | 3 | 17 | The execution guard: allocation ceiling and clamping, daily-loss limit (blocks BUY, allows SELL), HOLD never executes, missing/zero price, zero amount, SELL without or larger than a position, fractional crypto sizing. |
-| `test_llm_hooks.py` | 4 (+1 helper) | 19 | LLM transport interceptor: workspace-id and arbitrary extra headers, malformed-JSON tolerance, and an end-to-end test against a mock Anthropic HTTP endpoint that asserts the header arrives **on the wire**. |
-| `test_mcp.py` | 5 | 24 | MCP server over the real SDK: handshake, advertised tool set, per-tool JSON payloads, degradation, no-ORM-query isolation, logging forced to stderr, and MCP-vs-local tool routing in the crew. |
-| `test_models.py` | 4 | 11 | Schema contract: documented defaults, one-portfolio-per-user, negative balance and non-positive amount rejected at the database, cost-basis/market-value derivations, log/transaction FK behaviour. |
-| `test_recommendations.py` | 8 | 36 | Human-in-the-loop: creation and de-duplication, TTL expiry, approval re-validated at current prices (clamping, loss-limit block, SELL-without-position), double-approval refusal, audit rows, snapshots, debate persistence. |
-| `test_security.py` | 3 | 9 | `env_required` semantics and the repository-wide secret scan — see below. |
-| `test_services.py` | 6 | 31 | Ticker normalisation, quote cache/fallback paths, lexicon sentiment (negation, intensifiers), RSS parsing including billion-laughs and XXE rejection, ledger replay (weighted average cost, realised P&L), portfolio metrics. |
-| `test_tasks.py` | 4 | 19 | Celery task bodies: approved BUY/SELL ledger mutation and audit trail, clamping, loss-limit block, rollback on execution failure, crash capture, monitoring fan-out isolation, risk sweep halting, token purge. |
-| `test_telegram.py` | 9 (+2 helpers) | 45 | Bot formatting and 64-byte callback budget, link/unlink flow, reports, approve/reject/why callbacks, notification opt-out, webhook secret and always-ACK behaviour, and cross-user portfolio scoping. |
-| `test_throttle.py` | 4 | 18 | Sweep-ticker cooldowns and sweep debounce: effectiveness, per-ticker/per-portfolio independence, zero-window disable, explicit release, and **fail-open** when the cache is down. |
-| `test_websockets.py` | 3 | 14 | ASGI consumer auth (anonymous closed with policy code), ping/pong, unknown frames ignored, event relay to the owning user only, Decimal serialisation, soft failure without a channel layer. |
-| `test_regressions.py` | 15 | 58 | One class per defect found by a review rather than by a failing test: the `portfolio.snapshot` payload shape, per-caller sweep scoping and the truthful `429`, scoped debounce keys, link-code expiry, last-use token purge plus the activity stamp's cost bound, defensive `limit` parsing, the `autonomy.changed` broadcast, webhook fail-closed, trade-notification delivery, scheduled-snapshot emission, execution preconditions surviving `python -O`, ticker validation, log-forging neutralisation, and SPA path containment. Each class is named for the behaviour that was wrong, so a regression reads as a sentence. |
+| Module | Tests | What it actually covers |
+| --- | --- | --- |
+| `test_ai_agent.py` | 33 | `TradeProposal` payload contract, JSON extraction from prose/fenced output, heuristic engine sizing, token cost accounting, and real CrewAI crew construction (guardrail annotation contract, tool schemas). |
+| `test_api.py` | 19 | REST auth, portfolio payload + bounded query count, graceful market-data degradation, autonomy toggle confirmation rules, decision-log filtering/scoping, transaction listing, `/healthz`, token issuance. |
+| `test_attribution.py` | 24 | Outcome scoring: SELL is right when the price falls, HOLD never enters the hit rate, empty scorecard reports no rate, start-price choice, idempotent evaluation. |
+| `test_dashboard_api.py` | 29 | Equity snapshot series and hour filtering, recommendation list/approve/reject, advisory sweep dispatch, SPA serving, API-over-SPA route precedence. |
+| `test_debate_protocol.py` | 32 | Independent first round, one rebuttal round, adjudication, stage budgets, typed failures, fallback separation, reproducibility metadata. |
+| `test_decision_runs.py` | 25 | Decision-run list/metadata/detail/events/export contracts, fixture label propagation, ownership scoping and redaction. |
+| `test_demo_theme_contract.py` | 3 | The Streamlit demo's theme contract against the pinned Streamlit version. |
+| `test_documentation_links.py` | 6 | Every absolute source link resolves to a file and line in the checkout; the wiki-breaking relative form is rejected. |
+| `test_experiments.py` | 38 | Experiment manifest validation, variant publication, report assembly, fairness, sample gates, evidence coverage, Sharpe absence and counterfactual reporting. |
+| `test_exposure_limits.py` | 26 | Portfolio-level ceilings: exact clamp, binding limit named, SELL never blocked, production callers pass `Exposure`. |
+| `test_guardrails.py` | 17 | The execution guard: allocation ceiling and clamping, daily-loss limit, HOLD never executes, missing/zero price, zero amount, SELL sizing, fractional crypto. |
+| `test_llm_hooks.py` | 19 | LLM transport interceptor: headers, malformed-JSON tolerance, and an end-to-end mock Anthropic HTTP endpoint. |
+| `test_mcp.py` | 24 | MCP handshake, advertised tools, per-tool payloads, degradation, no-ORM-query isolation, logging to stderr, MCP-vs-local routing. |
+| `test_model_compatibility.py` | 11 | Sampling-parameter omission for models that reject `temperature`, and pricing/estimate behaviour. |
+| `test_models.py` | 11 | Schema contract: documented defaults, one portfolio per user, negative balance and non-positive amount rejected at the database, derivations. |
+| `test_portfolio_accounting.py` | 35 | Equity, fees, flows, TWR approximations, missing prices and benchmarks, weekend maturities, leakage, overlapping decisions, LLM cost, counterfactuals. |
+| `test_portfolio_allocation.py` | 53 | Brief completeness, target contract, deterministic projection, leg sizing, atomic apply, revalidation, concurrency and the paper command. |
+| `test_recommendations.py` | 36 | Human-in-the-loop creation, de-duplication, TTL expiry, approval re-validated at current prices, double approval, audit rows, snapshots. |
+| `test_regressions.py` | 104 | One class per defect found by review rather than a failing test: payload shapes, sweep scoping, truthful 429, debounce keys, link-code expiry, token purge, limit parsing, autonomy broadcast, webhook fail-closed, SPA containment and more. |
+| `test_security.py` | 9 | `env_required` semantics and the repository-wide secret scan. |
+| `test_service_exposure.py` | 3 | Wiring: the production callers actually pass an `Exposure` to the guard. |
+| `test_services.py` | 31 | Ticker normalisation, quote cache/fallback, lexicon sentiment, RSS parsing including entity-expansion and XXE rejection, ledger replay, portfolio metrics. |
+| `test_tasks.py` | 19 | Celery task bodies: approved BUY/SELL mutation, clamping, loss-limit block, rollback, crash capture, monitoring isolation, risk sweep, token purge. |
+| `test_telegram.py` | 45 | Bot formatting, 64-byte callback budget, link/unlink, reports, approve/reject callbacks, opt-out, webhook secret and always-ACK, cross-user scoping. |
+| `test_thesis.py` | 30 | One live thesis per instrument, superseded not overwritten, empty position closes it, absence stated in the prompt, wiring. |
+| `test_thinking_budget.py` | 2 | Adaptive-thinking token budget guard for models that expose one. |
+| `test_throttle.py` | 18 | Sweep-ticker cooldowns and debounce: effectiveness, independence, zero-window disable, release, fail-open. |
+| `test_websockets.py` | 14 | ASGI consumer auth, ping/pong, unknown frames, event relay to the owning user only, Decimal serialisation, soft failure without a channel layer. |
 
 `core/tests/helpers.py` is not a test module. It supplies `TEST_CACHES` (a `LocMemCache`
 override replacing the shared Redis cache), the `make_user`/`make_portfolio`/`make_asset`
@@ -49,9 +65,9 @@ The suite has three tiers, distinguished by what boundary they cross.
 
 | Tier | Modules | Boundary crossed |
 | --- | --- | --- |
-| Pure logic | `test_guardrails`, `test_services`, `test_throttle`, `test_ai_agent` (parsing/heuristics) | None — plain inputs and outputs. |
-| Database / API integration | `test_models`, `test_recommendations`, `test_tasks`, `test_api`, `test_dashboard_api`, `test_telegram` | Real PostgreSQL via `TestCase` transactions, real DRF routing, real ORM constraints. |
-| Transport / protocol integration | `test_websockets`, `test_mcp`, `test_llm_hooks` | A live channel layer, the real MCP SDK session, and a real localhost HTTP server respectively. |
+| Pure logic | `test_guardrails`, `test_services`, `test_throttle`, `test_ai_agent` (parsing/heuristics), `test_portfolio_accounting` | None — plain inputs and outputs. |
+| Database / API integration | `test_models`, `test_recommendations`, `test_tasks`, `test_api`, `test_dashboard_api`, `test_telegram`, `test_decision_runs`, `test_experiments`, `test_portfolio_allocation` | Real PostgreSQL via `TestCase` transactions, real DRF routing, real ORM constraints. |
+| Transport / protocol integration | `test_websockets`, `test_mcp`, `test_llm_hooks`, `test_debate_protocol` | A live channel layer, the real MCP SDK session, a localhost HTTP server, and the protocol's model seam. |
 
 ### How external services are isolated
 
@@ -60,7 +76,7 @@ Nothing in the suite performs network I/O. Three boundaries are stubbed:
 | Dependency | Isolation point | Evidence |
 | --- | --- | --- |
 | yfinance | `services.market_data._fetch_from_yfinance` is patched, so the *real* cache, retry and stored-price fallback logic still executes | `test_services.MarketDataTests`, `test_api.PortfolioEndpointTests` |
-| Consumer call sites | Modules import `get_latest_quote` into their own namespace, so tests patch the call site (`tasks.get_latest_quote`, `services.recommendations.get_latest_quote`, `mcp_server.server.get_latest_quote`) — narrower than patching the provider and independent of its internals | 8, 13 and 4 patch sites respectively |
+| Consumer call sites | Modules import `get_latest_quote` into their own namespace, so tests patch the call site (`tasks.get_latest_quote`, `services.recommendations.get_latest_quote`, `mcp_server.server.get_latest_quote`) — narrower than patching the provider and independent of its internals | each caller patches its own import |
 | RSS feeds | `_parse_rss` is fed literal XML bytes; malformed documents, entity-expansion bombs and external entities are asserted to yield `[]` rather than reaching `requests` | `test_services.NewsParsingTests` |
 | LLM provider | CI sets `AI_LLM_PROVIDER=none` and an empty `AI_LLM_API_KEY`. `test_ai_agent` builds **real** CrewAI `Agent`/`Crew`/`Task` objects — so CrewAI's own validators run — and stubs only `crewai.LLM` and `Crew.kickoff`; `test_llm_hooks` runs a mock Anthropic endpoint on localhost | `test_ai_agent.CrewBuildTests`, `test_llm_hooks` |
 | Redis cache | `helpers.TEST_CACHES` swaps the default cache for `LocMemCache` via `@override_settings` | `core/tests/helpers.py` |
@@ -120,7 +136,8 @@ on the same ref, and the workflow holds `contents: read` at the top level.
 | Job | `needs` | Steps | Fails the build when |
 | --- | --- | --- | --- |
 | `lint` — "Lint & format" | — | install `requirements-dev.txt`; `ruff check --output-format=github .`; `ruff format --check --diff .`; `python manage.py check --deploy` | Any ruff lint finding, any formatting diff, or any Django system-check **error** (with `DJANGO_DEBUG=false`). |
-| `test` — "Tests (PostgreSQL 16)" | `lint` | install `requirements-dev.txt` (hash-verified); wait for PostgreSQL via a `psycopg2` retry loop (30 × 2 s); `makemigrations --check --dry-run`; `migrate --noinput`; `test core.tests --verbosity=2` | Model changes without a migration, a failing migration, or any failing test. |
+| `test` — "Tests (PostgreSQL 16)" | `lint` | install `requirements-dev.txt` (hash-verified); wait for PostgreSQL; `makemigrations --check --dry-run`; `migrate --noinput`; `coverage run manage.py test core.tests`; `coverage report --fail-under=70`; regenerate the coverage badge | Model changes without a migration, a failing migration, a failing test, or coverage below 70%. |
+| `frontend` — "Frontend tests" | `lint` | `npm ci`; `npm run typecheck`; `npm run build`; `npm run test:coverage` | A type error, a failed production build, a failing Vitest test, or a coverage threshold breach. |
 | `docker` — "Docker image builds" | `lint` | buildx; `docker/build-push-action@v7` (`push: false`, `load: true`, GHA cache); `docker compose config --quiet`; import smoke test (`django, celery, crewai, yfinance`); real boot `manage.py check` with `DJANGO_SECRET_KEY` + `POSTGRES_PASSWORD` | Image build failure, invalid compose file, missing runtime import, or a settings/config error on boot. |
 
 Both service containers (`postgres:16-alpine`, `redis:7-alpine`) are declared with health
@@ -218,8 +235,8 @@ directories that are never published (`venv`, `.runtime`, `.git`, `logs`, `stati
 rather than on a developer's working tree.
 
 **Pre-commit** (`.pre-commit-config.yaml`) mirrors the CI gates locally: `ruff` with
-`--exit-non-zero-on-fix` and `ruff-format` pinned to `v0.16.9` — the same version as
-`requirements-dev.txt`, after commit `ca60782` realigned them — plus `gitleaks v8.28.0`,
+`--exit-non-zero-on-fix` and `ruff-format` pinned in `.pre-commit-config.yaml` (the
+lockfile pins the version CI installs; keep the two in step when upgrading) — plus `gitleaks v8.28.0`,
 `detect-private-key`, `check-added-large-files --maxkb=1024`, and whitespace/EOF/YAML/JSON/TOML
 /merge-conflict/mixed-line-ending hooks.
 
@@ -231,7 +248,7 @@ security-relevant surfaces kept individually visible:
 
 | Ecosystem | Groups | Documented ignores |
 | --- | --- | --- |
-| pip | `python-major`, `python-minor-patch`, `django`, `ai` (`crewai*`, `openai*`, `anthropic*`, `pydantic*`, `yfinance*`), `celery` | `openai >= 3.0.0` and `pydantic >= 2.13.0` (crewai 1.15.23 pins both — the PRs cannot install), `Django >= 6.0.0` (5.2 is the LTS line) |
+| pip | `python-major`, `python-minor-patch`, `django`, `ai` (`crewai*`, `openai*`, `anthropic*`, `pydantic*`, `yfinance*`), `celery` | `openai >= 3.0.0` and `pydantic >= 2.13.0` (crewai 1.15.33 pins both below those majors — the PRs cannot install), `Django >= 6.0.0` (5.2 is the LTS line) |
 | github-actions | `actions-major`, `actions-minor-patch` | — |
 | docker | `docker-all` | `python >= 3.14` (every crewai release declares `Requires-Python <3.14`) |
 
@@ -241,7 +258,7 @@ The Makefile wraps the common paths; the underlying commands are shown beside th
 
 | Target | Command it runs | Purpose |
 | --- | --- | --- |
-| `make test` | `venv/bin/python manage.py test core.tests` | The full 382-test suite. Requires PostgreSQL reachable (`make up` starts `db` and `redis` only). |
+| `make test` | `venv/bin/python manage.py test core.tests` | The full suite (716 at the Phase 0-4 baseline). Requires PostgreSQL reachable (`make up` starts `db` and `redis` only). |
 | `make test-guardrails` | `venv/bin/python manage.py test core.tests.test_guardrails core.tests.test_security` | The safety-critical subset: execution guardrails plus secret hygiene. |
 | `make lint` | `venv/bin/ruff check .` | Lint only. |
 | `make format` | `venv/bin/ruff check . --fix && venv/bin/ruff format .` | Auto-fix and format. |
@@ -301,11 +318,14 @@ stylesheet is hash-named `index-BGYHA9pb.css` before and after and the files are
 **byte-identical**, which is the evidence that a major bundler upgrade changed
 nothing observable.
 
-`chromadb` is the one genuine risk acceptance on the project. All four advisories
-report *no patched version*, `crewai` 1.15.23 pins `chromadb~=1.1.0`, and 1.15.23
-is the newest `crewai` on PyPI — so there is no installable release that fixes
-them. They are all server-side findings (code injection against a running Chroma
-server, RBAC and tenant isolation), and this project never imports `chromadb`,
+`chromadb` is the one genuine risk acceptance on the project. At the time of the
+triage, all four advisories reported *no patched version* and the then-pinned
+`crewai` required `chromadb~=1.1.0`, so there was no installable release that fixed
+them. The lockfile has since moved on (`crewai==1.15.33` pulls `chromadb==1.5.9`);
+the ignore entry and the advisory database should be re-checked rather than assumed
+to still say the same thing. The findings are all server-side (code injection
+against a running Chroma server, RBAC and tenant isolation), and this project never
+imports `chromadb`,
 runs no Chroma server, publishes no port for one, and builds its Crew with
 `memory=False`. The `ignore` entry in `dependabot.yml` records the triage and when
 to revisit it; the alerts themselves are dismissed with the same reasoning, so the
@@ -317,9 +337,9 @@ Two things to know before the first run: `config/settings.py` calls
 `LocMemCache` per module, so a running Redis is not strictly required for the cache-backed
 tests, only for the database.
 
-## Test modules added with the newest features
+## Test modules for attribution, exposure and theses
 
-Three modules cover the changes that score decisions, cap portfolio risk and give
+Three modules cover the features that score decisions, cap portfolio risk and give
 positions a memory. Each is written around the mistake that would be easy to make
 rather than around the happy path.
 
@@ -376,16 +396,17 @@ Related pages: [[Execution-Guard]], [[Architecture]], [[Operations]], [[Configur
 
 ## Quality signals
 
-Numbers here are deliberately kept in this one page rather than repeated around the
-repository. A count quoted in several places drifts apart — this project had 382,
-631 and 643 in three files at once — so the README no longer states a test count at
-all, and this page states it once.
+Numbers here are deliberately kept in as few places as possible. A count quoted in
+several files drifts apart — this project once had three different test counts in
+three files at once — so the README states no test count, and this page plus
+`CONTRIBUTING.md` carry the current snapshot. The authoritative number is whatever
+CI reports on the commit being reviewed.
 
 | | |
 | --- | --- |
-| **Two test tiers** | 533 Python tests — risk guard, ledger, API, task pipeline, WebSockets, Telegram bot, tool server, documentation links and the demo's theme contract — plus 115 frontend tests (Vitest + Testing Library) covering the formatters, the WebSocket frame validator and the metric grid. The authoritative number is whatever CI reports on the current commit; treat any figure written down, including this one, as a snapshot |
+| **Two test suites** | 716 Python tests at the Phase 0-4 baseline — risk guard, ledger, API, task pipeline, WebSockets, Telegram bot, tool server, decision runs, debate protocol, measurement, allocation, documentation links and the demo's theme contract — plus 178 frontend tests (Vitest + Testing Library) covering formatters, the WebSocket frame validator, feed merging and the metric grid. The authoritative number is whatever CI reports on the current commit; treat any figure written down, including this one, as a snapshot |
 | **Coverage enforced** | CI fails below a 70% floor on the backend |
-| **Continuous integration** | Lint, format, the full suite against PostgreSQL 16, and a Docker image build — on every push |
+| **Continuous integration** | Lint, format, the full backend suite against PostgreSQL 16 with a 70% coverage floor, the frontend typecheck/build/Vitest suite, and a Docker image build — on every push |
 | **Security scanning** | CodeQL analysis, Dependabot, secret scanning, and a test that walks every publishable file looking for committed credentials |
 | **Docs are checked too** | Every Markdown and wiki link is validated on each push, and every referenced screenshot is confirmed to exist — a renamed image fails the build rather than rotting silently |
 | **Supply chain** | `make audit` scans the pinned dependencies from an isolated environment, because `pip-audit` and `crewai` have incompatible `tomli` requirements and cannot share a virtualenv |

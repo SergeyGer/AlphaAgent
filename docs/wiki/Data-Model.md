@@ -1,22 +1,31 @@
 # Data Model
 
-Seven tables in the `core` app hold the platform's complete state. Every
-invariant that must survive concurrency is enforced by PostgreSQL 16 — `CHECK`
-and `UNIQUE` constraints plus indexes — not only by Python. Models live in
-`core/models.py`, the executable schema in `core/migrations/`.
+`core/models.py` defines the original seven tables — `Portfolio`, `Asset`,
+`Transaction`, `AgentDecisionLog`, `PortfolioSnapshot`, `TradeRecommendation`,
+`TelegramLink` — plus `PositionThesis` and `DecisionOutcome`. Phases 1–4 added
+additive tables in `core/decision_models.py`, `core/measurement_models.py` and
+`core/allocation_models.py` (summarised below). Every invariant that must survive
+concurrency is enforced by PostgreSQL 16 — `CHECK` and `UNIQUE` constraints plus
+indexes — not only by Python. The executable schema is `core/migrations/`.
 
 Two decisions shape everything below: **`Transaction` is append-only**, so cash,
 cost basis and realised P&L are *derived* rather than stored as mutable counters;
-and **one code path writes money**, `services.execution.apply_trade()`, the sole
-writer of `Transaction`, `Asset` and `Portfolio.balance_usd`.
+and **one code path writes money in the trading path**, `services.execution.apply_trade()`,
+the sole writer of `Transaction`. The demo seeders (`seed_demo`, `run_allocation`)
+create an account and its initial holdings directly; they are setup commands, not
+trading paths, and they write no `Transaction` rows except `seed_demo`'s optional
+seed position.
 
 No production code updates or deletes a `Transaction`; the only writes are
 `Transaction.objects.create()` in `services/execution.py` and `seed_demo.py`.
-`0001_initial` created `Portfolio`/`Asset`/`Transaction`/`AgentDecisionLog`,
-`0002_telegramlink_portfoliosnapshot_traderecommendation` added
-`TelegramLink`/`PortfolioSnapshot`/`TradeRecommendation`, and
-`0003_agentdecisionlog_bear_case_and_more` added the debate fields — CI runs
-`makemigrations --check --dry-run`, so drift fails the build.
+
+The migration history is additive: `0001`–`0003` built the original ledger and
+audit tables; `0004`–`0009` added link-code expiry, token accounting, the ticker
+column, `DecisionOutcome`, the two portfolio ceilings and `PositionThesis`;
+`0010`–`0011` added the decision-run evidence tables; `0012` added external cash
+flows, experiments and `Transaction.fee`; `0013` added instrument classifications
+and portfolio plans. CI runs `makemigrations --check --dry-run`, so drift fails the
+build.
 
 ## Portfolio
 
@@ -67,6 +76,7 @@ Append-only ledger row: written once, never mutated.
 | `tx_type` | `CharField(4)` | `TxType` — `BUY` / `SELL` |
 | `amount`, `price` | `Decimal(18,8)`, `Decimal(12,2)` | Units traded and execution price per unit |
 | `executed_by` | `CharField(10)` | `ExecutedBy` — `AI` from `apply_trade()`, `USER` from `seed_demo` |
+| `fee` | `Decimal(12,8)` | **Nullable.** `NULL` means no fee was recorded; `0` means a zero fee was recorded. No live producer writes one yet |
 | `timestamp` | `DateTimeField` | `auto_now_add`, indexed; ordering `-timestamp` |
 
 `tx_amount_positive` (`amount > 0`) and `tx_price_positive` (`price > 0`) make a
@@ -338,6 +348,22 @@ Why we hold an instrument, and what would prove that wrong.
 per instrument**, enforced by the schema rather than by convention. Superseded
 theses are closed and kept, so the table is a history of what was believed rather
 than a single mutable field. See [[Position-Thesis]].
+
+## Phase 1–4 additive tables
+
+The later phases did not reinterpret the original columns. They added tables.
+
+| Table(s) | Migration | Purpose |
+| --- | --- | --- |
+| `DecisionRun`, `RunEvent`, `InputSnapshot`, `DecisionRecord`, `GuardRecord`, `EvidenceItem`, `Claim`, `Rebuttal`, `OutcomeRecord` | `0010`–`0011` | A recorded decision: the run, its ordered events, the point-in-time inputs, the validated claims and rebuttals, the guard evaluation and the matured outcomes. `DecisionRun.protocol_metadata` carries provider/model/parameters and the reproducibility note |
+| `CashFlow`, `Experiment`, `ExperimentVariant`, `ExperimentRun` | `0012` | External deposits/withdrawals (kept out of `Transaction` because the ledger treats every non-BUY row as a SELL), the experiment manifest, its variants and scheduled runs |
+| `InstrumentClassification`, `PortfolioPlan`, `PortfolioPlanLeg` | `0013` | Explicit sector/asset-class lookup; the Phase 4 plan, its requested and constrained weights, deviations and one-to-one legs. A leg's transaction makes a duplicate fill structurally impossible |
+
+`DecisionRun` is keyed by the stable `fixture_id` for demo data, so a fixture is
+idempotent and a checksum change is refused rather than mixed. `Transaction.fee`
+stays nullable by design: `NULL` is *unrecorded*, not zero. The Phase 3 and Phase 4
+definitions of record are in `docs/spec/MEASUREMENT.md` and
+`docs/spec/ALLOCATION.md`.
 
 ## Why the ticker is denormalised
 

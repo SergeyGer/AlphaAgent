@@ -4,7 +4,7 @@
 
 # AlphaAgent
 
-**An enterprise-grade AI investment platform with deterministic risk governance and
+**An AI investment platform with deterministic risk governance and
 verifiable decision attribution.**
 
 [![CI](https://github.com/SergeyGer/AlphaAgent/actions/workflows/ci.yml/badge.svg)](https://github.com/SergeyGer/AlphaAgent/actions/workflows/ci.yml)
@@ -21,7 +21,7 @@ and — after the fact — whether it was right.
 </div>
 
 <details>
-<summary><b>Contents</b> — 8 sections, ~7 min read, or jump straight to the code</summary>
+<summary><b>Contents</b> — 9 sections, or jump straight to the code</summary>
 
 | | |
 | --- | --- |
@@ -29,8 +29,8 @@ and — after the fact — whether it was right.
 | [**The three product pillars**](#the-three-product-pillars) | Decision attribution, the deterministic guard, the adversarial debate |
 | [**Who this is for**](#who-this-is-for) | Four readers, and what each of them gets |
 | [**Choose your path**](#choose-your-path) | Four tracks with reading times |
-| [**See it running**](#see-it-running) | A narrated walkthrough, the live demo, and the screenshot tour |
-| [**Run it yourself**](#run-it-yourself) | One command, ~5 minutes to a running stack |
+| [**See it running**](#see-it-running) | A narrated walkthrough, the offline risk-guard demo, and the screenshot tour |
+| [**Run it yourself**](#run-it-yourself) | One command to a running stack |
 | [**How it works in one minute**](#how-it-works-in-one-minute) | The request path, end to end |
 | [**Under the hood**](#under-the-hood) | Stack, and links into the full technical wiki |
 | [**Roadmap**](#roadmap) | What is deliberately not built yet |
@@ -57,16 +57,22 @@ Three claims, each of which a reviewer can check in this repository. Click one t
 open the detail; all three stay shut by default.
 
 <details>
-<summary><b>1. Verifiable decision attribution</b> — every decision is scored against what the market did next &nbsp;·&nbsp; <code>HOLD included</code></summary>
+<summary><b>1. Verifiable decision attribution</b> — decisions are scored against what the market did next &nbsp;·&nbsp; <code>HOLD included</code></summary>
 
 Instead of hiding model performance, AlphaAgent treats transparency as the product
-metric. Every decision — including every deliberate **HOLD** — is scored
-retroactively against real market data at **1, 7 and 30 days**.
+metric. Decisions that name an instrument are evaluated at **1, 7 and 30 days**
+when the horizon matures and a permitted price exists; otherwise the outcome is
+absent, not zero. A **HOLD** carries a decision return of zero by convention but no
+directional hit: holding makes no directional claim. A missing price or benchmark
+is null, never zero.
 
-- **Continuous KPI tracking** — absolute return, directional hit rate, and alpha
-  against SPY over the same window.
-- **A complete audit trail** — every execution links back to the debate that produced
-  it (`bull_case`, `bear_case`), the tokens consumed, and the API cost charged.
+- **Continuous KPI tracking** — average decision return, directional hit rate, and
+  alpha against SPY over the same window, per horizon. The Phase 3 report adds a
+  per-action breakdown, so a good average cannot hide bad BUY calls.
+- **A traceable audit trail** — a debate-produced decision records both cases
+  (`bull_case`, `bear_case`), the tokens consumed and the API cost charged, and is
+  linked to its ledger transaction when the proposal executed. A heuristic
+  fallback is stored as a separate run with no claims and no rebuttals.
 - **Why it matters** — it gives a stakeholder an honest, data-driven assessment of
   LLM return on investment, rather than a demo that only shows winning trades.
 
@@ -99,7 +105,7 @@ Single-agent pipelines amplify hallucinations: one model agreeing with itself re
 certainty. AlphaAgent forces disagreement first.
 
 - **The debate** — a **Bullish Research Analyst** and a **Risk Assessor (Short
-  Seller)** build opposing cases from live prices, news and filings.
+  Seller)** build opposing cases from the recorded prices, news and fundamentals.
 - **The adjudicator** — a separate **Chief Investment Officer** agent weighs both and
   issues one structured proposal, so no single biased prompt dictates strategy.
 - **Why it matters** — the transcript is the artefact a reviewer reads, and it is
@@ -135,7 +141,7 @@ not, yet, and that is published.
 | Step | Read | Time |
 | --- | --- | --- |
 | 1 | [The measured scorecard](https://github.com/SergeyGer/AlphaAgent/wiki/Decision-Attribution) — hit rate, alpha, and how a decision is scored | **4 min** |
-| 2 | [The execution guard](https://github.com/SergeyGer/AlphaAgent/wiki/Execution-Guard) — the six limits, clamp vs. refuse | **5 min** |
+| 2 | [The execution guard](https://github.com/SergeyGer/AlphaAgent/wiki/Execution-Guard) — the guard rules, clamp vs. refuse | **5 min** |
 | 3 | [Position theses](https://github.com/SergeyGer/AlphaAgent/wiki/Position-Thesis) — why a position is held, and what would falsify it | **3 min** |
 | 4 | [INC-001](https://github.com/SergeyGer/AlphaAgent/wiki/Incident-Log#inc-001--overlapping-sweeps-bought-the-same-stock-twice) — the over-concentration a per-trade limit did not catch | **3 min** |
 
@@ -152,7 +158,7 @@ The interesting claim is that the model never gets the final say.
 | --- | --- | --- |
 | 1 | [LLM quality and guardrails](https://github.com/SergeyGer/AlphaAgent/wiki/LLM-Quality-and-Guardrails) — the seven layers, with line-numbered code | **7 min** |
 | 2 | [The agent debate](https://github.com/SergeyGer/AlphaAgent/wiki/Agent-Debate) — bull, bear, CIO, and the output contract | **4 min** |
-| 3 | `ai_agent.py` — [`TradeProposal`](https://github.com/SergeyGer/AlphaAgent/blob/main/ai_agent.py#L87) and [`parse_proposal`](https://github.com/SergeyGer/AlphaAgent/blob/main/ai_agent.py#L160) | **3 min** |
+| 3 | `ai_agent.py` — [`TradeProposal`](https://github.com/SergeyGer/AlphaAgent/blob/main/ai_agent.py#L97) and [`parse_proposal`](https://github.com/SergeyGer/AlphaAgent/blob/main/ai_agent.py#L170) | **3 min** |
 | 4 | [Model compatibility](https://github.com/SergeyGer/AlphaAgent/wiki/Configuration) — why Haiku 5.5 rejects `temperature` | **2 min** |
 
 **The one idea worth taking away:** `parse_proposal` returns `None` rather than
@@ -181,9 +187,9 @@ from a decision the model never made.
 | Step | Read | Time |
 | --- | --- | --- |
 | 1 | [▶ Watch the walkthrough](https://youtu.be/DfOMb_l19p8) — real dashboard, real debate, real guard | **2 min** |
-| 2 | [Incident log](https://github.com/SergeyGer/AlphaAgent/wiki/Incident-Log) — ten real defects, root causes and fixes | **8 min** |
-| 3 | [ADR index](docs/adr/README.md) — sixteen decisions with the alternatives that were rejected | **6 min** |
-| 4 | [Quality signals](#quality-signals) — what each gate actually proves | **2 min** |
+| 2 | [Incident log](https://github.com/SergeyGer/AlphaAgent/wiki/Incident-Log) — eleven real defects, root causes and fixes | **8 min** |
+| 3 | [ADR index](docs/adr/README.md) — seventeen decisions with the alternatives that were rejected | **6 min** |
+| 4 | [Quality and testing](https://github.com/SergeyGer/AlphaAgent/wiki/Quality-and-Testing) — what each gate actually proves | **2 min** |
 
 </details>
 
@@ -196,32 +202,32 @@ from a decision the model never made.
 running system. The dashboard, the AI debate, the risk guard, and the scorecard it
 publishes.
 
-### ▶ [Try the live demo](https://alphaagent-6stcj667tqeawiupedhygh.streamlit.app/) — the real UI in a browser, no installation and no API keys
+### ▶ [Try the offline Streamlit demo](https://alphaagent-6stcj667tqeawiupedhygh.streamlit.app/) — a browser page that drives the real risk guard, with no installation and no API keys
 
 ![AlphaAgent guided tour](docs/demo.gif)
 
-*Recorded from the live system — sign-in, portfolio metrics, the equity curve, an
-agent debate expanding, news sentiment and the trade ledger.*
+*Recorded from the live React application (not the Streamlit risk-guard demo above) — sign-in,
+portfolio metrics, the equity curve, an agent debate expanding, news sentiment and the trade
+ledger.*
 
 ### The headline metric: decision attribution
 
-AlphaAgent scores itself. Every decision — including every deliberate **HOLD** — is
-replayed against what the market actually did next, at **1, 7 and 30 day** horizons,
-and the scorecard is shown on the dashboard for any visitor to read.
+AlphaAgent scores itself. Decisions that name an instrument are evaluated against
+what the market did next at **1, 7 and 30 day** horizons when the horizon matures
+and a permitted price exists, and the scorecard is shown on the dashboard to any
+signed-in visitor.
 
-It tracks three things, and counts them separately for the long side so a good average
-cannot hide bad BUY calls:
+It reports three things per horizon:
 
 | Tracked | The question it answers |
 | --- | --- |
-| **Directional hit rate** | Was the call right in direction? |
-| **Forward return** | What was the decision actually worth? |
+| **Directional hit rate** | Was the call right in direction? HOLDs make no call and are excluded from the denominator. |
+| **Average decision return** | What was the action actually worth? A SELL scores positively when the price falls. |
 | **Alpha vs SPY** | Did it beat simply holding the benchmark over the same window? |
 
-**The figures are not flattering, and they are published anyway.** A performance
-number that can only ever produce good news is not a measurement; it is marketing.
-The scorecard is the feature, not the demo — it is what lets a reader judge the system
-instead of taking its word.
+**The scorecard is published as measured, not curated.** A performance number that
+can only ever produce good news is not a measurement; it is marketing. The scorecard is the feature, not the demo — it is what lets a reader judge
+the system instead of taking its word.
 
 > **What the audit trail adds:** every figure traces back to a stored decision row —
 > both sides of the argument that produced it (`bull_case`, `bear_case`), the tokens
@@ -229,7 +235,7 @@ instead of taking its word.
 > defend.
 
 The current scorecard, the method behind it, and the flaw I found in my own scoring —
-one that made the figures *worse* — live in
+a start-price bias that flattered BUY calls — live in
 [Decision Attribution](https://github.com/SergeyGer/AlphaAgent/wiki/Decision-Attribution).
 It is kept in one place on purpose: a number quoted in several files is a number that
 will eventually disagree with itself.
@@ -241,11 +247,11 @@ will eventually disagree with itself.
 
 ![Dashboard](docs/screenshots/dashboard.png)
 
-**Decision quality.** Every decision scored against what the market did next — hit rate, average return and alpha against SPY at 1, 7 and 30 days, with the individual outcomes behind the aggregate. The numbers are unflattering and shown as measured.
+**Decision quality.** Decisions scored against what the market did next — hit rate, average return and alpha against SPY at 1, 7 and 30 days, with the individual outcomes behind the aggregate, including losses.
 
 ![Decision quality](docs/screenshots/decision-quality.png)
 
-**Risk ceilings.** Invested capital against the portfolio exposure limit, and the largest position against the single-instrument concentration limit — the check that caught a real over-concentration in this demo portfolio.
+**Risk ceilings.** Invested capital against the portfolio exposure limit, and the largest position against the single-instrument concentration limit — the check that closes the over-concentration gap recorded as INC-001.
 
 ![Risk ceilings](docs/screenshots/portfolio-limits.png)
 
@@ -353,11 +359,11 @@ flowchart LR
 
 **Why three agents and not one?** A single analyst feeding a single
 decision-maker is a hallucination amplifier — whatever the analyst asserts
-becomes the premise, and nothing argues the other side. Here a bull and a short
-seller work from *different evidence* and are explicitly instructed to concede
-when their case is weak. The short seller in one live run reported that it
-"cannot build a credible bear case for Apple at current levels" — and the final
-verdict cited that admission.
+becomes the premise, and nothing argues the other side. Here a bull and a risk
+assessor build their cases independently from the same recorded evidence catalog:
+neither prompt contains the other side's case, and both are explicitly instructed
+to concede when their case is weak, including saying that no credible bear case
+exists. The disagreement is stored as claims and rebuttals, not summarised away.
 
 **Why a guard instead of trusting the model?** Position size, available cash,
 concentration and the daily stop-loss are enforced in a pure function that is
@@ -385,13 +391,17 @@ the wiki:
 | [**API Reference**](https://github.com/SergeyGer/AlphaAgent/wiki/API-Reference) | Every endpoint, with request and response shapes |
 | [**Operations**](https://github.com/SergeyGer/AlphaAgent/wiki/Operations) | Runbook, scheduled jobs, failure modes |
 | [**Engineering Decisions**](https://github.com/SergeyGer/AlphaAgent/wiki/Engineering-Decisions) | The trade-offs behind each significant choice |
-| [**Architecture Decision Records**](docs/adr/README.md) | Sixteen decisions, each with the alternatives that were rejected |
+| [**Architecture Decision Records**](docs/adr/README.md) | Seventeen decisions, each with the alternatives that were rejected |
 | [**Incident Log**](https://github.com/SergeyGer/AlphaAgent/wiki/Incident-Log) | Real defects, root-cause analysis and the fixes |
 | [**Quality & Testing**](https://github.com/SergeyGer/AlphaAgent/wiki/Quality-and-Testing) | Test strategy, CI pipeline, security scanning |
+| [**Methodology**](docs/spec/METHODOLOGY.md) | What the numbers mean, and what they do not |
+| [**Claims index**](docs/spec/CLAIMS.md) | Every public claim, and the file that supports it |
+| [**Curated cases**](docs/spec/CASES.md) | Reviewed disagreement, risk-intervention, uncertainty and outcome cases |
+| [**Reproducing the demos**](docs/spec/DEMO.md) | Exact offline commands for the guard demo, decision replay, allocation and report |
 
 **The stack, in detail:**
 
-[![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![Django 5.2](https://img.shields.io/badge/Django-5.2-092E20?logo=django&logoColor=white)](https://www.djangoproject.com/)
 [![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Redis 7](https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white)](https://redis.io/)

@@ -77,15 +77,17 @@ remote: - Changes must be made through a pull request.
 Those two lines are the proof. They appear only when a rule **would have** blocked
 the push; the push succeeded solely because the pushing identity held the bypass.
 
-## Known open advisory: MCP streamable-HTTP sessions
+## Closed advisory: MCP streamable-HTTP sessions
 
-One advisory is open against this project and **cannot be closed here**:
-`mcp` 1.28.1, *Unbounded Session Accumulation in StreamableHTTP Transport*
-(medium), patched in 1.30.0.
+The advisory that used to sit here is **closed**. `mcp` 1.28.1 had *Unbounded
+Session Accumulation in StreamableHTTP Transport* (medium), patched in 1.30.0.
+The project now pins `mcp==1.30.0` in `requirements.txt`. The release that
+unblocked the pin, `crewai` 1.15.32, declares `mcp<2,>=1.30.0` (recorded in
+`CHANGELOG.md` 1.1.2); the lockfile now pins `crewai==1.15.33`, so the resolver
+reaches the patched release.
 
-The vulnerable code **is** in the execute path — `mcp_server/__main__.py` serves
-`mcp.streamable_http_app()` — so dismissing it would be wrong. It is left open on
-purpose. What bounds it:
+The reachability analysis that bounded the risk while it was open still applies
+to any future transport issue:
 
 - the MCP service publishes no ports; it is reachable only inside the compose
   network, not from the host and not from the internet;
@@ -94,15 +96,12 @@ purpose. What bounds it:
 - the worst case is memory growth from an authenticated client repeatedly opening
   sessions, which in this threat model means a client already inside the network.
 
-The fix is genuinely blocked upstream: `crewai` declares `mcp~=1.28.1`, which
-means `>=1.28.1,<1.29.0`. Verified by reading the `Requires-Dist` metadata of the
-newest release (1.15.28) rather than assuming a bump would carry it. Until crewai
-widens that pin, no amount of re-locking reaches 1.30.0.
-
 Two other advisories were dismissed with reasons recorded on the alert itself:
 `twisted` (the advisory is `IMAP4.wildcardToRegexp()`, and this project contains no
 IMAP client) and `uv` (a transitive CLI tool imported by nothing at runtime). Both
-dismissals cite the check that justified them.
+dismissals cite the check that justified them. Dependency history can go stale:
+check `requirements.txt` and the alert database rather than trusting this page's
+version numbers.
 
 ## Network exposure: what may be reachable, and from where
 
@@ -199,6 +198,7 @@ from duplicating a run.
 | `daily-loss-limit-sweep` | `tasks.daily_loss_limit_sweep_task` | `21:05`, Mon–Fri | 3600 s | End-of-session stop-loss: replay realised P&L, set `is_autonomous=False` on breach, write a `HALT - daily loss limit breached` decision log |
 | `expire-stale-recommendations` | `tasks.expire_stale_recommendations_task` | `*/30` min | 1800 s | `PENDING` → `EXPIRED` past `RECOMMENDATION_TTL_MINUTES` |
 | `purge-expired-auth-tokens` | `tasks.purge_expired_auth_tokens_task` | `03:30` daily | 3600 s | Deletes DRF `Token` rows that are **both** older than 30 days and owned by a user whose `last_login` is older than 30 days or null — last use, not issue date, so an actively authenticating client is never logged out (`core/auth.py`) |
+| `evaluate-decision-outcomes` | `tasks.evaluate_decision_outcomes_task` | minute `25` of every hour | 3000 s | Scores matured decisions at the 1/7/30-day horizons and writes `DecisionOutcome` rows; idempotent, so a re-run costs time but does not double-score |
 
 * Run **exactly one** beat container — two copies double-fire every entry. The
   container deletes `/app/celerybeat-schedule` at start, so a stale schedule file

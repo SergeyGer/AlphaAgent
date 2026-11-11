@@ -45,17 +45,17 @@ and `avg_alpha_pct` is null rather than negative when nothing has been benchmark
 
 A call can look wrong at one day and right at thirty. That disagreement is the
 interesting part, so it is preserved rather than collapsed into a single score.
+The scorecard prints `evaluated`, `directional_calls`, `hit_rate_pct`,
+`avg_decision_return_pct` and `avg_alpha_pct` per horizon.
 
-```
-+ 1d  evaluated=15  calls=15  hit_rate=26.7  avg_decision=-0.2666%  alpha=-0.2203
-+ 7d  evaluated= 2  calls= 2  hit_rate= 0.0  avg_decision=-1.4768%  alpha=-1.2606
-+30d  evaluated= 0  calls= 0  hit_rate=  n/a  avg_decision= 0.0000%  alpha=None
-```
-
-That is the real output as of writing, and it is unflattering. Fifteen scored
-calls is far too few to conclude anything, and one-day returns are mostly noise —
-but the number is shown as measured rather than withheld, because a system that
-reports only its flattering statistics is not reporting.
+This page does not reproduce a live scorecard dump. The dashboard computes it from
+the database on every read, so the figures change as outcomes mature and as new
+decisions are scored; they are not a committed artefact and cannot be checked from
+this repository. The measurements that *are* committed are the synthetic Phase 3
+report at
+`docs/spec/fixtures/experiments/phase3-engineering.v1.report.json`, and it is
+labelled engineering evidence only. For the method behind each number, see
+`docs/spec/METHODOLOGY.md`.
 
 ## The ticker column
 
@@ -67,7 +67,10 @@ all, and those are precisely the rows most worth reviewing.
 creates a row. A migration backfilled 62 rows from their transactions. The 1247
 that remain blank are pre-migration HOLDs whose ticker was never stored anywhere;
 inventing one would be worse than admitting the gap, so they are simply
-unscorable.
+unscorable. Those counts are recorded in
+[ADR-0014](https://github.com/SergeyGer/AlphaAgent/blob/main/docs/adr/0014-decision-outcome-attribution.md);
+they come from the production database at migration time and cannot be reproduced
+from this repository.
 
 The logs endpoint now filters on the column too, with a fallback to the
 transaction — filtering through `transaction__ticker` silently excluded every HOLD.
@@ -103,24 +106,26 @@ Worth stating plainly, because a scorecard invites more confidence than it earns
 
 Related pages: [[Execution-Guard]], [[Agent-Debate]], [[Data-Model]], [[Quality-and-Testing]].
 
-## The published scorecard, as it stands
+## The published scorecard
 
-Every decision is scored against what the market did next, and the scorecard is shown
-to any visitor of the dashboard. Across **57 scored decisions at a 1-day horizon**:
+Every decision that names an instrument is scored against what the market did
+next, and the scorecard is shown to a signed-in visitor of the dashboard. The
+numbers are read at request time from `DecisionOutcome` rows; this page does not
+quote them, because a figure that changes between reads and cannot be reproduced
+from the repository is not evidence a reviewer can check.
 
-| | |
-| --- | --- |
-| **Hit rate** | **10.5%** — 6 of 57 directional calls |
-| **Average decision return** | **−1.78%** |
-| **Alpha versus SPY** | **−1.54%** |
-| **BUY calls at 1 day** | **7.0%** hit rate, average forward return −2.08% |
+What can be checked here is the method: the action signing, the HOLD null, the
+benchmark null, the start-price choice and the limitations below. The only
+committed measurement report is the synthetic Phase 3 fixture report, and it says
+`engineering_validation_only: true`, `no_profitability_claim: true` and
+`strict_historical_claims: false`.
 
-Put plainly: **the system buys things that fall and sells things that rise.** SPY was
-roughly flat over the same windows, so this is not the market going down.
-
-That result is published rather than hidden because it is the point of the feature. A
-measurement that can only produce good news is not a measurement. The flaw I found in
-my own scoring method — one that made these numbers *worse* — is recorded below.
+The flaw I found in my own scoring method is recorded in
+`services/attribution.py` and `CHANGELOG.md`: forward returns used to start at
+the day's close while trades executed at the live quote. The engine now prefers
+the transaction's own price and falls back to the close only for a HOLD. The
+direction of that bias — it flattered a BUY whenever the close sat below the
+entry — is why it is kept documented rather than quietly corrected.
 
 ### Why this is a product feature, not a leaderboard
 

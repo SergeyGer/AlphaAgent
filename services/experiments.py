@@ -34,7 +34,9 @@ increments the version; the manifest checksum refuses a silent edit.
 from __future__ import annotations
 
 import json
+import logging
 import random
+import uuid
 from collections import Counter
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
@@ -125,6 +127,8 @@ PCT4 = Decimal("0.0001")
 PCT1 = Decimal("0.1")
 CENT = Decimal("0.01")
 
+logger = logging.getLogger("alphaagent.experiments")
+
 #: The five arms EXP-01 requires. V4 is defined and deliberately unimplemented;
 #: a report says so instead of presenting an empty arm as a measured zero.
 DEFAULT_VARIANTS: tuple[dict, ...] = (
@@ -212,6 +216,28 @@ class ExperimentError(Exception):
 
 class ManifestError(ExperimentError):
     """The manifest is malformed, unsupported, or its checksum drifted."""
+
+
+def _failure_reason(exc: BaseException, *, operation: str) -> str:
+    """Log a caught build failure and return a reason that is safe to publish.
+
+    The report is stored and then served by the experiment API, so an exception's
+    text must not be written into it: messages can carry filesystem paths, SQL, or
+    model payloads. The full detail (including the traceback) goes to the server
+    log; the correlation id in the returned sentence is the operator's link from
+    the client-visible report to that log entry.
+    """
+    correlation_id = uuid.uuid4().hex[:12]
+    logger.error(
+        "Experiment report: %s failed [correlation_id=%s]",
+        operation,
+        correlation_id,
+        exc_info=exc,
+    )
+    return (
+        f"{operation} could not be completed. The cause was logged on the server "
+        f"with correlation id {correlation_id}."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1277,7 +1303,7 @@ def _build_accounting(
         )
         return performance, None
     except (AccountingError, ManifestError) as exc:
-        return None, str(exc)
+        return None, _failure_reason(exc, operation="Portfolio accounting")
 
 
 def _snapshot_holdings_check(
@@ -1319,7 +1345,7 @@ def _snapshot_holdings_check(
                     "ledger_holdings": None,
                     "differences": None,
                     "status": "ledger_unavailable",
-                    "reason": str(exc),
+                    "reason": _failure_reason(exc, operation="Ledger holdings reconciliation"),
                 }
             )
             continue
@@ -2253,7 +2279,7 @@ def _counterfactuals(
             "rule": None,
             "rows": [],
             "established_count": 0,
-            "reason": str(exc),
+            "reason": _failure_reason(exc, operation="Counterfactual measurement"),
             "note": "No counterfactual was computed.",
         }
 

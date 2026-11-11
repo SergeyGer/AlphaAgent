@@ -101,8 +101,7 @@ options override those defaults; `socket_keepalive` is already `True` in redis-p
 ### The bug: LIVE ↔ RECONNECTING flap
 
 **Symptom.** The dashboard's connection pill flapped between `LIVE` and
-`RECONNECTING` roughly every 90 seconds ([[Incident-Log|INC-003]]: 26 occurrences
-in 40 minutes), and each flap fired a full REST resync (five endpoints) plus a
+`RECONNECTING` repeatedly ([[Incident-Log|INC-003]]), and each flap fired a full REST resync (five endpoints) plus a
 "Live stream restored" toast.
 
 **Mechanism.** The consumer's receive loop blocks in `BZPOPMIN` for
@@ -140,9 +139,8 @@ default retry policy, not from Redis.
 it, so the race is gone by construction (`4/4` clean pops, no `TimeoutError`), and
 idle connections are health-checked every 30 s rather than discovered dead by a
 trading-path call. Verified against this checkout: a client authenticated with a
-DRF token at `ws://127.0.0.1:8080/ws/portfolio/` completed the handshake in 0.12 s
-and **held the socket open for 150 s** — past the window in which the flap used to
-appear — receiving the `connection.established` greeting and no `1011` close. What
+DRF token at `ws://127.0.0.1:8080/ws/portfolio/` completed the handshake and
+**held the socket open past the window in which the flap used to appear** — receiving the `connection.established` greeting and no `1011` close. What
 remains in the log is a rejected bad-token handshake (`4401`) and a normal
 navigation close (`1000`).
 

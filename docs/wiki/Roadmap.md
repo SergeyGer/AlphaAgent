@@ -134,11 +134,11 @@ and planned stays explicit.
 | Phase | Deliverable | State |
 | --- | --- | --- |
 | **0 / Baseline** | Pin the commit, inventory models, endpoints and events, confirm fallback and transaction behaviour, record divergences | **Done** — baseline `1527cdc`, divergences recorded |
-| **1 / Explain one decision** | Decision detail, guard comparison, legacy labels, recorded fixture playback, accurate README and video edits | **In progress** |
-| **2 / Real rebuttals** | Evidence and claim contracts populated by a live protocol, independent first round, one bounded response round, stage events, repair budgets | Planned |
-| **3 / Measure value** | Versioned signal diagnostics, ledger-based portfolio performance, experiment manifests, V0–V3 reports | Planned |
-| **4 / Allocate capital** | Complete portfolio brief, target weights, deterministic plan sizing, advisory workflow | Planned |
-| **5 / Publish evidence** | Curated recorded cases, revised demonstration, methodology report | Planned |
+| **1 / Explain one decision** | Decision detail, guard comparison, legacy labels, recorded fixture playback, accurate README and video edits | **Done** — v1.1.5; see `docs/spec/FIXTURES.md` |
+| **2 / Real rebuttals** | Evidence and claim contracts populated by a live protocol, independent first round, one bounded response round, stage events, repair budgets | **Done** — v1.1.6; `services/debate_protocol.py` |
+| **3 / Measure value** | Versioned signal diagnostics, ledger-based portfolio performance, experiment manifests, V0–V3 reports | **Done** — v1.1.7; `docs/spec/MEASUREMENT.md` |
+| **4 / Allocate capital** | Complete portfolio brief, target weights, deterministic plan sizing, advisory workflow | **Done** — Unreleased; `docs/spec/ALLOCATION.md` |
+| **5 / Publish evidence** | Curated recorded cases, revised demonstration, methodology report | **In progress** — this change: `docs/spec/METHODOLOGY.md`, `CASES.md`, `DEMO.md`, `CLAIMS.md` |
 
 ### Why the phases cannot be collapsed
 
@@ -147,9 +147,10 @@ and planned stays explicit.
   actually produced rebuttals. Fixtures are labelled `synthetic` so a reviewer can
   tell the difference. Letting the UI imply a debate that never happened would
   breach the specification's REL-02 invariants.
-- **Phase 3 needs Phase 4's opposite.** Metric definitions must be frozen before any
-  comparative performance claim. Adding portfolio accounting after publishing a
-  comparison would mean re-labelling numbers that people already quoted.
+- **Phase 3 needs a frozen metric definition.** Signal diagnostics and portfolio
+  performance must be defined before any comparative claim. Adding portfolio
+  accounting after publishing a comparison would mean re-labelling numbers that
+  people already quoted.
 - **Phase 4 needs Phase 3.** An allocator without reconciled portfolio accounting and
   execution safeguards is the exact configuration REL-02 calls release-blocking.
 

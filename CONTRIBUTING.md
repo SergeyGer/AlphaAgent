@@ -16,7 +16,7 @@ make up                 # PostgreSQL + Redis via Docker
 # Edit .env: set POSTGRES_PASSWORD and DJANGO_SECRET_KEY to real values
 make migrate
 make seed               # demo user + API token
-make test               # 139 tests, no network required
+make test               # full suite (716 at the Phase 0-4 baseline; the run prints the total), no network required
 ```
 
 Run the API, worker and scheduler in three terminals:
@@ -72,7 +72,8 @@ CI runs on every push and pull request:
 | Job | What it enforces |
 | --- | --- |
 | `lint` | Ruff lint + format, `manage.py check --deploy` |
-| `test` | Full suite against PostgreSQL 16 and Redis 7, migration drift |
+| `test` | Full suite against PostgreSQL 16 and Redis 7, migration drift, coverage floor |
+| `frontend` | Typecheck, production build, Vitest suite with its coverage floors |
 | `docker` | The image builds, compose config is valid, the image imports cleanly |
 
 Install the git hooks to catch most of this before you push:
@@ -182,6 +183,150 @@ here instead.
 file with lychee, verifies that every image and file referenced actually exists in
 the repository, and confirms that wiki pages only cross-reference pages that
 exist. A renamed screenshot or a retitled page fails the build.
+
+## Technical specification: where each phase lives
+
+The five-phase programme is recorded in
+[`docs/spec/IMPLEMENTATION-NOTE.md`](docs/spec/IMPLEMENTATION-NOTE.md), with a
+definition-of-record for each measurement surface:
+
+| Document | Covers |
+| --- | --- |
+| [`docs/spec/MEASUREMENT.md`](docs/spec/MEASUREMENT.md) | Signal diagnostics, portfolio accounting, experiments and the report |
+| [`docs/spec/ALLOCATION.md`](docs/spec/ALLOCATION.md) | The Phase 4 brief, target contract, projection and plan execution |
+| [`docs/spec/FIXTURES.md`](docs/spec/FIXTURES.md) | Decision-run fixture schema, loader and honesty rules |
+| [`docs/spec/METHODOLOGY.md`](docs/spec/METHODOLOGY.md) | What the numbers mean, and what they do not |
+| [`docs/spec/CASES.md`](docs/spec/CASES.md) | The curated cases a reviewer should inspect |
+| [`docs/spec/DEMO.md`](docs/spec/DEMO.md) | Exact commands for every offline demonstration |
+| [`docs/spec/CLAIMS.md`](docs/spec/CLAIMS.md) | Every public claim and the file that supports it |
+
+### Phase map
+
+| Phase | Requirements | Where it is implemented | How to test it |
+| --- | --- | --- | --- |
+| **0 — Baseline** | Inventory, confirmed behaviours, recorded divergences | `docs/spec/IMPLEMENTATION-NOTE.md`; `docs/adr/` | Documentation review; no runtime surface |
+| **1 — Explain one decision** | REP-02, REP-03, API-01 | `core/decision_models.py`, `core/decision_serializers.py`, `core/decision_views.py`, `services/evidence.py`, `services/decision_runs.py`, `core/management/commands/load_decision_fixtures.py`, `docs/spec/fixtures/decision-runs.v1.json` | `manage.py test core.tests.test_decision_runs` (includes the detail, events and export contracts) |
+| **2 — Real rebuttals** | DEB-01 … DEB-05 | `services/debate_protocol.py`; the public entry point stays `ai_agent.run_alpha_agent`; legacy sequential mode is `AI_DEBATE_PROTOCOL=legacy_sequential` | `manage.py test core.tests.test_debate_protocol` |
+| **3 — Measure value** | MET-01 … MET-05, EXP-01 … EXP-05 | `services/signal_diagnostics.py`, `services/portfolio_accounting.py`, `services/experiments.py`, `core/measurement_models.py`, `core/management/commands/build_experiment.py` | `manage.py test core.tests.test_portfolio_accounting core.tests.test_experiments` |
+| **4 — Allocate capital** | PORT-01 … PORT-05 | `services/portfolio_brief.py`, `services/portfolio_policy.py`, `services/portfolio_targets.py`, `services/portfolio_allocation.py`, `core/allocation_models.py`, `core/management/commands/run_allocation.py` | `manage.py test core.tests.test_portfolio_allocation` |
+| **5 — Publish evidence** | Methodology, curated cases, demo, contributor map, claims index | `docs/spec/METHODOLOGY.md`, `docs/spec/CASES.md`, `docs/spec/DEMO.md`, `docs/spec/CLAIMS.md`, this section | `manage.py test core.tests.test_documentation_links` |
+
+The older dashboard attribution (`services/attribution.py`, ADR-0014) is not the
+same engine as Phase 3. Before changing either, read
+[`docs/spec/METHODOLOGY.md`](docs/spec/METHODOLOGY.md) §0: the two systems have
+different point-in-time guarantees and must not share method versions or claims.
+
+### Tests by layer
+
+The suite is one Django/unittest tree; run the slice that covers your change.
+
+```bash
+# Everything (716 at the Phase 0-4 baseline; the run prints the total)
+venv/bin/python manage.py test core.tests
+
+# Safety-critical guard and its portfolio-level ceilings
+venv/bin/python manage.py test core.tests.test_guardrails \
+    core.tests.test_exposure_limits core.tests.test_security
+
+# Decision-run API and fixture loader
+venv/bin/python manage.py test core.tests.test_decision_runs
+
+# Phase 2 protocol: independence, rebuttals, adjudication, budgets, reproducibility
+venv/bin/python manage.py test core.tests.test_debate_protocol
+
+# Phase 3 measurement: accounting, leakage, fees, TWR, variants, report
+venv/bin/python manage.py test core.tests.test_portfolio_accounting \
+    core.tests.test_experiments
+
+# Phase 4 allocation: brief, contract, projection, apply, concurrency
+venv/bin/python manage.py test core.tests.test_portfolio_allocation
+
+# HTTP and dashboard behaviour
+venv/bin/python manage.py test core.tests.test_api core.tests.test_dashboard_api
+
+# Documentation source links and the demo theme contract
+venv/bin/python manage.py test core.tests.test_documentation_links \
+    core.tests.test_demo_theme_contract
+
+# Frontend (178 tests on this commit)
+cd frontend && npm test
+```
+
+Counts are snapshots, not constants. The authoritative numbers are whatever the
+current run reports; do not copy a count into a new document without saying where
+it came from. The full-suite count is reproduced in
+[`docs/spec/CLAIMS.md`](docs/spec/CLAIMS.md).
+
+### Migrations are additive only
+
+- New behaviour gets a **new** migration file in `core/migrations/`. Never edit
+  or renumber an applied migration; a deployed database has already recorded its
+  name and checksum in `django_migrations`.
+- Add tables, nullable columns or columns with a safe default. Do not drop or
+  rename a column in the same change that adds its replacement; add, backfill in
+  a separate reviewed migration, then remove in a later release.
+- A column that existing rows cannot answer honestly is nullable rather than
+  defaulted. `Transaction.fee` is the reference case: `NULL` means "no fee was
+  recorded", and `Decimal("0")` means "a zero fee was recorded". Backfilling a
+  zero would turn an unknown into a false measurement.
+- New state that is not a trade gets a separate table, not a new `Transaction`
+  type. `CashFlow` exists because `services/ledger.replay_positions` treats every
+  non-BUY transaction as a SELL, and `tx_type` is `varchar(4)`.
+- CI runs `manage.py makemigrations --check --dry-run`; a model change without
+  its migration fails the build. Run `make migrate` locally before the suite.
+
+The Phase 1–4 tables arrived as migrations `0010`–`0013`; they are additive, and
+no existing column was repurposed.
+
+### Fixture and report commands
+
+All of these are offline: no model key and no market-data request.
+
+```bash
+# Decision-run fixtures (idempotent; keyed by fixture_id)
+venv/bin/python manage.py load_decision_fixtures
+venv/bin/python manage.py load_decision_fixtures --path docs/spec/fixtures/decision-runs.v1.json
+venv/bin/python manage.py load_decision_fixtures --username demo
+venv/bin/python manage.py load_decision_fixtures --force   # only after a checksum change
+
+# Phase 3 experiment report (rebuilds from stored rows)
+venv/bin/python manage.py build_experiment
+venv/bin/python manage.py build_experiment --force          # after a manifest checksum change
+
+# Phase 4 paper allocation (synthetic fixture, stub CIO)
+venv/bin/python manage.py run_allocation --reset --apply
+venv/bin/python manage.py run_allocation --reset --apply --fail-leg AAPL
+
+# Demo account for the browser/API
+venv/bin/python manage.py seed_demo --username demo --password demo-pass-123
+```
+
+Fixtures are checksummed. If you intentionally edit a manifest, regenerate its
+checksum with the script in [`docs/spec/FIXTURES.md`](docs/spec/FIXTURES.md) or
+[`docs/spec/MEASUREMENT.md`](docs/spec/MEASUREMENT.md), then reload with
+`--force`. Never hand-edit a fixture and leave the checksum stale: the loader
+will refuse it, and a report built from mixed rows would be worse than a failed
+command.
+
+### A public claim must trace to a committed file
+
+This is the Phase 5 gate and a standing rule, not a one-off review.
+
+1. Every substantive claim in `README.md` and `docs/wiki/` must have a row in
+   [`docs/spec/CLAIMS.md`](docs/spec/CLAIMS.md) naming the repository file that
+   supports it — a fixture, a report, a test, an ADR, a settings value or a
+   workflow.
+2. A number taken from a live database, a live run or a local log is **not**
+   evidence. Either commit a fixture/report that contains it, or do not publish
+   the number.
+3. If a claim has no source, fix the claim. Do not invent a source, and do not
+   add a test that asserts the claim without asserting the behaviour.
+4. When you add or change a public claim, update `CLAIMS.md` in the same pull
+   request. A reviewer should be able to go from the sentence to the file in one
+   hop.
+5. Synthetic content is labelled at the point of use (`mode`, `is_synthetic`,
+   `synthetic`, `synthetic_note`, or the report's honesty block). Never describe
+   it as market evidence, a track record or a protocol comparison.
 
 ## Reporting bugs and requesting features
 

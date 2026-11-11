@@ -1,0 +1,29 @@
+# CodeQL configuration.
+#
+# `py/unexpected-raise-in-special-method` is suppressed for
+# `services/signal_diagnostics.py` only. The two flagged methods,
+# `PerDecisionScoreSeries.__add__` and `__radd__`, raise `MetricFamilyError` on
+# purpose: per-decision scores cover overlapping windows with unequal position
+# sizes, so their sum is not a portfolio return. Refusing every arithmetic
+# combination at runtime is the guard that makes that mistake impossible rather
+# than merely discouraged; `total()` and `sum()` enforce the same rule and are
+# not special methods, so the query does not flag them. The behaviour is pinned
+# by `core/tests/test_portfolio_accounting.py::OverlappingDecisionTests`.
+#
+# Why a file-level ignore rather than a one-rule/one-file filter:
+# CodeQL query filters match query metadata only (id, tags, severity, ...). A
+# `paths` key inside a filter is silently ignored (verified against CodeQL
+# 2.27.4), and CodeQL's top-level `paths` accepts directories, not individual
+# files, so this file cannot be split into a companion analysis either. A
+# repository-wide `query-filters` exclusion of the rule would hide every future
+# genuine finding, so it is deliberately not used. Excluding this one file is the
+# narrowest supported suppression; the rule remains active on every other file
+# and still flags the same construct elsewhere.
+#
+# Coverage tradeoff: `services/signal_diagnostics.py` is a pure computation
+# module. Its only external interaction is one read-only
+# `DecisionRun.objects.filter(...)`; it has no request handling, file or network
+# I/O, deserialisation, shell or logging sink, so excluding it from CodeQL loses
+# little realistic security coverage.
+paths-ignore:
+  - services/signal_diagnostics.py

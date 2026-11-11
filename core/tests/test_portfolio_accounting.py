@@ -509,7 +509,8 @@ class OverlappingDecisionTests(SimpleTestCase):
         with self.assertRaises(MetricFamilyError):
             series.sum()
         with self.assertRaises(MetricFamilyError):
-            series + series
+            # The result is deliberately discarded; the raise is the assertion.
+            _ = series + series
         with self.assertRaises(MetricFamilyError):
             sum([series])
 

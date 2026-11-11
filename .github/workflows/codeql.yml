@@ -31,6 +31,10 @@ jobs:
         with:
           languages: python
           queries: security-and-quality
+          # Suppresses one deliberate, test-pinned guard in
+          # services/signal_diagnostics.py without disabling the rule
+          # repository-wide. See the config file for the rationale and scope.
+          config-file: ./.github/codeql/codeql-config.yml
           # NOTE: `.github/codeql/model-pack` is deliberately NOT loaded here.
           # The `packs` input accepts only *published* pack references
           # ("owner/name"), not a path in the repository - passing a path fails

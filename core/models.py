@@ -20,6 +20,73 @@ from django.db.models import Q
 from django.utils import timezone
 
 # ---------------------------------------------------------------------------
+# Public surface
+# ---------------------------------------------------------------------------
+# The Phase 1, 3 and 4 models are imported at the bottom of this module so
+# Django's app loader registers them, and they are re-exported so callers can
+# keep importing the whole schema from ``core.models``. Naming them here makes
+# that re-export an explicit contract instead of an incidental side effect; it
+# is also what tells linters that the bottom-of-file imports are intentional.
+__all__ = [
+    "ZERO_USD",
+    "AgentDecisionLog",
+    "AgentRole",
+    "Asset",
+    "CashFlow",
+    "CashFlowType",
+    "Claim",
+    "ClaimStance",
+    "ClaimType",
+    "DecidedVia",
+    "DecisionAction",
+    "DecisionOutcome",
+    "DecisionRecord",
+    "DecisionRun",
+    "DecisionStatus",
+    "EvidenceItem",
+    "EvidenceSourceType",
+    "ExecutedBy",
+    "Experiment",
+    "ExperimentEvaluationMode",
+    "ExperimentRun",
+    "ExperimentRunStatus",
+    "ExperimentStatus",
+    "ExperimentVariant",
+    "GuardRecord",
+    "GuardStatus",
+    "InputSnapshot",
+    "InstrumentClassification",
+    "InstrumentClassificationSource",
+    "MarketSentiment",
+    "OutcomeMaturity",
+    "OutcomeRecord",
+    "PlanLegPriority",
+    "PlanLegStatus",
+    "PlanSide",
+    "PlanStatus",
+    "Portfolio",
+    "PortfolioPlan",
+    "PortfolioPlanLeg",
+    "PortfolioSnapshot",
+    "PositionThesis",
+    "PrimaryMetricFamily",
+    "Rebuttal",
+    "RebuttalResponseType",
+    "RecommendationStatus",
+    "RiskProfile",
+    "RunEvent",
+    "RunEventType",
+    "RunMode",
+    "RunSource",
+    "RunStage",
+    "TelegramLink",
+    "ThesisStatus",
+    "TradeRecommendation",
+    "Transaction",
+    "TxType",
+]
+
+# ---------------------------------------------------------------------------
 # Shared constants
 # ---------------------------------------------------------------------------
 ZERO_USD = Decimal("0.00")
@@ -754,7 +821,7 @@ class TelegramLink(models.Model):
 # Imported last for the same reason as the Phase 1 and Phase 3 models. See
 # core/allocation_models.py for why the sector lookup is explicit rather than
 # inferred and why a plan leg has a one-to-one ledger row.
-from core.allocation_models import (  # noqa: E402,F401
+from core.allocation_models import (  # noqa: E402
     InstrumentClassification,
     InstrumentClassificationSource,
     PlanLegPriority,
@@ -771,7 +838,7 @@ from core.allocation_models import (  # noqa: E402,F401
 # Imported last and re-exported so Django's app loader registers the models while
 # the Phase 0 schema above stays untouched (DATA-04). See core/decision_models.py
 # for why they live in a separate module.
-from core.decision_models import (  # noqa: E402,F401
+from core.decision_models import (  # noqa: E402
     AgentRole,
     Claim,
     ClaimStance,
@@ -802,7 +869,7 @@ from core.decision_models import (  # noqa: E402,F401
 # Imported last for the same reason as the Phase 1 models: the Phase 0 schema and
 # its consumer contract stay untouched, and Django registers these tables through
 # this module. See core/measurement_models.py.
-from core.measurement_models import (  # noqa: E402,F401
+from core.measurement_models import (  # noqa: E402
     CashFlow,
     CashFlowType,
     Experiment,

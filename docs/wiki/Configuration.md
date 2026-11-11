@@ -42,7 +42,7 @@ git-ignored.
 | `DJANGO_SECURE_HSTS_PRELOAD` | `false` | No | Adds `preload` to HSTS |
 | `DJANGO_USE_X_FORWARDED_PROTO` | `false` | No | Trust `X-Forwarded-Proto: https` from a reverse proxy |
 
-The bundled Compose stack serves plain HTTP on `:8000`, so every HTTPS-related flag defaults off.
+The bundled Compose stack serves plain HTTP on host port `8080` (container port `8000`), so every HTTPS-related flag defaults off.
 `SECURE_CONTENT_TYPE_NOSNIFF` (`true`), `SECURE_REFERRER_POLICY` (`same-origin`) and
 `X_FRAME_OPTIONS` (`DENY`) are always on and are not configurable.
 
@@ -147,7 +147,9 @@ the point it prices, so the boundary is a recorded limitation rather than an
 approximation applied silently.
 
 Measured on a real run: **$0.161 on Haiku 4.5 → $0.0145 on Haiku 5.5**, a 91%
-reduction.
+reduction. The figures are recorded in `CHANGELOG.md`; the run itself is not a
+committed fixture, so treat them as a recorded observation rather than a
+reproducible measurement.
 
 ### Redis authentication
 

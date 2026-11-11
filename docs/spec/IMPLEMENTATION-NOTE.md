@@ -2,7 +2,8 @@
 
 This records the Phase 0 baseline the specification requires, and what is being
 built against it. The specification is a five-phase programme; this note covers
-Phase 0 in full, and Phase 1, Phase 2, Phase 3 and Phase 4 in implementation.
+Phase 0 in full and Phases 1–5 in implementation. Phases 1–4 are merged; Phase 5
+is the publication gate.
 
 ## BASE-01 — Baseline
 
@@ -297,3 +298,30 @@ command.
    supplied synthetic series, but the series, prices, classifications and
    candidate cases are not realised history. The command labels the provider
    `stub` and the source `fixture`.
+
+## Phase 5 — publish evidence
+
+The final phase is documentation, not a new subsystem. Its gate is that **every
+public claim traces to reviewed evidence**, and it adds four artefacts:
+
+| Deliverable | File | What it establishes |
+| --- | --- | --- |
+| Methodology report | [`METHODOLOGY.md`](METHODOLOGY.md) | What signal diagnostics, portfolio performance, Sharpe, sessions and counterfactuals do and do not measure |
+| Curated cases | [`CASES.md`](CASES.md) | Disagreement, risk intervention, uncertainty and outcome cases, with the exact fixture evidence and the reason each was selected |
+| Revised demonstration | [`DEMO.md`](DEMO.md) | Exact offline commands for the Streamlit guard demo, the decision-detail replay, the paper allocation and the report build, with an accurate mode label for each |
+| Claims index | [`CLAIMS.md`](CLAIMS.md) | Every public claim in `README.md` and `docs/wiki/`, its source, every correction made in this phase, and every claim that could not be traced |
+
+The contributor map in [`../../CONTRIBUTING.md`](../../CONTRIBUTING.md) records
+where each phase lives, how to run each test layer, the additive-migration rule
+and the fixture-loading commands.
+
+Phase 5 changed no application code. It corrected public claims that the code did
+not support, including the description of the Streamlit demo, the ADR and incident
+counts, the outdated security advisory, the stale test counts in the wiki and the
+live scorecard figures that no committed file contained. Those corrections are
+listed in [`CLAIMS.md`](CLAIMS.md) §3 and §4.
+
+The committed evidence is still what the earlier phases produced: the three
+synthetic decision fixtures, the synthetic Phase 3 experiment report and the
+synthetic Phase 4 paper allocation. No live run was added, and no number in the
+new documents is quoted from a live database.

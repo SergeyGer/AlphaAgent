@@ -27,7 +27,6 @@ are strings, timestamps are UTC ISO-8601 with ``Z``.
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
@@ -55,8 +54,6 @@ from services.portfolio_policy import (
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from core.decision_models import InputSnapshot
 
-logger = logging.getLogger("alphaagent.portfolio_brief")
-
 __all__ = [
     "BRIEF_SCHEMA_VERSION",
     "CANDIDATE_CLAIM_LIMIT",
@@ -78,7 +75,6 @@ __all__ = [
 BRIEF_SCHEMA_VERSION = "portfolio_brief.v1"
 COVARIANCE_METHOD_VERSION = "covariance.sample_daily_returns.v1"
 CANDIDATE_CLAIM_LIMIT = 10
-PRICE_QUANTUM = CENT
 VALUE_QUANTUM = CENT
 PUBLISHED_WEIGHT_QUANTUM = Decimal("0.00000001")
 
