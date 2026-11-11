@@ -44,11 +44,25 @@ def _apply(record: OutcomeRecord, outcome: DecisionOutcome) -> OutcomeRecord:
     record.maturity = _maturity(outcome)
     record.price_at_decision = outcome.price_at_decision
     record.price_at_horizon = outcome.price_at_horizon
-    record.price_observed_at = outcome.evaluated_at
-    record.price_source = "decision_outcome_bridge"
+    # Real observation dates when the producer recorded them. Falling back to
+    # ``evaluated_at`` would present the evaluation instant as a market
+    # observation; the fallback is kept only for rows whose producer predates
+    # provenance, and ``price_source`` labels it.
+    record.price_observed_at_decision = outcome.price_observed_at_decision
+    record.price_observed_at = outcome.price_observed_at or outcome.evaluated_at
+    record.price_source = (
+        outcome.price_source
+        if outcome.price_observed_at is not None
+        else "decision_outcome_bridge_evaluated_at"
+    )
     record.forward_return_pct = outcome.forward_return_pct
     record.decision_return_pct = outcome.decision_return_pct
     record.benchmark_return_pct = outcome.benchmark_return_pct
+    record.benchmark_price_at_decision = outcome.benchmark_price_at_decision
+    record.benchmark_price_at_horizon = outcome.benchmark_price_at_horizon
+    record.benchmark_observed_at_decision = outcome.benchmark_observed_at_decision
+    record.benchmark_price_observed_at = outcome.benchmark_price_observed_at
+    record.benchmark_price_source = outcome.benchmark_price_source
     record.signal_diagnostics = {
         "source": "services.attribution.evaluate_pending",
         "directional_hit": outcome.directional_hit,

@@ -108,12 +108,12 @@
     },
     {
       "key": "V2",
-      "label": "Current pipeline",
+      "label": "Current pipeline (no explicit response round)",
       "engine": "debate",
-      "protocol_version": "debate.v1",
+      "protocol_version": "debate.no_rebuttal.v1",
       "implemented": true,
       "requires_rebuttals": false,
-      "description": "The production debate protocol as currently shipped.",
+      "description": "Bull / Bear / CIO with the response round omitted. Recorded as debate.no_rebuttal.v1 so it is distinct from the V3 rebuttal arm.",
       "model_configuration": {
         "provider": "synthetic",
         "model": "synthetic.v1",
@@ -345,6 +345,6 @@
     "algorithm": "sha256",
     "scope": "the entire manifest with its 'checksum' member removed",
     "canonicalisation": "JSON with sorted keys, separators (',' ':'), UTF-8",
-    "value": "5e984b5a949d18c0f42e32f8c77e6a8dfd19499e2c89ad801aee8592c7bb3284"
+    "value": "99ea06a002c9d78dc5ebf933df67a1c2ee93b3de8582d8c2ef54de174a45c5b9"
   }
 }

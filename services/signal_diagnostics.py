@@ -107,6 +107,19 @@ BENCHMARK_RULES = {
 
 BENCHMARK_MATCH_RULE = "pairwise_same_horizon_forward_returns.v1"
 
+#: The declared rule: the stored benchmark return refers to the same decision and
+#: horizon as the strategy. Whether that can be *checked* is a separate question,
+#: answered per row by ``_verify_benchmark_interval``.
+BENCHMARK_INTERVAL_RULE = (
+    "stored_benchmark_return_uses_the_same_decision_and_horizon_as_the_strategy.v1"
+)
+
+#: The verification rule (FIX-07C). Applied only when both sides persisted their
+#: observation sessions; see ``_verify_benchmark_interval``.
+BENCHMARK_INTERVAL_VERIFICATION_RULE = (
+    "benchmark_and_instrument_observations_share_the_decision_and_horizon_sessions.v1"
+)
+
 ZERO = Decimal("0")
 HUNDRED = Decimal("100")
 PCT4 = Decimal("0.0001")
@@ -381,6 +394,12 @@ class SignalObservation:
     benchmark_return_pct: Decimal | None = None
     benchmark_matched: bool = False
     benchmark_interval_verified: bool = False
+    #: Persisted observation provenance (FIX-07C). ``None`` means the row does not
+    #: carry it, which is why verification is false rather than assumed.
+    benchmark_observed_at_decision: datetime | None = None
+    benchmark_observed_at_horizon: datetime | None = None
+    benchmark_observation_source: str = ""
+    benchmark_verification_reason: str = ""
     relative_forward_return_pct: Decimal | None = None
     action_relative_return_pct: Decimal | None = None
     cohort: str = "llm"
@@ -423,6 +442,21 @@ class SignalObservation:
                 ),
                 "matched": self.benchmark_matched,
                 "interval_verified": self.benchmark_interval_verified,
+                "observation": {
+                    "at_decision": (
+                        None
+                        if self.benchmark_observed_at_decision is None
+                        else utc_iso(self.benchmark_observed_at_decision)
+                    ),
+                    "at_horizon": (
+                        None
+                        if self.benchmark_observed_at_horizon is None
+                        else utc_iso(self.benchmark_observed_at_horizon)
+                    ),
+                    "source": self.benchmark_observation_source or None,
+                    "precision": "session_date",
+                    "verification_reason": self.benchmark_verification_reason or None,
+                },
             },
             "relative_forward_return_pct": (
                 None
@@ -453,6 +487,10 @@ def _cohort_for(run: DecisionRun) -> str:
         return "heuristic"
     if run.mode == RunMode.SYNTHETIC:
         return "synthetic"
+    if run.mode == RunMode.SIMULATED or run.source == RunSource.STUB:
+        # A scripted provider is not an LLM sample. Pooling it with live model
+        # runs would let authored output borrow the credibility of a real one.
+        return "simulated"
     return "llm"
 
 
@@ -488,6 +526,49 @@ def _outcome_rows(run: DecisionRun) -> tuple[list[Any], str]:
     return [], "none"
 
 
+def _verify_benchmark_interval(
+    *,
+    decision_at: datetime,
+    horizon_days: int | None,
+    instrument_at_decision: datetime | None,
+    instrument_at_horizon: datetime | None,
+    benchmark_at_decision: datetime | None,
+    benchmark_at_horizon: datetime | None,
+) -> tuple[bool, str]:
+    """Check that the benchmark window is the instrument window (FIX-07C).
+
+    Verified means: both sides persisted an observation for both endpoints, the
+    benchmark's decision observation falls on the same session as the
+    instrument's, and the benchmark's horizon observation falls on the same
+    session as the instrument's and not before the target session.
+
+    What this does **not** verify: the intraday instant of either observation.
+    Prices are daily closes, so the comparison is at session-date precision. A
+    row can carry a benchmark return with no provenance at all (legacy rows); it
+    is reported unverified with the missing field named, not assumed matched.
+    """
+    missing = []
+    if benchmark_at_decision is None:
+        missing.append("benchmark_decision_observation_missing")
+    if benchmark_at_horizon is None:
+        missing.append("benchmark_horizon_observation_missing")
+    if instrument_at_decision is None:
+        missing.append("instrument_decision_observation_missing")
+    if instrument_at_horizon is None:
+        missing.append("instrument_horizon_observation_missing")
+    if missing:
+        return False, missing[0]
+    if benchmark_at_decision.date() != instrument_at_decision.date():
+        return False, "benchmark_decision_session_mismatch"
+    if benchmark_at_horizon.date() != instrument_at_horizon.date():
+        return False, "benchmark_horizon_session_mismatch"
+    if horizon_days is not None:
+        target = (decision_at + timedelta(days=horizon_days)).date()
+        if benchmark_at_horizon.date() < target:
+            return False, "benchmark_horizon_before_target_session"
+    return True, ""
+
+
 def _observation_from_outcome(
     *,
     run: DecisionRun,
@@ -512,6 +593,12 @@ def _observation_from_outcome(
         benchmark_ticker = (record.benchmark_ticker or "").strip().upper()
         evaluated_at = record.evaluated_at
         price_observed_at = record.price_observed_at
+        price_observed_at_decision = record.price_observed_at_decision
+        benchmark_observed_at_decision = record.benchmark_observed_at_decision
+        benchmark_observed_at_horizon = record.benchmark_price_observed_at
+        benchmark_observation_source = record.benchmark_price_source
+        benchmark_interval_verified = False
+        benchmark_verification_reason = ""
         reason = record.unavailable_reason or None
         if maturity == OutcomeMaturity.EVALUATED and (forward is None or action_score is None):
             maturity = OutcomeMaturity.UNAVAILABLE
@@ -527,6 +614,12 @@ def _observation_from_outcome(
         benchmark_ticker = BENCHMARK_TICKER
         evaluated_at = record.evaluated_at
         price_observed_at = None
+        price_observed_at_decision = None
+        benchmark_observed_at_decision = None
+        benchmark_observed_at_horizon = None
+        benchmark_observation_source = ""
+        benchmark_interval_verified = False
+        benchmark_verification_reason = ""
         reason = None
         maturity = (
             OutcomeMaturity.EVALUATED
@@ -606,6 +699,23 @@ def _observation_from_outcome(
     elif maturity == OutcomeMaturity.EVALUATED and forward is not None and benchmark_return is None:
         flags.append("benchmark_missing")
 
+    if benchmark_matched:
+        (
+            benchmark_interval_verified,
+            benchmark_verification_reason,
+        ) = _verify_benchmark_interval(
+            decision_at=decision_at,
+            horizon_days=horizon,
+            instrument_at_decision=price_observed_at_decision,
+            instrument_at_horizon=price_observed_at,
+            benchmark_at_decision=benchmark_observed_at_decision,
+            benchmark_at_horizon=benchmark_observed_at_horizon,
+        )
+        if not benchmark_interval_verified:
+            flags.append("benchmark_interval_unverified")
+    elif benchmark_ticker and benchmark_return is not None:
+        benchmark_verification_reason = "benchmark_not_matched_to_a_scored_observation"
+
     if (
         kind == "outcome_record"
         and benchmark_ticker
@@ -633,6 +743,11 @@ def _observation_from_outcome(
         benchmark_ticker=benchmark_ticker,
         benchmark_return_pct=benchmark_return if benchmark_matched else None,
         benchmark_matched=benchmark_matched,
+        benchmark_interval_verified=benchmark_interval_verified,
+        benchmark_observed_at_decision=benchmark_observed_at_decision,
+        benchmark_observed_at_horizon=benchmark_observed_at_horizon,
+        benchmark_observation_source=benchmark_observation_source,
+        benchmark_verification_reason=benchmark_verification_reason,
         relative_forward_return_pct=relative_forward,
         action_relative_return_pct=action_relative,
         cohort=cohort,
@@ -710,6 +825,62 @@ def _hit_rate(hits: int, calls: int) -> Decimal | None:
     if not calls:
         return None
     return (Decimal(hits) / Decimal(calls) * HUNDRED).quantize(PCT1)
+
+
+def _benchmark_interval_block(observations: Sequence[SignalObservation]) -> dict:
+    """Summarise what the stored observations actually allow a reader to verify.
+
+    ``benchmark_interval_verified`` is true only when there is at least one
+    matched pair and **every** matched pair carries the four observation
+    timestamps and passes the same-session check. The report names the reason it
+    is false instead of declaring the rule and hoping. ``precision`` is
+    ``session_date``: the prices are daily closes, so the intraday observation
+    instant is not recorded and is not claimed.
+    """
+    matched = [row for row in observations if row.benchmark_matched]
+    verified = [row for row in matched if row.benchmark_interval_verified]
+    reasons: dict[str, int] = {}
+    for row in matched:
+        if row.benchmark_interval_verified:
+            continue
+        key = row.benchmark_verification_reason or "unverified"
+        reasons[key] = reasons.get(key, 0) + 1
+    verified_flag = bool(matched) and len(verified) == len(matched)
+    if not matched:
+        reason = "no_matched_benchmark_pairs"
+    elif verified_flag:
+        reason = None
+    else:
+        reason = "some_matched_pairs_lack_observation_provenance"
+    return {
+        "benchmark_interval_verified": verified_flag,
+        "benchmark_interval": {
+            "verification_rule": BENCHMARK_INTERVAL_VERIFICATION_RULE,
+            "matched_pairs": len(matched),
+            "verified_pairs": len(verified),
+            "unverified_pairs": len(matched) - len(verified),
+            "precision": "session_date",
+            "intraday_observation_instant_verified": False,
+            "unverified_reasons": dict(sorted(reasons.items())),
+            "reason": reason,
+            "what_is_verified": (
+                "For every matched pair, the stored benchmark decision and horizon "
+                "observations fall on the same sessions as the instrument's, and the "
+                "benchmark horizon observation is not before the target session."
+            ),
+            "what_is_not_verified": (
+                "The intraday instant of any observation (prices are daily closes), and "
+                "the exchange calendar itself: sessions are compared as stored dates. "
+                "Rows written before observation timestamps existed cannot be verified at "
+                "all and are counted, not assumed."
+            ),
+        },
+        "benchmark_interval_note": (
+            "A benchmark return is reported as interval-verified only when its stored "
+            "observation timestamps exist and match the instrument's sessions. A row "
+            "without provenance keeps its benchmark return but is counted as unverified."
+        ),
+    }
 
 
 def aggregate_observations(
@@ -909,7 +1080,7 @@ class SignalDiagnosticsReport:
             for horizon in horizons
         }
         cohorts = {}
-        for cohort in ("heuristic", "llm", "synthetic"):
+        for cohort in ("heuristic", "llm", "synthetic", "simulated"):
             cohort_rows = [row for row in self.observations if row.cohort == cohort]
             cohorts[cohort] = {
                 "observations": len(cohort_rows),
@@ -974,15 +1145,8 @@ class SignalDiagnosticsReport:
             },
             "benchmark_policy": self.benchmark_policy or BENCHMARK_RULES,
             "benchmark_match_rule": BENCHMARK_MATCH_RULE,
-            "benchmark_interval_rule": (
-                "stored_benchmark_return_uses_the_same_decision_and_horizon_as_the_strategy.v1"
-            ),
-            "benchmark_interval_verified": False,
-            "benchmark_interval_note": (
-                "Stored outcomes carry a benchmark return but not benchmark observation "
-                "timestamps. The same-horizon rule is declared and the method_version is "
-                "displayed; interval matching cannot be independently re-derived from the rows."
-            ),
+            "benchmark_interval_rule": BENCHMARK_INTERVAL_RULE,
+            **_benchmark_interval_block(self.observations),
             "primary_horizon_days": self.primary_horizon,
             "rows": [row.as_dict() for row in self.observations],
             "summary_by_horizon": summaries,

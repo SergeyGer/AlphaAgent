@@ -9,6 +9,57 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- **FIX-07 [P1] — cost and deadline semantics, and the experiment execution path.**
+  Four defects in cost accounting and budgeting, plus the missing arm executor.
+
+  **An estimate was being reported as a measurement.** `ai_agent.py` priced tokens
+  with a price-table estimate; that is now carried as `estimated_cost_usd` with a
+  `cost_basis` label, separate from the nullable `api_cost_usd` that means a billed
+  charge.
+
+  **Unknown usage became a measured zero.** `_read_totals` returned `(0, 0)` when
+  the usage summary was unavailable, so a provider that failed to report looked
+  like a run that spent nothing. It now returns `None`, and the run records `null`
+  with a reason rather than `0`.
+
+  **A retry could breach the monetary ceiling**, because the budget was checked once
+  before the retry loop. It is now checked before every attempt, and a call's timeout
+  and backoff are bounded by the remaining run deadline rather than the stage
+  timeout — a run could previously overrun its own deadline by a full stage.
+
+  **The budget contract is stated honestly.** The run metadata carries
+  `strict_billed_ceiling: false`; the code no longer promises a hard dollar ceiling
+  while late provider charges are unknown, and unreconciled timed-out calls are
+  labelled.
+
+  **V0–V3 now execute.** `services/experiment_execution.py` and
+  `manage.py run_experiment` schedule all four arms against one frozen opportunity
+  set with a shared `InputSnapshot` per opportunity, and four genuinely distinct
+  protocol ids — `heuristic_fallback.v1`, `single_agent_baseline.v1`,
+  `debate.no_rebuttal.v1` and `debate.v1`. Each arm carries its own decisions, fills
+  and trajectory through the same guard, fill rule and accounting. V4 stays declared
+  and unimplemented, excluded from the equal-opportunity denominator, and failed or
+  not-executed arms stay in the denominator.
+
+  **Reports are immutable by version.** `ExperimentReportVersion` stores the report
+  JSON with a hash and its dependency rows, including a digest of itself, so replay
+  appends rather than overwrites. `verify_report_version` rebuilds from live rows and
+  names the drift groups when they no longer match.
+
+  **Benchmark provenance is recorded** — observation dates and sources on
+  `DecisionOutcome` and `OutcomeRecord`, with `benchmark_interval_verified` computed
+  per matched pair at session-date precision and the reasons named when it cannot be.
+
+  The committed V0–V3 comparison is explicitly **simulated engineering validation**:
+  authored prices, a scripted model client, measured tokens zero, estimated tokens
+  21,394 in / 2,937 out, price-table cost $0.018190, billed cost `null` for nine runs.
+  It states `engineering_validation_only: true` and
+  `comparative_protocol_claim: false`.
+
+## [1.1.9] — 2026-11-11
+
+### Fixed
+
 - **FIX-02 [P0] — every trade is revalidated under lock.** `apply_trade` locked the
   portfolio and asset rows, then checked cash and quantity, but never reran
   cumulative exposure, concentration, daily-loss or budget rules under that lock.

@@ -25,8 +25,8 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
-from decimal import Decimal
+from datetime import UTC, date, datetime, time, timedelta
+from decimal import Decimal, InvalidOperation
 
 from django.utils import timezone
 
@@ -38,6 +38,7 @@ logger = logging.getLogger("alphaagent.attribution")
 __all__ = [
     "BENCHMARK_TICKER",
     "OUTCOME_METHOD_VERSION",
+    "PriceObservation",
     "Scorecard",
     "action_of",
     "build_scorecard",
@@ -117,13 +118,63 @@ def _as_date(stamp) -> date | None:
     return None
 
 
-def _close_on_or_after(ticker: str, when, *, horizon_days: int) -> Decimal | None:
+@dataclass(frozen=True)
+class PriceObservation:
+    """One price with the session it was observed on and where it came from.
+
+    A return without this is a number two prices happened to produce. Recording
+    the observation date is what lets the report check that the benchmark window
+    and the instrument window cover the same sessions instead of assuming it.
+    ``observed_on`` is a **date**, not an instant: the price provider publishes
+    daily closes, so the intraday observation instant is not recorded. The report
+    says so rather than presenting session-date precision as an exact interval.
+    """
+
+    ticker: str
+    price: Decimal
+    observed_on: date | None = None
+    source: str = "price_history"
+
+    def observed_at(self) -> datetime | None:
+        """Midnight UTC on the observation date, or ``None`` when unknown."""
+        if self.observed_on is None:
+            return None
+        return datetime.combine(self.observed_on, time.min, tzinfo=UTC)
+
+    def as_dict(self) -> dict:
+        return {
+            "ticker": self.ticker,
+            "price_usd": str(self.price),
+            "observed_on": self.observed_on.isoformat() if self.observed_on else None,
+            "source": self.source,
+        }
+
+
+def _observation(value, *, ticker: str, source: str = "price_history"):
+    """Coerce a price or observation into ``PriceObservation``.
+
+    Callers (and tests) that supply a bare ``Decimal`` still work; the provenance
+    is then unknown, which is exactly what such a row should record.
+    """
+    if value is None:
+        return None
+    if isinstance(value, PriceObservation):
+        return value
+    try:
+        return PriceObservation(ticker=ticker, price=Decimal(str(value)), source=source)
+    except (InvalidOperation, ValueError, TypeError):
+        return None
+
+
+def _close_on_or_after(ticker: str, when, *, horizon_days: int) -> PriceObservation | None:
     """Closing price nearest to ``when``, searching forward over the window.
 
     Markets are shut at weekends and on holidays, so a horizon date usually has no
     price of its own. ``get_price_history`` returns only actual trading days; the
     first one at or after the target is the honest approximation, and it is what a
-    human comparing two dates on a chart would read off.
+    human comparing two dates on a chart would read off. The observation date and
+    source travel with the price so the interval can be checked rather than
+    assumed.
     """
     from services.fundamentals import get_price_history
 
@@ -137,16 +188,23 @@ def _close_on_or_after(ticker: str, when, *, horizon_days: int) -> Decimal | Non
     for stamp, price in history.points:
         stamp_date = _as_date(stamp)
         if stamp_date is not None and stamp_date >= target:
-            return price
+            return PriceObservation(
+                ticker=ticker, price=price, observed_on=stamp_date, source="price_history"
+            )
     return None
 
 
-def _price_at(ticker: str, when) -> Decimal | None:
+def _price_at(ticker: str, when) -> PriceObservation | None:
     """Closing price on the decision date, or the first trading day after it."""
     return _close_on_or_after(ticker, when, horizon_days=0)
 
 
-def _start_price(decision) -> Decimal | None:
+def _price_of(value) -> Decimal | None:
+    observation = _observation(value, ticker="?", source="price_history")
+    return None if observation is None else observation.price
+
+
+def _start_price(decision) -> PriceObservation | None:
     """The price the decision would actually have traded at.
 
     For an executed decision that is the transaction's own price, not the day's
@@ -161,7 +219,12 @@ def _start_price(decision) -> Decimal | None:
     """
     transaction = getattr(decision, "transaction", None)
     if transaction is not None and transaction.price:
-        return transaction.price
+        return PriceObservation(
+            ticker=decision.ticker,
+            price=transaction.price,
+            observed_on=transaction.created_at.date() if transaction.created_at else None,
+            source="transaction",
+        )
     return _price_at(decision.ticker, decision.created_at)
 
 
@@ -201,12 +264,15 @@ def evaluate_pending(*, now=None, limit: int = 500) -> dict[str, int]:
     for decision in candidates:
         age_days = (reference - decision.created_at).days
         action = action_of(decision.action_taken)
-        start_price = _start_price(decision)
-        if start_price is None:
+        start_observation = _observation(
+            _start_price(decision), ticker=decision.ticker, source="price_history"
+        )
+        if start_observation is None:
             # No price for the decision day means no denominator, so no return.
             # Better to score nothing than to score against a guess.
             failed += 1
             continue
+        start_price = start_observation.price
 
         made_progress = False
         for horizon in horizons:
@@ -218,17 +284,27 @@ def evaluate_pending(*, now=None, limit: int = 500) -> dict[str, int]:
                 skipped += 1
                 continue
 
-            end_price = _close_on_or_after(decision.ticker, target, horizon_days=horizon)
-            if end_price is None:
+            end_observation = _observation(
+                _close_on_or_after(decision.ticker, target, horizon_days=horizon),
+                ticker=decision.ticker,
+            )
+            if end_observation is None:
                 failed += 1
                 continue
+            end_price = end_observation.price
 
             forward = _return_pct(start_price, end_price)
             benchmark = None
-            benchmark_start = _price_at(BENCHMARK_TICKER, decision.created_at)
-            benchmark_end = _close_on_or_after(BENCHMARK_TICKER, target, horizon_days=horizon)
-            if benchmark_start and benchmark_end:
-                benchmark = _return_pct(benchmark_start, benchmark_end)
+            benchmark_start = _observation(
+                _price_at(BENCHMARK_TICKER, decision.created_at),
+                ticker=BENCHMARK_TICKER,
+            )
+            benchmark_end = _observation(
+                _close_on_or_after(BENCHMARK_TICKER, target, horizon_days=horizon),
+                ticker=BENCHMARK_TICKER,
+            )
+            if benchmark_start is not None and benchmark_end is not None:
+                benchmark = _return_pct(benchmark_start.price, benchmark_end.price)
 
             outcome, _created = DecisionOutcome.objects.update_or_create(
                 decision=decision,
@@ -238,9 +314,33 @@ def evaluate_pending(*, now=None, limit: int = 500) -> dict[str, int]:
                     "action": action,
                     "price_at_decision": start_price,
                     "price_at_horizon": end_price,
+                    "price_observed_at_decision": start_observation.observed_at(),
+                    "price_observed_at": end_observation.observed_at(),
+                    "price_source": end_observation.source,
                     "forward_return_pct": forward,
                     "decision_return_pct": signed_return(action, forward),
                     "benchmark_return_pct": benchmark,
+                    # Benchmark provenance: the prices and the sessions they were
+                    # observed on. Without these a stored return cannot be
+                    # interval-checked, which is why the report used to say
+                    # ``benchmark_interval_verified: false`` for every row.
+                    "benchmark_price_at_decision": (
+                        None if benchmark_start is None else benchmark_start.price
+                    ),
+                    "benchmark_price_at_horizon": (
+                        None if benchmark_end is None else benchmark_end.price
+                    ),
+                    "benchmark_observed_at_decision": (
+                        None if benchmark_start is None else benchmark_start.observed_at()
+                    ),
+                    "benchmark_price_observed_at": (
+                        None if benchmark_end is None else benchmark_end.observed_at()
+                    ),
+                    "benchmark_price_source": (
+                        benchmark_end.source
+                        if benchmark_end is not None
+                        else (benchmark_start.source if benchmark_start is not None else "")
+                    ),
                     "directional_hit": directional_hit(action, forward),
                 },
             )

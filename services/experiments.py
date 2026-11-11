@@ -26,9 +26,12 @@ dependence between overlapping observations. Missing intervals are null with a
 reason. A small sample can validate the engineering, and the report says so; it
 never asserts a profitability threshold.
 
-The report is stored on the experiment with a monotonically increasing
-``report_version``. Replaying the command recomputes it from stored rows and
-increments the version; the manifest checksum refuses a silent edit.
+Each build appends an immutable, addressable ``ExperimentReportVersion``: the
+published document, its hash and a digest of every row the report read. Replay
+never overwrites an earlier version, and a version can be rebuilt from stored
+data and compared byte for byte. The manifest checksum still refuses a silent
+edit; it is not sufficient on its own, because it cannot freeze later-maturing
+outcome rows or a changing ledger.
 """
 
 from __future__ import annotations
@@ -43,6 +46,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -58,13 +62,14 @@ from core.decision_models import (
 from core.measurement_models import (
     Experiment,
     ExperimentEvaluationMode,
+    ExperimentReportVersion,
     ExperimentRun,
     ExperimentRunStatus,
     ExperimentStatus,
     ExperimentVariant,
     PrimaryMetricFamily,
 )
-from core.models import Portfolio, Transaction
+from core.models import CashFlow, Portfolio, PortfolioSnapshot, Transaction
 from services.portfolio_accounting import (
     METHOD_VERSION as ACCOUNTING_METHOD_VERSION,
 )
@@ -110,11 +115,14 @@ __all__ = [
     "ManifestError",
     "build_experiment",
     "build_report",
+    "capture_report_dependencies",
     "checksum_of",
     "load_manifest",
     "replay_experiment",
+    "report_version",
     "time_block_bootstrap",
     "validate_manifest",
+    "verify_report_version",
 ]
 
 MANIFEST_VERSION = 1
@@ -155,12 +163,16 @@ DEFAULT_VARIANTS: tuple[dict, ...] = (
     },
     {
         "key": "V2",
-        "label": "Current pipeline",
+        "label": "Current pipeline (no explicit response round)",
         "engine": "debate",
-        "protocol_version": "debate.v1",
+        "protocol_version": "debate.no_rebuttal.v1",
         "requires_rebuttals": False,
         "implemented": True,
-        "description": "The production debate protocol as currently shipped.",
+        "description": (
+            "Bull / Bear / CIO with the explicit response round omitted. It records "
+            "debate.no_rebuttal.v1 so it is a genuinely distinct arm from V3 rather "
+            "than the same producer relabelled."
+        ),
     },
     {
         "key": "V3",
@@ -1440,6 +1452,11 @@ def _eligibility(
         reasons.append("at least one stored run is a synthetic fixture")
     if any(run.mode == RunMode.HEURISTIC for run in runs):
         reasons.append("at least one stored run is a heuristic fallback, not an LLM run")
+    if any(run.mode == RunMode.SIMULATED for run in runs):
+        reasons.append(
+            "at least one stored run used a scripted/simulated provider, so its output is "
+            "not a model sample"
+        )
     if not runs:
         reasons.append("no stored runs are linked, so no historical claim is possible")
 
@@ -1868,6 +1885,8 @@ def _sample_integrity(
         "source_mode": (
             "synthetic"
             if modes.get(RunMode.SYNTHETIC)
+            else "simulated"
+            if modes.get(RunMode.SIMULATED)
             else modes.most_common(1)[0][0]
             if modes
             else "none"
@@ -1876,7 +1895,7 @@ def _sample_integrity(
         "source_counts": dict(sorted(source_modes.items())),
         "cohorts": {
             key: diagnostics_dict["cohorts"][key]["runs"]
-            for key in ("heuristic", "llm", "synthetic")
+            for key in ("heuristic", "llm", "synthetic", "simulated")
         },
         "unresolved_observations": unresolved,
         "unresolved_by_maturity": diagnostics_dict["unresolved"]["by_maturity"],
@@ -2378,9 +2397,423 @@ def _rehydrate_manifest(experiment: Experiment) -> dict:
     return manifest
 
 
-def build_report(experiment: Experiment, *, now: datetime | None = None) -> dict:
-    """Assemble the versioned report from stored rows only (no model calls)."""
+# ---------------------------------------------------------------------------
+# Immutable report versions and their data dependencies (FIX-07C)
+# ---------------------------------------------------------------------------
+#: The dependency groups a report version is built from. Each group is captured
+#: as canonical rows and hashed, so drift can be named by group instead of being
+#: discovered as a changed number in an already-published document.
+REPORT_DEPENDENCY_GROUPS = (
+    "manifest_and_variants",
+    "portfolio_configuration",
+    "scheduled_runs",
+    "decision_runs",
+    "decisions",
+    "outcomes",
+    "guards",
+    "claims",
+    "rebuttals",
+    "transactions",
+    "cash_flows",
+    "portfolio_snapshots",
+    "input_snapshots",
+)
+
+
+def _decimal_text(value) -> str | None:
+    """Numeric text that survives a database round trip.
+
+    ``Decimal("0")`` (an omitted manifest field) and ``Decimal("0.00")`` (the
+    same value reloaded from a ``decimal_places=2`` column) are the same number
+    but different strings. A dependency digest must not change just because a
+    value passed through the database, so decimals are normalised here.
+    """
+    if value is None:
+        return None
+    return format(Decimal(value).normalize(), "f")
+
+
+def _row_dict(instance, fields: Sequence[str]) -> dict:
+    row = {}
+    for field in fields:
+        value = getattr(instance, field, None)
+        if isinstance(value, Decimal):
+            row[field] = _decimal_text(value)
+        elif isinstance(value, datetime):
+            row[field] = utc_iso(value)
+        elif isinstance(value, (list, dict)):
+            row[field] = json_safe(value)
+        else:
+            row[field] = value
+    return row
+
+
+def capture_report_dependencies(experiment: Experiment) -> dict:
+    """Freeze the rows a report reads, grouped and hashed.
+
+    This is *not* a copy of every table. It is the set of values the report
+    actually consumes: the manifest and variant declarations, the portfolio
+    limits the fairness block compares against, the scheduled rows, the decision
+    runs (costs, tokens, cost basis), the decisions and guards, the outcomes
+    (including benchmark provenance), claims and rebuttals, the ledger, external
+    flows and snapshots. Its digest answers "would a rebuild from live data
+    produce this version?" - and when the answer is no, the stored report is
+    still the published one.
+
+    A checksum over the manifest alone is insufficient: later-maturing outcome
+    rows and changing accounting data are exactly what this captures.
+    """
+    variants = list(experiment.variants.order_by("display_order", "key"))
+    scheduled = list(
+        experiment.scheduled_runs.select_related("variant").order_by("scheduled_at", "run_key")
+    )
+    runs = list(
+        DecisionRun.objects.filter(
+            pk__in=[row.decision_run_id for row in scheduled if row.decision_run_id]
+        )
+        .select_related("decision", "snapshot")
+        .prefetch_related("decision__outcomes", "decision__guards", "claims", "rebuttals")
+        .order_by("id")
+    )
+    run_ids = [run.id for run in runs]
+
+    def _decision_of(run):
+        # A reverse OneToOne has no ``decision_id`` attribute; accessing it is
+        # the only reliable way to tell a run with a proposal from a failed run.
+        # Django raises a descriptor-specific ``RelatedObjectDoesNotExist`` here,
+        # which is not always caught by the related model's ``DoesNotExist``.
+        try:
+            return run.decision
+        except (ObjectDoesNotExist, AttributeError):
+            return None
+
+    decisions = [decision for decision in (_decision_of(run) for run in runs) if decision]
+    decision_ids = [decision.id for decision in decisions]
+    portfolio = experiment.portfolio
+
+    groups: dict[str, list] = {
+        "manifest_and_variants": [
+            {
+                "experiment_key": experiment.experiment_key,
+                "manifest_checksum": experiment.manifest_checksum,
+                "manifest_version": experiment.manifest_version,
+                "schema_version": experiment.schema_version,
+                "declared_at": utc_iso(experiment.declared_at),
+                "evaluation_mode": experiment.evaluation_mode,
+                "primary_metric": json_safe(experiment.primary_metric),
+                "sample_requirements": json_safe(experiment.sample_requirements),
+                "cost_ceiling_usd": _decimal_text(experiment.cost_ceiling_usd),
+                "acceptable_drawdown_pct": _decimal_text(experiment.acceptable_drawdown_pct),
+                "observation_window": [
+                    utc_iso(experiment.observation_start),
+                    utc_iso(experiment.observation_end),
+                ],
+                "manifest": json_safe(experiment.manifest),
+            }
+        ]
+        + [
+            _row_dict(
+                variant,
+                (
+                    "key",
+                    "engine",
+                    "protocol_version",
+                    "requires_rebuttals",
+                    "implemented",
+                    "model_configuration",
+                    "budget",
+                ),
+            )
+            for variant in variants
+        ],
+        "portfolio_configuration": [
+            _row_dict(
+                portfolio,
+                (
+                    "balance_usd",
+                    "risk_profile",
+                    "max_portfolio_exposure_pct",
+                    "max_ticker_concentration_pct",
+                    "max_sector_concentration_pct",
+                    "max_turnover_pct",
+                    "min_cash_buffer_pct",
+                    "max_trade_allocation_pct",
+                    "daily_loss_limit_usd",
+                ),
+            )
+        ],
+        "scheduled_runs": [
+            _row_dict(
+                row,
+                (
+                    "run_key",
+                    "variant_id",
+                    "scheduled_at",
+                    "status",
+                    "decision_run_id",
+                    "failure_code",
+                    "failure_detail",
+                    "cost_usd",
+                    "latency_ms",
+                    "input_tokens",
+                    "output_tokens",
+                    "metadata",
+                ),
+            )
+            for row in scheduled
+        ],
+        "decision_runs": [
+            _row_dict(
+                run,
+                (
+                    "id",
+                    "ticker",
+                    "protocol_version",
+                    "status",
+                    "mode",
+                    "source",
+                    "snapshot_id",
+                    "started_at",
+                    "completed_at",
+                    "latency_ms",
+                    "total_cost_usd",
+                    "estimated_cost_usd",
+                    "cost_basis",
+                    "input_tokens",
+                    "output_tokens",
+                    "cached_input_tokens",
+                    "error_code",
+                    "error_detail",
+                    "execution_state",
+                    "fixture_id",
+                    "protocol_metadata",
+                ),
+            )
+            for run in runs
+        ],
+        "decisions": [
+            _row_dict(
+                decision,
+                (
+                    "id",
+                    "run_id",
+                    "action",
+                    "requested_quantity",
+                    "concise_rationale",
+                    "decisive_claim_ids",
+                    "strongest_objection",
+                    "thesis",
+                    "invalidation_condition",
+                    "engine_source",
+                    "created_at",
+                ),
+            )
+            for decision in decisions
+        ],
+        "outcomes": [
+            _row_dict(
+                outcome,
+                (
+                    "id",
+                    "decision_id",
+                    "horizon_days",
+                    "method_version",
+                    "maturity",
+                    "price_at_decision",
+                    "price_at_horizon",
+                    "price_observed_at_decision",
+                    "price_observed_at",
+                    "price_source",
+                    "forward_return_pct",
+                    "decision_return_pct",
+                    "benchmark_ticker",
+                    "benchmark_return_pct",
+                    "benchmark_price_at_decision",
+                    "benchmark_price_at_horizon",
+                    "benchmark_observed_at_decision",
+                    "benchmark_price_observed_at",
+                    "benchmark_price_source",
+                    "signal_diagnostics",
+                    "unavailable_reason",
+                    "evaluated_at",
+                ),
+            )
+            for decision in decisions
+            for outcome in decision.outcomes.all().order_by("horizon_days", "method_version")
+        ],
+        "guards": [
+            _row_dict(
+                guard,
+                (
+                    "id",
+                    "proposal_id",
+                    "policy_version",
+                    "evaluated_portfolio_version",
+                    "quote_time",
+                    "status",
+                    "requested_quantity",
+                    "allowed_quantity",
+                    "reason_codes",
+                    "binding_rule",
+                    "numerical_checks",
+                    "created_at",
+                ),
+            )
+            for decision in decisions
+            for guard in decision.guards.all().order_by("created_at", "id")
+        ],
+        "claims": [
+            _row_dict(
+                claim,
+                (
+                    "id",
+                    "run_id",
+                    "agent_role",
+                    "stance",
+                    "claim_type",
+                    "statement",
+                    "horizon",
+                    "limitations",
+                    "case_round",
+                    "created_at",
+                ),
+            )
+            for run in runs
+            for claim in run.claims.all().order_by("id")
+        ],
+        "rebuttals": [
+            _row_dict(
+                rebuttal,
+                (
+                    "id",
+                    "run_id",
+                    "responding_agent",
+                    "response_type",
+                    "target_claim_id",
+                    "explanation",
+                    "position_change",
+                    "created_at",
+                ),
+            )
+            for run in runs
+            for rebuttal in run.rebuttals.all().order_by("id")
+        ],
+        "transactions": [
+            _row_dict(
+                transaction,
+                (
+                    "id",
+                    "ticker",
+                    "tx_type",
+                    "amount",
+                    "price",
+                    "fee",
+                    "executed_by",
+                    "timestamp",
+                ),
+            )
+            for transaction in Transaction.objects.filter(
+                portfolio=portfolio,
+                timestamp__gte=experiment.observation_start,
+                timestamp__lte=experiment.observation_end,
+            ).order_by("timestamp", "id")
+        ],
+        "cash_flows": [
+            _row_dict(
+                flow,
+                ("id", "flow_type", "amount", "currency", "occurred_at", "source"),
+            )
+            for flow in CashFlow.objects.filter(
+                portfolio=portfolio,
+                occurred_at__gte=experiment.observation_start,
+                occurred_at__lte=experiment.observation_end,
+            ).order_by("occurred_at", "id")
+        ],
+        "portfolio_snapshots": [
+            _row_dict(
+                snapshot,
+                (
+                    "id",
+                    "total_equity_usd",
+                    "cash_balance_usd",
+                    "positions_value_usd",
+                    "captured_at",
+                ),
+            )
+            for snapshot in PortfolioSnapshot.objects.filter(
+                portfolio=portfolio,
+                captured_at__gte=experiment.observation_start,
+                captured_at__lte=experiment.observation_end,
+            ).order_by("captured_at", "id")
+        ],
+        "input_snapshots": [
+            _row_dict(
+                run.snapshot,
+                (
+                    "id",
+                    "portfolio_version",
+                    "analysis_cutoff",
+                    "captured_at",
+                    "holdings",
+                    "cash",
+                    "quotes",
+                    "content_hash",
+                ),
+            )
+            for run in runs
+            if getattr(run, "snapshot_id", None) and run.snapshot is not None
+        ],
+    }
+    # De-duplicate the snapshot group: many runs may share one snapshot.
+    seen = set()
+    unique_snapshots = []
+    for row in groups["input_snapshots"]:
+        key = str(row.get("id"))
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_snapshots.append(row)
+    groups["input_snapshots"] = unique_snapshots
+
+    digests = {name: content_hash(rows) for name, rows in groups.items()}
+    return {
+        "groups": groups,
+        "group_digests": digests,
+        "run_ids": [str(run_id) for run_id in run_ids],
+        "decision_ids": [str(decision_id) for decision_id in decision_ids],
+        "digest": content_hash(digests),
+        "note": (
+            "The report is a function of these rows. A manifest checksum alone does not "
+            "freeze later-maturing outcomes or a changing ledger; this snapshot does. "
+            "When the live data no longer matches, the published version is still the "
+            "stored one and the drift is reported, not smoothed away."
+        ),
+    }
+
+
+def _canonical_report(report: dict) -> str:
+    return json.dumps(json_safe(report), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def report_hash(report: dict) -> str:
+    """SHA-256 of the canonical JSON encoding of a report."""
+    return content_hash(json_safe(report))
+
+
+def build_report(
+    experiment: Experiment,
+    *,
+    now: datetime | None = None,
+    dependencies: dict | None = None,
+) -> dict:
+    """Assemble the versioned report from stored rows only (no model calls).
+
+    ``dependencies`` lets the caller pass the snapshot it captured, so the digest
+    stored on the report and the digest stored on the archived version are the
+    same value rather than two reads that happened to agree.
+    """
     now = now or timezone.now()
+    dependencies = dependencies or capture_report_dependencies(experiment)
     manifest = _rehydrate_manifest(experiment)
     variants = list(experiment.variants.order_by("display_order", "key"))
     scheduled = list(
@@ -2535,10 +2968,14 @@ def build_report(experiment: Experiment, *, now: datetime | None = None) -> dict
         or bool(manifest["honesty"].get("all_runs_synthetic"))
         or bool(performance.provenance.get("synthetic") if performance else False)
     )
-    engineering_only = synthetic or not integrity["minimum_usable_sample"]["met"]
+    # Simulated content is real protocol execution over a scripted provider. It
+    # is engineering validation, never a comparative protocol result.
+    simulated = bool(integrity.get("mode_counts", {}).get(RunMode.SIMULATED))
+    engineering_only = synthetic or simulated or not integrity["minimum_usable_sample"]["met"]
     report = {
         "report_schema_version": REPORT_SCHEMA_VERSION,
         "generated_at": utc_iso(now),
+        "dependency_digest": dependencies["digest"],
         "experiment": {
             "experiment_id": experiment.experiment_key,
             "experiment_uuid": str(experiment.id),
@@ -2586,16 +3023,31 @@ def build_report(experiment: Experiment, *, now: datetime | None = None) -> dict
     return report
 
 
-def replay_experiment(experiment: Experiment, *, now: datetime | None = None) -> dict:
-    """Rebuild the report from stored output and persist it under a new version."""
+def replay_experiment(
+    experiment: Experiment,
+    *,
+    now: datetime | None = None,
+    reason: str = "replay",
+) -> dict:
+    """Rebuild the report from stored output and append a new immutable version.
+
+    ``Experiment.report`` remains the latest document for existing consumers, but
+    the previous versions are no longer overwritten: each build appends an
+    ``ExperimentReportVersion`` row carrying the published JSON, its hash and a
+    snapshot of the rows it was built from. A replay after an outcome matures or
+    a ledger row changes produces a *new* version; the old one still reads back
+    byte-identically.
+    """
     now = now or timezone.now()
-    report = build_report(experiment, now=now)
+    dependencies = capture_report_dependencies(experiment)
+    report = build_report(experiment, now=now, dependencies=dependencies)
     with transaction.atomic():
         locked = Experiment.objects.select_for_update().get(pk=experiment.pk)
         version = locked.report_version + 1
         report["report_version"] = version
         report["generated_at"] = utc_iso(now)
-        locked.report = json_safe(report)
+        stored = json_safe(report)
+        locked.report = stored
         locked.report_version = version
         locked.report_generated_at = now
         locked.status = ExperimentStatus.READY
@@ -2608,8 +3060,75 @@ def replay_experiment(experiment: Experiment, *, now: datetime | None = None) ->
                 "updated_at",
             ]
         )
+        ExperimentReportVersion.objects.create(
+            experiment=locked,
+            version=version,
+            generated_at=now,
+            build_reason=(reason or "replay")[:64],
+            report=stored,
+            report_hash=report_hash(stored),
+            dependency_digest=dependencies["digest"],
+            dependencies=json_safe(dependencies),
+        )
     experiment.refresh_from_db()
     return experiment.report
+
+
+def report_version(experiment: Experiment, version: int):
+    """The archived document for one version, or ``None``.
+
+    Reading a version never rebuilds anything. That is what makes an already
+    published number stable even after the rows behind it mature or change.
+    """
+    return ExperimentReportVersion.objects.filter(
+        experiment=experiment, version=int(version)
+    ).first()
+
+
+def verify_report_version(experiment: Experiment, version: int) -> dict:
+    """Recompute one archived version from live rows and compare it byte for byte.
+
+    This is the standing check on the archive. It answers three questions:
+
+    * does the archived document still hash to what was published;
+    * would a rebuild from the *current* rows reproduce it;
+    * if not, which dependency groups moved.
+
+    A mismatch is not a reason to edit the archived version: the stored document
+    is the evidence of what was published, and the drift is the news.
+    """
+    archived = report_version(experiment, version)
+    if archived is None:
+        raise ExperimentError(f"Experiment has no report version {version}.")
+    current = capture_report_dependencies(experiment)
+    rebuilt = build_report(experiment, now=archived.generated_at, dependencies=current)
+    rebuilt["report_version"] = archived.version
+    rebuilt["generated_at"] = utc_iso(archived.generated_at)
+    rebuilt_hash = report_hash(rebuilt)
+    archived_hash = report_hash(archived.report)
+    stored_digests = (archived.dependencies or {}).get("group_digests", {})
+    drift = [
+        group
+        for group in REPORT_DEPENDENCY_GROUPS
+        if stored_digests.get(group) != current["group_digests"].get(group)
+    ]
+    return {
+        "version": archived.version,
+        "generated_at": utc_iso(archived.generated_at),
+        "archived_report_hash": archived_hash,
+        "rebuilt_report_hash": rebuilt_hash,
+        "byte_identical": archived_hash == rebuilt_hash,
+        "rebuilt_report": json_safe(rebuilt),
+        "archived_dependency_digest": archived.dependency_digest,
+        "current_dependency_digest": current["digest"],
+        "dependencies_unchanged": archived.dependency_digest == current["digest"],
+        "dependency_drift": drift,
+        "note": (
+            "A byte-identical rebuild proves the stored rows still produce the "
+            "published document. A drift list means the data moved after publication; "
+            "the archived version remains the record of what was published."
+        ),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -2732,6 +3251,10 @@ def build_experiment(
         experiment.manifest = json_safe(normalised)
         experiment.status = ExperimentStatus.DECLARED
         experiment.save()
+        # Reload so decimal columns carry their stored scale. The dependency
+        # digest captured below must match a later verification that reads the
+        # row back from the database, not the looser in-memory Decimal("0").
+        experiment.refresh_from_db()
 
         variants: dict[str, ExperimentVariant] = {}
         for entry in normalised["variants"]:

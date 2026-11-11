@@ -24,6 +24,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
+from core.decision_json import canonical_json
 from core.decision_models import (
     AgentRole,
     Claim,
@@ -42,8 +43,10 @@ from core.decision_models import (
 )
 from core.measurement_models import (
     Experiment,
+    ExperimentReportVersion,
     ExperimentRun,
     ExperimentRunStatus,
+    ImmutableReportError,
 )
 from core.models import AgentDecisionLog, ExecutedBy, PortfolioSnapshot, Transaction, TxType
 from core.tests.helpers import auth_client, make_portfolio, make_user
@@ -67,7 +70,9 @@ from services.experiments import (
     checksum_of,
     load_manifest,
     replay_experiment,
+    report_version,
     validate_manifest,
+    verify_report_version,
 )
 from services.portfolio_accounting import AccountingError
 from services.signal_diagnostics import HOLD_ZERO_CONVENTION
@@ -1094,3 +1099,171 @@ class BuildExperimentCommandTests(TestCase):
         )
         experiment = Experiment.objects.get(experiment_key="phase3-test.v1")
         self.assertEqual(experiment.manifest_checksum, manifest["checksum"]["value"])
+
+
+# ---------------------------------------------------------------------------
+# FIX-07C: immutable report versions, dependencies and benchmark provenance
+# ---------------------------------------------------------------------------
+class ReportVersionTests(TestCase):
+    """A published version is addressable, immutable and re-checkable."""
+
+    def setUp(self):
+        self.user = make_user("version-user")
+        self.portfolio = make_portfolio(self.user, balance="10000.00")
+
+    def build(self, manifest, *, force=False):
+        return build_experiment(manifest=manifest, portfolio=self.portfolio, force=force)
+
+    def manifest_for(self, run, decision):
+        add_outcome(decision)
+        return base_manifest([run_entry("v2-aapl", "V2", run)])
+
+    def test_each_replay_appends_a_version_and_never_overwrites_one(self):
+        run, decision = make_debate_run(self.portfolio)
+        manifest = self.manifest_for(run, decision)
+        experiment, _ = self.build(manifest)
+        first_stored = report_version(experiment, 1)
+        self.assertIsNotNone(first_stored)
+        self.assertEqual(first_stored.report["report_version"], 1)
+
+        _, second = self.build(manifest)
+        self.assertEqual(second["report_version"], 2)
+        again = report_version(experiment, 1)
+        self.assertEqual(again.report, first_stored.report)
+        self.assertEqual(again.report_hash, first_stored.report_hash)
+        self.assertEqual(
+            list(
+                ExperimentReportVersion.objects.filter(experiment=experiment)
+                .order_by("version")
+                .values_list("version", flat=True)
+            ),
+            [1, 2],
+        )
+
+    def test_an_unchanged_version_rebuilds_byte_identically(self):
+        run, decision = make_debate_run(self.portfolio)
+        experiment, _ = self.build(self.manifest_for(run, decision))
+
+        verified = verify_report_version(experiment, 1)
+        self.assertTrue(verified["byte_identical"])
+        self.assertTrue(verified["dependencies_unchanged"])
+        self.assertEqual(verified["dependency_drift"], [])
+        self.assertEqual(verified["archived_report_hash"], verified["rebuilt_report_hash"])
+        archived = report_version(experiment, 1).report
+        self.assertEqual(canonical_json(verified["rebuilt_report"]), canonical_json(archived))
+
+    def test_a_changed_dependency_is_named_and_the_published_version_is_unchanged(self):
+        run, decision = make_debate_run(self.portfolio)
+        add_outcome(decision)
+        manifest = base_manifest([run_entry("v2-aapl", "V2", run)])
+        experiment, _ = self.build(manifest)
+        published = report_version(experiment, 1)
+        published_report = dict(published.report)
+
+        # A later-maturing outcome is exactly the data a manifest checksum cannot
+        # freeze. Append one, replay, then re-check version 1.
+        extra = add_outcome(decision, horizon=30, forward="4.00")
+        self.assertIsNotNone(extra)
+        _, replayed = self.build(manifest)
+        self.assertEqual(replayed["report_version"], 2)
+
+        verified = verify_report_version(experiment, 1)
+        self.assertFalse(verified["byte_identical"])
+        self.assertFalse(verified["dependencies_unchanged"])
+        self.assertIn("outcomes", verified["dependency_drift"])
+        # The stored version is still exactly what was published.
+        self.assertEqual(report_version(experiment, 1).report, published_report)
+        self.assertEqual(report_version(experiment, 1).report_hash, published.report_hash)
+
+    def test_a_published_version_cannot_be_edited_or_deleted(self):
+        run, decision = make_debate_run(self.portfolio)
+        experiment, _ = self.build(self.manifest_for(run, decision))
+        row = report_version(experiment, 1)
+        row.report = {"tampered": True}
+        with self.assertRaises(ImmutableReportError):
+            row.save()
+        with self.assertRaises(ImmutableReportError):
+            row.delete()
+
+    def test_the_dependency_snapshot_records_the_rows_the_report_read(self):
+        run, decision = make_debate_run(self.portfolio)
+        experiment, _ = self.build(self.manifest_for(run, decision))
+        row = report_version(experiment, 1)
+        dependencies = row.dependencies
+        self.assertEqual(set(dependencies["group_digests"]) - set(dependencies["groups"]), set())
+        self.assertIn(str(run.id), dependencies["run_ids"])
+        self.assertIn(str(decision.id), dependencies["decision_ids"])
+        self.assertTrue(dependencies["digest"])
+        self.assertEqual(row.dependency_digest, dependencies["digest"])
+        # The report carries the same digest, so a version and its rows agree.
+        self.assertEqual(row.report["dependency_digest"], row.dependency_digest)
+
+
+class BenchmarkProvenanceTests(TestCase):
+    def setUp(self):
+        self.user = make_user("benchmark-user")
+        self.portfolio = make_portfolio(self.user, balance="10000.00")
+
+    def build(self, manifest):
+        return build_experiment(manifest=manifest, portfolio=self.portfolio)[1]
+
+    def _run_with_outcome(self, **kwargs):
+        run, decision = make_debate_run(self.portfolio)
+        add_outcome(decision, **kwargs)
+        manifest = base_manifest([run_entry("bench", "V2", run)])
+        return decision, self.build(manifest)
+
+    def row(self, report):
+        return report["signal_diagnostics"]["rows"][0]
+
+    def test_interval_is_unverified_without_observation_timestamps_and_says_why(self):
+        _decision, report = self._run_with_outcome()
+        policy = report["signal_diagnostics"]
+        self.assertFalse(policy["benchmark_interval_verified"])
+        block = policy["benchmark_interval"]
+        self.assertEqual(block["matched_pairs"], 1)
+        self.assertEqual(block["verified_pairs"], 0)
+        self.assertEqual(block["precision"], "session_date")
+        self.assertFalse(block["intraday_observation_instant_verified"])
+        self.assertTrue(block["unverified_reasons"])
+        self.assertFalse(self.row(report)["benchmark"]["interval_verified"])
+
+    def test_interval_is_verified_when_the_session_provenance_matches(self):
+        run, decision = make_debate_run(self.portfolio)
+        add_outcome(decision)
+        OutcomeRecord.objects.filter(decision=decision).update(
+            price_observed_at_decision=CUTOFF,
+            price_observed_at=CUTOFF + timedelta(days=7),
+            price_source="test_price_history",
+            benchmark_observed_at_decision=CUTOFF,
+            benchmark_price_observed_at=CUTOFF + timedelta(days=7),
+            benchmark_price_source="test_price_history",
+        )
+        manifest = base_manifest([run_entry("bench", "V2", run)])
+        report = self.build(manifest)
+        policy = report["signal_diagnostics"]
+        self.assertTrue(policy["benchmark_interval_verified"])
+        block = policy["benchmark_interval"]
+        self.assertEqual(block["verified_pairs"], 1)
+        self.assertEqual(block["unverified_pairs"], 0)
+        self.assertIsNone(block["reason"])
+        self.assertTrue(self.row(report)["benchmark"]["interval_verified"])
+        self.assertEqual(self.row(report)["benchmark"]["observation"]["precision"], "session_date")
+
+    def test_a_mismatched_session_is_unverified_not_assumed(self):
+        run, decision = make_debate_run(self.portfolio)
+        add_outcome(decision)
+        OutcomeRecord.objects.filter(decision=decision).update(
+            price_observed_at_decision=CUTOFF,
+            price_observed_at=CUTOFF + timedelta(days=7),
+            benchmark_observed_at_decision=CUTOFF,
+            # The benchmark horizon observation is a session later than the
+            # instrument's: the interval cannot be matched.
+            benchmark_price_observed_at=CUTOFF + timedelta(days=8),
+        )
+        manifest = base_manifest([run_entry("bench", "V2", run)])
+        report = self.build(manifest)
+        block = report["signal_diagnostics"]["benchmark_interval"]
+        self.assertFalse(report["signal_diagnostics"]["benchmark_interval_verified"])
+        self.assertEqual(block["unverified_reasons"], {"benchmark_horizon_session_mismatch": 1})
+        self.assertIn("benchmark_interval_unverified", self.row(report)["flags"])

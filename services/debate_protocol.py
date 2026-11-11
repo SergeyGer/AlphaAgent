@@ -96,6 +96,15 @@ from core.decision_models import (
     RunStage,
 )
 from core.models import Portfolio
+from services.cost_accounting import (
+    UNKNOWN_MODEL_PRICING,
+    UNKNOWN_NO_CALL,
+    UNKNOWN_PROVIDER_COST,
+    UNKNOWN_UNRECONCILED_TIMEOUT,
+)
+from services.cost_accounting import (
+    price_table_cost as price_table_cost,
+)
 from services.decision_runs import (
     append_event,
     create_run,
@@ -117,6 +126,7 @@ __all__ = [
     "HEURISTIC_PROTOCOL_VERSION",
     "MAX_INITIAL_CLAIMS",
     "MAX_REBUTTALS_PER_AGENT",
+    "NO_REBUTTAL_PROTOCOL_VERSION",
     "PROMPT_TEMPLATE_VERSION",
     "PROTOCOL_VERSION",
     "REBUTTAL_ROUNDS",
@@ -157,10 +167,16 @@ BASELINE_PROTOCOL_VERSION = "single_agent_baseline.v1"
 #: The deterministic engine, recorded as an attempt of its own (DEB-04).
 HEURISTIC_PROTOCOL_VERSION = "heuristic_fallback.v1"
 
+#: The same producer with the explicit rebuttal round omitted (FIX-07B). V2 in
+#: the experiment manifest needs a genuinely distinct configuration from V3, and
+#: V3 is the rebuttal protocol; recording both as ``debate.v1`` would make the
+#: comparison a relabelling of one arm as two.
+NO_REBUTTAL_PROTOCOL_VERSION = "debate.no_rebuttal.v1"
+
 #: Version of the wording below. A prompt change that could move model behaviour
 #: is a version change; the raw prompts are not stored (they contain the whole
 #: evidence catalog) but their template identity is.
-PROMPT_TEMPLATE_VERSION = "debate.prompts.v1"
+PROMPT_TEMPLATE_VERSION = "debate.prompts.v2"
 
 #: DEB-02 hard bounds. NOT configurable: a configuration flag that raises these
 #: would turn "bounded output" into a wish. The values actually used are recorded
@@ -331,11 +347,14 @@ def classify_provider_exception(exc: Exception, *, stage: str = "") -> StageFail
 class ProtocolBudget:
     """DEB-04 ceilings, with the specification's starting defaults.
 
-    ``monetary_budget_usd=None`` disables the monetary ceiling. It is enforced
-    only against cost the client actually reports: an unreported cost stays
-    unmeasured (``ProtocolUsage.cost_reported`` is false) rather than being
-    guessed, because a guessed cost would be indistinguishable from a measured
-    one on the run.
+    ``monetary_budget_usd=None`` disables the monetary ceiling. When enabled it is
+    checked before **every** model attempt (retries included) against the best
+    available basis: the provider-reported charge where one exists, otherwise the
+    price-table estimate over measured or estimated tokens. It is deliberately
+    **not** a strict billed-dollar ceiling. A provider may report tokens without
+    dollars, a timed-out call may be billed after the run ends, and a price table
+    may be stale; :meth:`DebateProtocol._cost_accounting` records
+    ``strict_billed_ceiling: false`` so no reader is told otherwise.
     """
 
     stage_timeout_seconds: float = 90.0
@@ -418,17 +437,33 @@ class ProtocolBudget:
 
 @dataclass
 class ModelUsage:
-    """What one model call cost.
+    """What one model call used, and on what basis.
 
-    ``reported`` distinguishes "the client told us" from "we estimated from
-    character counts". The estimate is recorded as an estimate; it is never
-    presented as a billed figure.
+    ``reported``/``tokens_measured`` distinguish provider-reported token counts
+    from character estimates. ``cost_usd`` is the **billed** charge when the
+    client knows it. A price-table number is never placed in ``cost_usd``: it is
+    carried in ``price_table_cost_usd`` and labelled an estimate. ``None`` in
+    either money field means unknown, with ``cost_unknown_reason`` saying why.
     """
 
     input_tokens: int = 0
     output_tokens: int = 0
     cost_usd: Decimal | None = None
     reported: bool = False
+    #: True when the token counts came from the provider rather than a character
+    #: estimate. ``None`` falls back to ``reported`` so existing clients keep
+    #: their meaning.
+    tokens_measured: bool | None = None
+    #: Price-table arithmetic over the tokens above. An estimate, even when the
+    #: tokens are measured.
+    price_table_cost_usd: Decimal | None = None
+    cost_unknown_reason: str = ""
+
+    @property
+    def measured_tokens(self) -> bool:
+        if self.tokens_measured is None:
+            return bool(self.reported)
+        return bool(self.tokens_measured)
 
 
 class StageClient(Protocol):
@@ -452,28 +487,151 @@ class StageClient(Protocol):
 
 @dataclass
 class ProtocolUsage:
-    """Token/cost totals for one run, plus how they were obtained."""
+    """Token/cost totals for one run, with every quantity kept separate.
 
-    input_tokens: int = 0
-    output_tokens: int = 0
-    cost_usd: Decimal = Decimal("0")
-    cost_reported: bool = False
+    Five things are recorded and never interchanged:
+
+    * **measured tokens** - provider-reported counts;
+    * **estimated tokens** - character-based inference;
+    * **price-table cost** - arithmetic over either token source, published only
+      when every call could be priced (a partial sum is named as partial);
+    * **billed cost** - the provider-reported charge, published only when every
+      call reported one;
+    * **unknown** - ``None`` plus a reason, never ``Decimal("0")``.
+
+    ``cost_usd``/``cost_reported`` are retained as the billed-cost view for
+    existing consumers: a run with any unreported charge has ``cost_usd = None``
+    rather than a total that silently omits it.
+    """
+
+    measured_input_tokens: int = 0
+    measured_output_tokens: int = 0
+    estimated_input_tokens: int = 0
+    estimated_output_tokens: int = 0
+    price_table_cost_usd: Decimal = Decimal("0")
+    price_table_priced_calls: int = 0
+    price_table_unpriced_calls: int = 0
+    price_table_unknown_reason: str = ""
+    billed_cost_usd: Decimal = Decimal("0")
+    billed_cost_calls: int = 0
+    billed_cost_unknown_calls: int = 0
+    billed_cost_unknown_reason: str = ""
     calls: int = 0
     retries: int = 0
     repairs: int = 0
-    accounting_method: str = "estimated_chars_per_4_tokens"
+    timed_out_calls: int = 0
+    reconciled_timeout_calls: int = 0
+    unreconciled_timeout_calls: int = 0
+    budget_basis_counts: dict[str, int] = field(default_factory=dict)
+    budget_spent_usd: Decimal = Decimal("0")
+
+    @property
+    def input_tokens(self) -> int:
+        return self.measured_input_tokens + self.estimated_input_tokens
+
+    @property
+    def output_tokens(self) -> int:
+        return self.measured_output_tokens + self.estimated_output_tokens
+
+    @property
+    def accounting_method(self) -> str:
+        if not self.calls:
+            return UNKNOWN_NO_CALL
+        measured = self.measured_input_tokens + self.measured_output_tokens
+        estimated = self.estimated_input_tokens + self.estimated_output_tokens
+        if measured and estimated:
+            return "mixed_measured_and_estimated"
+        if measured:
+            return "provider_reported"
+        return "estimated_chars_per_4_tokens"
+
+    @property
+    def cost_reported(self) -> bool:
+        """True only when every call reported an actual charge."""
+        return self.calls > 0 and self.billed_cost_unknown_calls == 0
+
+    @property
+    def cost_usd(self) -> Decimal | None:
+        return self.billed_cost_usd if self.cost_reported else None
+
+    @property
+    def price_table_cost_complete(self) -> bool:
+        return self.price_table_priced_calls > 0 and self.price_table_unpriced_calls == 0
+
+    @property
+    def billed_cost_complete(self) -> bool:
+        return self.cost_reported
 
     def as_dict(self) -> dict:
         return {
-            "input_tokens": self.input_tokens,
-            "output_tokens": self.output_tokens,
-            "cost_usd": str(self.cost_usd) if self.cost_reported else None,
+            # Legacy view, now explicitly the *billed* view.
+            "cost_usd": (str(self.cost_usd) if self.cost_usd is not None else None),
             "cost_reported": self.cost_reported,
             "calls": self.calls,
             "provider_retries_used": self.retries,
             "schema_repairs_used": self.repairs,
             "token_accounting": self.accounting_method,
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            # The five separated quantities.
+            "measured_tokens": {
+                "input": self.measured_input_tokens,
+                "output": self.measured_output_tokens,
+            },
+            "estimated_tokens": {
+                "input": self.estimated_input_tokens,
+                "output": self.estimated_output_tokens,
+            },
+            "price_table_cost_usd": (
+                str(self.price_table_cost_usd.quantize(Decimal("0.000001")))
+                if self.price_table_cost_complete
+                else None
+            ),
+            "price_table_cost_partial_usd": (
+                str(self.price_table_cost_usd.quantize(Decimal("0.000001")))
+                if self.price_table_priced_calls and not self.price_table_cost_complete
+                else None
+            ),
+            "price_table_cost_complete": self.price_table_cost_complete,
+            "price_table_cost_unknown_calls": self.price_table_unpriced_calls,
+            "price_table_cost_unknown_reason": (
+                self.price_table_unknown_reason or UNKNOWN_MODEL_PRICING
+                if self.price_table_unpriced_calls
+                else None
+            ),
+            "billed_cost_usd": (
+                str(self.billed_cost_usd.quantize(Decimal("0.000001")))
+                if self.cost_reported
+                else None
+            ),
+            "billed_cost_unknown_calls": self.billed_cost_unknown_calls,
+            "billed_cost_unknown_reason": (
+                self.billed_cost_unknown_reason or UNKNOWN_PROVIDER_COST
+                if self.billed_cost_unknown_calls
+                else None
+            ),
+            "timed_out_calls": self.timed_out_calls,
+            "reconciled_timeout_calls": self.reconciled_timeout_calls,
+            "unreconciled_timeout_calls": self.unreconciled_timeout_calls,
+            "unreconciled_charge_note": (
+                "A timed-out call may still be billed by the provider after this run "
+                "ended; its charge is not included in any figure here."
+                if self.unreconciled_timeout_calls
+                else None
+            ),
+            "monetary_ceiling_basis": self.budget_basis,
+            "monetary_ceiling_spent_usd": str(self.budget_spent_usd.quantize(Decimal("0.000001"))),
+            "strict_billed_ceiling": False,
         }
+
+    @property
+    def budget_basis(self) -> str:
+        bases = set(self.budget_basis_counts)
+        if not bases:
+            return "unknown"
+        if len(bases) == 1:
+            return next(iter(bases))
+        return "mixed_billed_and_price_table_estimate"
 
 
 # ---------------------------------------------------------------------------
@@ -706,8 +864,7 @@ ADJUDICATION_PROMPT_TEMPLATE = Template(
 Prompt template: $template_version
 Ticker: $ticker
 
-You are the Chief Investment Officer. Two analysts produced independent cases, then one
-rebuttal round. Decide.
+You are the Chief Investment Officer. $protocol_note
 
 BRIEF
 $brief
@@ -722,9 +879,10 @@ REBUTTALS
 $rebuttals
 
 DISAGREEMENT SUMMARY
-Round 1 recorded $rebuttal_count responses: $dispute_count dispute, $qualify_count qualify,
-$concession_count agree, $insufficient_count insufficient_evidence ($position_change_count
-position changes). $disagreement_note
+$round_note
+$dispute_count dispute, $qualify_count qualify, $concession_count agree,
+$insufficient_count insufficient_evidence, $position_change_count position changes.
+$disagreement_note
 
 RULES
 - Decide from the evidence, not from how confident the prose sounds.
@@ -870,13 +1028,14 @@ def _parse_timestamp(value: Any) -> Any:
     return parsed.astimezone(UTC)
 
 
-def _call_with_timeout(fn, timeout: float, *, stage: str):
+def _call_with_timeout(fn, timeout: float, *, stage: str, timeout_basis: str = "stage_timeout"):
     """Run ``fn`` and stop *waiting* after ``timeout`` seconds.
 
     A timed-out call is not cancelled - Python cannot kill a thread - so the
     provider may still finish it and bill for it. The protocol stops consuming
     its output, which is the guarantee that matters here: the run fails typed
-    instead of hanging. Documented rather than papered over.
+    instead of hanging. ``timeout_basis`` says whether the bound was the stage
+    timeout or the remaining run deadline, so a truncated stage is diagnosable.
     """
     if timeout is None or timeout <= 0:
         return fn()
@@ -886,9 +1045,14 @@ def _call_with_timeout(fn, timeout: float, *, stage: str):
         return future.result(timeout=timeout)
     except FuturesTimeout as exc:
         future.cancel()
+        basis = (
+            "the remaining run deadline"
+            if timeout_basis == "remaining_deadline"
+            else "the stage timeout"
+        )
         raise StageTimeout(
-            f"stage {stage!r} did not return within {timeout:g}s; the call was "
-            "abandoned (it may still complete and be billed by the provider).",
+            f"stage {stage!r} did not return within {timeout:g}s ({basis}); the call "
+            "was abandoned (it may still complete and be billed by the provider).",
             stage=stage,
         ) from exc
     finally:
@@ -1391,6 +1555,10 @@ class DebateProtocol:
         self._usage = ProtocolUsage()
         self._attempts_items: list[dict] = []
         self._started_monotonic = 0.0
+        #: The client's last usage object that has already been accounted, so a
+        #: failed call is not counted twice and a previously successful call is
+        #: not re-read as if it belonged to the failure.
+        self._accounted_client_usage: ModelUsage | None = None
 
     # -- public -----------------------------------------------------------
     @property
@@ -1404,19 +1572,48 @@ class DebateProtocol:
         portfolio: Portfolio | None = None,
         snapshot: InputSnapshot | None = None,
         record: bool = True,
+        fixture_id: str = "",
     ) -> ProtocolOutcome:
         """Execute the full debate protocol and return the validated proposal.
 
         ``record=False`` runs the protocol without persisting anything: no
         snapshot, no run, no evidence, no claims, no decision. It is the
-        read-only path (the dry-run command's contract), not a degraded mode.
+        read-only path (the ``dry_run_agent`` contract), not a degraded mode.
+        ``fixture_id`` gives a scheduled experiment run its stable natural key.
         """
         return self._execute(
             context,
             portfolio=portfolio,
             snapshot=snapshot,
             baseline=False,
+            rebuttal=True,
             record=record,
+            fixture_id=fixture_id,
+        )
+
+    def run_without_rebuttal(
+        self,
+        context: Any,
+        *,
+        portfolio: Portfolio | None = None,
+        snapshot: InputSnapshot | None = None,
+        record: bool = True,
+        fixture_id: str = "",
+    ) -> ProtocolOutcome:
+        """Bull / Bear / CIO with **no explicit response round** (FIX-07B).
+
+        This is the same producer with one stage omitted, not a second protocol
+        pretending to be one. It is recorded as ``debate.no_rebuttal.v1`` so a
+        report cannot present it as the rebuttal arm.
+        """
+        return self._execute(
+            context,
+            portfolio=portfolio,
+            snapshot=snapshot,
+            baseline=False,
+            rebuttal=False,
+            record=record,
+            fixture_id=fixture_id,
         )
 
     def run_single_agent_baseline(
@@ -1426,6 +1623,7 @@ class DebateProtocol:
         portfolio: Portfolio | None = None,
         snapshot: InputSnapshot | None = None,
         record: bool = True,
+        fixture_id: str = "",
     ) -> ProtocolOutcome:
         """One analyst, no cases and no rebuttal round (acceptance scenario 4).
 
@@ -1438,7 +1636,9 @@ class DebateProtocol:
             portfolio=portfolio,
             snapshot=snapshot,
             baseline=True,
+            rebuttal=False,
             record=record,
+            fixture_id=fixture_id,
         )
 
     # -- execution --------------------------------------------------------
@@ -1449,13 +1649,22 @@ class DebateProtocol:
         portfolio: Portfolio | None,
         snapshot: InputSnapshot | None,
         baseline: bool,
+        rebuttal: bool,
         record: bool,
+        fixture_id: str = "",
     ) -> ProtocolOutcome:
         self._usage = ProtocolUsage()
         self._attempts_items = []
+        self._accounted_client_usage = None
         self._started_monotonic = time.monotonic()
+        self._rebuttal_rounds = REBUTTAL_ROUNDS if rebuttal else 0
         state = _RunState()
-        protocol_version = BASELINE_PROTOCOL_VERSION if baseline else PROTOCOL_VERSION
+        if baseline:
+            protocol_version = BASELINE_PROTOCOL_VERSION
+        elif rebuttal:
+            protocol_version = PROTOCOL_VERSION
+        else:
+            protocol_version = NO_REBUTTAL_PROTOCOL_VERSION
 
         try:
             state = self._prepare(
@@ -1464,10 +1673,11 @@ class DebateProtocol:
                 snapshot=snapshot if record else None,
                 protocol_version=protocol_version,
                 record=record,
+                fixture_id=fixture_id,
             )
             if baseline:
                 return self._run_baseline(context, state)
-            return self._run_debate(context, state)
+            return self._run_debate(context, state, rebuttal=rebuttal)
         except StageFailure as exc:
             self._fail(state, exc)
             raise
@@ -1480,6 +1690,7 @@ class DebateProtocol:
         snapshot: InputSnapshot | None,
         protocol_version: str,
         record: bool = True,
+        fixture_id: str = "",
     ) -> _RunState:
         state = _RunState()
 
@@ -1509,6 +1720,7 @@ class DebateProtocol:
                 snapshot=snapshot,
                 protocol_version=protocol_version,
                 started_at=timezone.now(),
+                fixture_id=fixture_id,
             )
             state.current_stage = RunStage.COLLECTING
             self._transition(state, DecisionStatus.COLLECTING)
@@ -1532,6 +1744,7 @@ class DebateProtocol:
                 snapshot=state.snapshot,
                 protocol_version=protocol_version,
                 started_at=cutoff,
+                fixture_id=fixture_id,
             )
             state.current_stage = RunStage.COLLECTING
             self._transition(state, DecisionStatus.COLLECTING)
@@ -1639,8 +1852,11 @@ class DebateProtocol:
         )
 
     # -- debate -----------------------------------------------------------
-    def _run_debate(self, context: Any, state: _RunState) -> ProtocolOutcome:
+    def _run_debate(
+        self, context: Any, state: _RunState, *, rebuttal: bool = True
+    ) -> ProtocolOutcome:
         brief = _brief(context)
+        rounds = REBUTTAL_ROUNDS if rebuttal else 0
 
         # ---- Round 1: two independent cases (DEB-01) --------------------
         self._transition(state, DecisionStatus.ANALYSING)
@@ -1649,9 +1865,10 @@ class DebateProtocol:
             RunEventType.STAGE_STARTED,
             RunStage.ANALYSING,
             payload={
-                "protocol": PROTOCOL_VERSION,
+                "protocol": PROTOCOL_VERSION if rebuttal else NO_REBUTTAL_PROTOCOL_VERSION,
                 "independence": "isolated_context",
-                "rounds": REBUTTAL_ROUNDS,
+                "rounds": rounds,
+                "rebuttal_round_executed": rebuttal,
                 "limits": self._limits(),
                 "prompt_template_version": PROMPT_TEMPLATE_VERSION,
                 "provider": self.provider,
@@ -1671,7 +1888,7 @@ class DebateProtocol:
                 ticker=getattr(context, "ticker", ""),
                 role=role_name,
                 stance=stance,
-                rounds=REBUTTAL_ROUNDS,
+                rounds=rounds,
                 brief=brief,
                 catalog=_render_catalog(state.refs),
                 max_claims=MAX_INITIAL_CLAIMS,
@@ -1713,89 +1930,102 @@ class DebateProtocol:
             },
         )
 
-        # ---- Round 2: one explicit rebuttal round (DEB-02) --------------
-        self._transition(state, DecisionStatus.REBUTTING)
-        state.rebuttal_rounds = 1
-        self._stage_event(
-            state,
-            RunEventType.STAGE_STARTED,
-            RunStage.REBUTTING,
-            payload={
-                "round": 1,
-                "rounds_configured": REBUTTAL_ROUNDS,
-                "max_responses_per_agent": MAX_REBUTTALS_PER_AGENT,
-                "bull_claim_ids": [
-                    item["claim_id"] for item in state.claims_by_stance.get(ClaimStance.BULL, [])
-                ],
-                "bear_claim_ids": [
-                    item["claim_id"] for item in state.claims_by_stance.get(ClaimStance.BEAR, [])
-                ],
-            },
-        )
         rebuttal_payloads: list[dict] = []
-        for agent_role, opposing_stance, stage_key, role_name in (
-            (
-                AgentRole.BULL,
-                ClaimStance.BEAR,
-                STAGE_BULL_REBUTTAL,
-                "Bullish Research Analyst",
-            ),
-            (
-                AgentRole.BEAR,
-                ClaimStance.BULL,
-                STAGE_BEAR_REBUTTAL,
-                "Risk Assessor (Short Seller)",
-            ),
-        ):
-            opposing = state.claims_by_stance.get(opposing_stance, [])
-            if not opposing:
-                self._limitation(
-                    state,
-                    f"No {opposing_stance} claims were recorded, so the {agent_role} had "
-                    "no validated claim to rebut. The stage was skipped rather than "
-                    "inventing a target.",
-                )
-                continue
-            prompt = REBUTTAL_PROMPT_TEMPLATE.substitute(
-                stage=stage_key,
-                template_version=PROMPT_TEMPLATE_VERSION,
-                ticker=getattr(context, "ticker", ""),
-                role=role_name,
-                opposing_stance=opposing_stance,
-                rounds=REBUTTAL_ROUNDS,
-                opposing=_render_opposing(opposing),
-                catalog=_render_catalog(state.refs),
-                brief=brief,
-                max_responses=MAX_REBUTTALS_PER_AGENT,
-            )
-            round_payloads = self._rebuttal_stage(
+        if rebuttal:
+            # ---- Round 2: one explicit rebuttal round (DEB-02) ----------
+            self._transition(state, DecisionStatus.REBUTTING)
+            state.rebuttal_rounds = 1
+            self._stage_event(
                 state,
-                stage_key=stage_key,
-                prompt=prompt,
-                agent_role=agent_role,
-                opposing=opposing,
+                RunEventType.STAGE_STARTED,
+                RunStage.REBUTTING,
+                payload={
+                    "round": 1,
+                    "rounds_configured": rounds,
+                    "max_responses_per_agent": MAX_REBUTTALS_PER_AGENT,
+                    "bull_claim_ids": [
+                        item["claim_id"]
+                        for item in state.claims_by_stance.get(ClaimStance.BULL, [])
+                    ],
+                    "bear_claim_ids": [
+                        item["claim_id"]
+                        for item in state.claims_by_stance.get(ClaimStance.BEAR, [])
+                    ],
+                },
             )
-            rebuttal_payloads.extend(round_payloads)
+            for agent_role, opposing_stance, stage_key, role_name in (
+                (
+                    AgentRole.BULL,
+                    ClaimStance.BEAR,
+                    STAGE_BULL_REBUTTAL,
+                    "Bullish Research Analyst",
+                ),
+                (
+                    AgentRole.BEAR,
+                    ClaimStance.BULL,
+                    STAGE_BEAR_REBUTTAL,
+                    "Risk Assessor (Short Seller)",
+                ),
+            ):
+                opposing = state.claims_by_stance.get(opposing_stance, [])
+                if not opposing:
+                    self._limitation(
+                        state,
+                        f"No {opposing_stance} claims were recorded, so the {agent_role} had "
+                        "no validated claim to rebut. The stage was skipped rather than "
+                        "inventing a target.",
+                    )
+                    continue
+                prompt = REBUTTAL_PROMPT_TEMPLATE.substitute(
+                    stage=stage_key,
+                    template_version=PROMPT_TEMPLATE_VERSION,
+                    ticker=getattr(context, "ticker", ""),
+                    role=role_name,
+                    opposing_stance=opposing_stance,
+                    rounds=rounds,
+                    opposing=_render_opposing(opposing),
+                    catalog=_render_catalog(state.refs),
+                    brief=brief,
+                    max_responses=MAX_REBUTTALS_PER_AGENT,
+                )
+                round_payloads = self._rebuttal_stage(
+                    state,
+                    stage_key=stage_key,
+                    prompt=prompt,
+                    agent_role=agent_role,
+                    opposing=opposing,
+                )
+                rebuttal_payloads.extend(round_payloads)
 
-        self._stage_event(
-            state,
-            RunEventType.STAGE_COMPLETED,
-            RunStage.REBUTTING,
-            payload={
-                "round": 1,
-                "rebuttals": len(rebuttal_payloads),
-                "disputes": sum(
-                    1 for item in rebuttal_payloads if item["response_type"] == "dispute"
-                ),
-                "concessions": sum(
-                    1 for item in rebuttal_payloads if item["response_type"] == "agree"
-                ),
-            },
-        )
+            self._stage_event(
+                state,
+                RunEventType.STAGE_COMPLETED,
+                RunStage.REBUTTING,
+                payload={
+                    "round": 1,
+                    "rebuttals": len(rebuttal_payloads),
+                    "disputes": sum(
+                        1 for item in rebuttal_payloads if item["response_type"] == "dispute"
+                    ),
+                    "concessions": sum(
+                        1 for item in rebuttal_payloads if item["response_type"] == "agree"
+                    ),
+                },
+            )
+        else:
+            # No rebuttal round is a configuration, not an omission. Say so where
+            # a reader looks for the debate: in the event log and on the run.
+            self._limitation(
+                state,
+                "No rebuttal round was executed: this run is the Bull/Bear/CIO "
+                "configuration without an explicit response round "
+                f"({NO_REBUTTAL_PROTOCOL_VERSION}).",
+            )
 
         # ---- Adjudication (DEB-03) --------------------------------------
         self._transition(state, DecisionStatus.ADJUDICATING)
         disagreement = self._disagreement_summary(rebuttal_payloads)
+        consensus = disagreement["analyst_consensus"] if rebuttal else None
         self._stage_event(
             state,
             RunEventType.STAGE_STARTED,
@@ -1803,16 +2033,32 @@ class DebateProtocol:
             payload={
                 "claim_count": len(state.claims),
                 "rebuttal_count": len(rebuttal_payloads),
-                "analyst_consensus": disagreement["analyst_consensus"],
+                "rebuttal_round_executed": rebuttal,
+                "analyst_consensus": consensus,
             },
         )
         bull_case, bear_case = _render_cases(state.claims_by_stance, summaries)
-        disagreement_note = (
-            "The rebuttals still dispute or qualify claims, so the analysts have NOT "
-            "converged; do not describe the outcome as a consensus."
-            if not disagreement["analyst_consensus"]
-            else "Every recorded rebuttal was a concession, so the record shows convergence."
-        )
+        if rebuttal:
+            disagreement_note = (
+                "The rebuttals still dispute or qualify claims, so the analysts have NOT "
+                "converged; do not describe the outcome as a consensus."
+                if not disagreement["analyst_consensus"]
+                else "Every recorded rebuttal was a concession, so the record shows convergence."
+            )
+            protocol_note = (
+                "Two analysts produced independent cases, then one rebuttal round. Decide."
+            )
+            round_note = "Round 1 recorded the following responses:"
+        else:
+            disagreement_note = (
+                "No explicit response round was executed, so the analysts expressed no "
+                "measured consensus. Do not describe the outcome as agreement or as a debate."
+            )
+            protocol_note = (
+                "Two analysts produced independent cases. No rebuttal round was executed "
+                "in this configuration. Decide."
+            )
+            round_note = "No rebuttal round was executed; the response counts are all zero."
         prompt = ADJUDICATION_PROMPT_TEMPLATE.substitute(
             stage=STAGE_ADJUDICATION,
             template_version=PROMPT_TEMPLATE_VERSION,
@@ -1820,6 +2066,7 @@ class DebateProtocol:
             brief=brief,
             bull_case=bull_case,
             bear_case=bear_case,
+            protocol_note=protocol_note,
             rebuttals=_render_rebuttals(rebuttal_payloads),
             rebuttal_count=len(rebuttal_payloads),
             dispute_count=disagreement["counts"]["dispute"],
@@ -1827,6 +2074,7 @@ class DebateProtocol:
             concession_count=disagreement["counts"]["agree"],
             insufficient_count=disagreement["counts"]["insufficient_evidence"],
             position_change_count=disagreement["position_changes"],
+            round_note=round_note,
             disagreement_note=disagreement_note,
         )
         payload = self._stage_json(
@@ -1846,7 +2094,11 @@ class DebateProtocol:
         if hints:
             self._limitation(state, "adjudication repair hints: " + " ".join(hints))
 
-        if not disagreement["analyst_consensus"] and not adjudication.unresolved_uncertainty:
+        if (
+            rebuttal
+            and not disagreement["analyst_consensus"]
+            and not adjudication.unresolved_uncertainty
+        ):
             self._limitation(
                 state,
                 "The CIO returned an empty unresolved_uncertainty field while the rebuttals "
@@ -1857,7 +2109,7 @@ class DebateProtocol:
             state,
             adjudication,
             baseline=False,
-            consensus=disagreement["analyst_consensus"],
+            consensus=consensus,
             disagreement=disagreement,
         )
         self._stage_event(
@@ -1867,7 +2119,7 @@ class DebateProtocol:
             payload={
                 "decision_id": str(decision.id) if decision is not None else None,
                 "action": adjudication.action,
-                "analyst_consensus": disagreement["analyst_consensus"],
+                "analyst_consensus": consensus,
             },
         )
 
@@ -1876,8 +2128,9 @@ class DebateProtocol:
         if completed_run is not None:
             metadata = update_protocol_metadata(
                 completed_run,
-                rebuttal_rounds_run=1,
-                analyst_consensus=disagreement["analyst_consensus"],
+                rebuttal_rounds_run=rounds,
+                rebuttal_executed=rebuttal,
+                analyst_consensus=consensus,
                 disagreement=disagreement,
             )
         return ProtocolOutcome(
@@ -2159,6 +2412,7 @@ class DebateProtocol:
         snapshot: InputSnapshot,
         protocol_version: str,
         started_at,
+        fixture_id: str = "",
     ) -> DecisionRun:
         run = create_run(
             portfolio=portfolio,
@@ -2180,6 +2434,7 @@ class DebateProtocol:
                 }
             ),
             prompt_hash=prompt_template_hash(),
+            fixture_id=fixture_id,
             protocol_metadata={
                 "protocol": {
                     "name": protocol_version,
@@ -2190,9 +2445,23 @@ class DebateProtocol:
                     "parameters": json_safe(self.parameters),
                     "tool_versions": dict(TOOL_VERSIONS),
                     "snapshot_hash": snapshot.content_hash,
-                    "rounds": REBUTTAL_ROUNDS,
+                    "rounds": self._rebuttal_rounds,
                     "limits": self._limits(),
                     "budget": self.budget.as_dict(),
+                    "cost_ceiling": {
+                        "limit_usd": (
+                            str(self.budget.monetary_budget_usd)
+                            if self.budget.monetary_budget_usd is not None
+                            else None
+                        ),
+                        "checked_before_every_attempt": True,
+                        "strict_billed_ceiling": False,
+                        "note": (
+                            "Enforced against the reported charge when one exists and "
+                            "otherwise the price-table estimate. Late provider charges and "
+                            "unreconciled timed-out calls are not visible to the check."
+                        ),
+                    },
                 },
                 "deterministic_replay": (
                     "Stored events and records replay deterministically. Regenerating "
@@ -2693,6 +2962,7 @@ class DebateProtocol:
                 "excluded_items": len(state.excluded),
             },
             limits=self._limits(),
+            cost_accounting=self._cost_accounting(),
             deterministic_replay=(
                 "Stored events and records replay deterministically. Regenerating the "
                 "model outputs does not: a second generation is a new sample, not a "
@@ -2700,7 +2970,11 @@ class DebateProtocol:
             ),
         )
         DecisionRun.objects.filter(pk=state.run.pk).update(
-            total_cost_usd=(self._usage.cost_usd if self._usage.cost_reported else None),
+            total_cost_usd=self._usage.cost_usd,
+            estimated_cost_usd=(
+                self._usage.price_table_cost_usd if self._usage.price_table_cost_complete else None
+            ),
+            cost_basis=self._cost_basis(),
             input_tokens=self._usage.input_tokens,
             output_tokens=self._usage.output_tokens,
         )
@@ -2766,6 +3040,16 @@ class DebateProtocol:
             excluded_items=[item.as_dict() for item in state.excluded],
             raw_outputs=state.raw_outputs,
             limits=self._limits(),
+            cost_accounting=self._cost_accounting(),
+        )
+        DecisionRun.objects.filter(pk=state.run.pk).update(
+            total_cost_usd=self._usage.cost_usd,
+            estimated_cost_usd=(
+                self._usage.price_table_cost_usd if self._usage.price_table_cost_complete else None
+            ),
+            cost_basis=self._cost_basis(),
+            input_tokens=self._usage.input_tokens,
+            output_tokens=self._usage.output_tokens,
         )
         logger.warning("Debate protocol run %s failed at %s: %s", state.run.id, stage, exc.detail)
 
@@ -2781,7 +3065,7 @@ class DebateProtocol:
         return {
             "max_initial_claims": MAX_INITIAL_CLAIMS,
             "max_rebuttals_per_agent": MAX_REBUTTALS_PER_AGENT,
-            "rebuttal_rounds": REBUTTAL_ROUNDS,
+            "rebuttal_rounds": self._rebuttal_rounds,
             "max_statement_chars": MAX_STATEMENT_CHARS,
             "max_evidence_items": int(self.config.get("MAX_EVIDENCE_ITEMS", 20) or 20),
         }
@@ -2862,33 +3146,67 @@ class DebateProtocol:
     def _call_model(self, state: _RunState, stage_key: str, prompt: str, *, stage: str) -> str:
         """One model call with the budget checks, timeout and retries applied.
 
+        **The budget is checked before every attempt, including every retry.**
+        Checking once before the loop let a retry push past the monetary ceiling
+        unchecked: the first call's cost was inside the budget, the second was
+        not, and nothing looked again.
+
+        **Every call's timeout is the smaller of the stage timeout and the
+        remaining run deadline.** A stage timeout alone lets a run overrun its
+        own deadline by a full stage; a retry's backoff is bounded the same way
+        and becomes a typed :class:`DeadlineExceeded` rather than a sleep that
+        outlives the run.
+
         A stage timeout is deliberately *not* retried: the stage is over, and
-        retrying would double the wall-clock budget the run deadline caps. A
-        client-classified transient error is retried ``provider_retries`` times
-        with exponential backoff; anything else is fatal.
+        retrying would double the wall-clock budget the run deadline caps. The
+        abandoned call is reconciled from the client's counters when the client
+        can do that, and labelled unreconciled when it cannot. A transient error
+        is retried ``provider_retries`` times with exponential backoff.
         """
-        self._check_budgets(stage_key, prompt, stage=stage)
         retries = 0
         delay = self.budget.provider_retry_backoff_seconds
         while True:
+            # Before *every* attempt, retries included.
+            self._check_budgets(stage_key, prompt, stage=stage)
+            timeout, basis = self._effective_timeout(stage, stage_key)
             started = time.monotonic()
             try:
                 text = _call_with_timeout(
                     lambda: self.client.complete(stage_key, prompt),
-                    self.budget.stage_timeout_seconds,
+                    timeout,
                     stage=stage_key,
+                    timeout_basis=basis,
                 )
-            except StageTimeout:
+            except StageTimeout as exc:
+                self._account_timed_out(state, stage_key, stage=stage, exc=exc)
+                if basis == "remaining_deadline":
+                    # The call did not exceed the stage allowance; the run ran
+                    # out of time. Reporting a stage timeout here would blame the
+                    # provider for the deadline the run imposed on itself.
+                    raise DeadlineExceeded(
+                        f"the remaining run deadline bounded the call to stage {stage_key!r} "
+                        f"at {timeout:g}s, which elapsed. The stage was abandoned and the "
+                        "run stopped rather than overrunning its deadline.",
+                        budget="run_deadline",
+                        stage=stage,
+                    ) from exc
                 raise
             except ProviderTransientError as exc:
+                # A failed call can still be billed. Account whatever the client
+                # reported for it before deciding whether a retry is affordable.
+                self._reconcile_failed_call(state, stage_key, stage=stage, exc=exc)
                 retries += 1
                 self._usage.retries += 1
+                remaining = self._remaining_deadline()
                 self._attempts_record(
                     {
                         "stage": stage_key,
                         "kind": "provider_retry",
                         "attempt": retries,
                         "error": exc.detail,
+                        "remaining_deadline_seconds": (
+                            None if remaining is None else round(remaining, 3)
+                        ),
                     }
                 )
                 if retries > self.budget.provider_retries:
@@ -2897,16 +3215,26 @@ class DebateProtocol:
                         f"{exc.detail}",
                         stage=stage,
                     ) from exc
-                logger.warning(
-                    "Debate stage %s hit a transient provider error (attempt %s/%s); "
-                    "retrying in %.2fs: %s",
-                    stage_key,
-                    retries,
-                    self.budget.provider_retries,
-                    delay,
-                    exc.detail,
-                )
                 if delay:
+                    remaining = self._remaining_deadline()
+                    if remaining is not None and remaining <= delay:
+                        raise DeadlineExceeded(
+                            f"stage {stage_key!r} needs a retry after {delay:g}s of backoff, "
+                            f"but only {remaining:.2f}s of the "
+                            f"{self.budget.run_deadline_seconds:g}s run deadline remain. "
+                            "The retry was not started.",
+                            budget="run_deadline",
+                            stage=stage,
+                        ) from exc
+                    logger.warning(
+                        "Debate stage %s hit a transient provider error (attempt %s/%s); "
+                        "retrying in %.2fs: %s",
+                        stage_key,
+                        retries,
+                        self.budget.provider_retries,
+                        delay,
+                        exc.detail,
+                    )
                     time.sleep(delay)
                 delay *= 2
                 continue
@@ -2925,11 +3253,35 @@ class DebateProtocol:
             self._account(
                 state, stage_key, usage, elapsed_ms=int((time.monotonic() - started) * 1000)
             )
+            self._accounted_client_usage = getattr(self.client, "last_usage", None)
             return text
+
+    def _remaining_deadline(self) -> float | None:
+        """Seconds left in the run deadline, or ``None`` when it is disabled."""
+        if not self.budget.run_deadline_seconds:
+            return None
+        return self.budget.run_deadline_seconds - (time.monotonic() - self._started_monotonic)
+
+    def _effective_timeout(self, stage: str, stage_key: str) -> tuple[float, str]:
+        """The timeout to use for one call, bounded by the remaining deadline."""
+        stage_timeout = self.budget.stage_timeout_seconds or 0.0
+        remaining = self._remaining_deadline()
+        if remaining is None:
+            return stage_timeout, "stage_timeout"
+        if remaining <= 0:
+            raise DeadlineExceeded(
+                f"run deadline of {self.budget.run_deadline_seconds:g}s elapsed before stage "
+                f"{stage_key!r} could start.",
+                budget="run_deadline",
+                stage=stage,
+            )
+        if stage_timeout and stage_timeout <= remaining:
+            return stage_timeout, "stage_timeout"
+        return remaining, "remaining_deadline"
 
     def _check_budgets(self, stage_key: str, prompt: str, *, stage: str) -> None:
         elapsed = time.monotonic() - self._started_monotonic
-        if self.budget.run_deadline_seconds and elapsed > self.budget.run_deadline_seconds:
+        if self.budget.run_deadline_seconds and elapsed >= self.budget.run_deadline_seconds:
             raise DeadlineExceeded(
                 f"run deadline of {self.budget.run_deadline_seconds:g}s elapsed before stage "
                 f"{stage_key!r} (elapsed {elapsed:.1f}s).",
@@ -2956,28 +3308,56 @@ class DebateProtocol:
                 budget="output_tokens",
                 stage=stage,
             )
-        if (
-            self.budget.monetary_budget_usd is not None
-            and self._usage.cost_reported
-            and self._usage.cost_usd >= self.budget.monetary_budget_usd
-        ):
-            raise BudgetExhausted(
-                f"monetary budget of {self.budget.monetary_budget_usd} USD was exhausted before "
-                f"stage {stage_key!r}.",
-                budget="monetary",
-                stage=stage,
-            )
+        if self.budget.monetary_budget_usd is not None:
+            spend = self._usage.budget_spent_usd
+            if spend >= self.budget.monetary_budget_usd:
+                basis = self._usage.budget_basis
+                raise BudgetExhausted(
+                    f"monetary budget of {self.budget.monetary_budget_usd} USD was exhausted "
+                    f"before stage {stage_key!r} (spend basis: {basis}; "
+                    f"{self._usage.unreconciled_timeout_calls} unreconciled timed-out call(s)). "
+                    "This ceiling is not a strict billed-dollar cap: a charge the provider "
+                    "reports late is not visible here.",
+                    budget="monetary",
+                    stage=stage,
+                )
 
     def _read_usage(self, prompt: str, text: str) -> ModelUsage:
         reported = getattr(self.client, "last_usage", None)
         if isinstance(reported, ModelUsage):
-            self._usage.accounting_method = "provider_reported"
+            if reported.price_table_cost_usd is None and reported.cost_usd is None:
+                # Fill in the table price when the client did not, and only when
+                # the model is actually priced. An unpriced model stays unknown.
+                reported = ModelUsage(
+                    input_tokens=reported.input_tokens,
+                    output_tokens=reported.output_tokens,
+                    cost_usd=reported.cost_usd,
+                    reported=reported.reported,
+                    tokens_measured=reported.tokens_measured,
+                    price_table_cost_usd=price_table_cost(
+                        reported.input_tokens + reported.output_tokens,
+                        self.model,
+                        input_tokens=reported.input_tokens,
+                        output_tokens=reported.output_tokens,
+                    ),
+                    cost_unknown_reason=reported.cost_unknown_reason,
+                )
             return reported
+        input_tokens = _estimate_tokens(prompt)
+        output_tokens = _estimate_tokens(text)
         return ModelUsage(
-            input_tokens=_estimate_tokens(prompt),
-            output_tokens=_estimate_tokens(text),
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
             cost_usd=None,
             reported=False,
+            tokens_measured=False,
+            price_table_cost_usd=price_table_cost(
+                input_tokens + output_tokens,
+                self.model,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            ),
+            cost_unknown_reason=UNKNOWN_PROVIDER_COST,
         )
 
     def _account(
@@ -2987,21 +3367,72 @@ class DebateProtocol:
         usage: ModelUsage,
         *,
         elapsed_ms: int,
+        timed_out: bool = False,
     ) -> None:
         self._usage.calls += 1
-        self._usage.input_tokens += usage.input_tokens
-        self._usage.output_tokens += usage.output_tokens
+        if usage.measured_tokens:
+            self._usage.measured_input_tokens += usage.input_tokens
+            self._usage.measured_output_tokens += usage.output_tokens
+        else:
+            self._usage.estimated_input_tokens += usage.input_tokens
+            self._usage.estimated_output_tokens += usage.output_tokens
+
+        # Billed, price-table, or unknown - never a substitution.
         if usage.cost_usd is not None:
-            self._usage.cost_reported = True
-            self._usage.cost_usd += usage.cost_usd
+            self._usage.billed_cost_calls += 1
+            self._usage.billed_cost_usd += usage.cost_usd
+            self._usage.budget_basis_counts["billed"] = (
+                self._usage.budget_basis_counts.get("billed", 0) + 1
+            )
+            self._usage.budget_spent_usd += usage.cost_usd
+        else:
+            self._usage.billed_cost_unknown_calls += 1
+            if not self._usage.billed_cost_unknown_reason:
+                self._usage.billed_cost_unknown_reason = (
+                    usage.cost_unknown_reason or UNKNOWN_PROVIDER_COST
+                )
+
+        if usage.price_table_cost_usd is not None:
+            self._usage.price_table_priced_calls += 1
+            self._usage.price_table_cost_usd += usage.price_table_cost_usd
+            if usage.cost_usd is None:
+                self._usage.budget_basis_counts["price_table_estimate"] = (
+                    self._usage.budget_basis_counts.get("price_table_estimate", 0) + 1
+                )
+                self._usage.budget_spent_usd += usage.price_table_cost_usd
+        else:
+            self._usage.price_table_unpriced_calls += 1
+            if not self._usage.price_table_unknown_reason:
+                self._usage.price_table_unknown_reason = UNKNOWN_MODEL_PRICING
+            if usage.cost_usd is None:
+                self._usage.budget_basis_counts["unknown"] = (
+                    self._usage.budget_basis_counts.get("unknown", 0) + 1
+                )
+
         self._attempts_record(
             {
                 "stage": stage_key,
                 "kind": "model_call",
                 "input_tokens": usage.input_tokens,
                 "output_tokens": usage.output_tokens,
+                "token_accounting": ("provider_reported" if usage.measured_tokens else "estimated"),
                 "cost_usd": str(usage.cost_usd) if usage.cost_usd is not None else None,
-                "token_accounting": "provider_reported" if usage.reported else "estimated",
+                "cost_basis": (
+                    "billed_provider_reported"
+                    if usage.cost_usd is not None
+                    else (
+                        "price_table_estimate"
+                        if usage.price_table_cost_usd is not None
+                        else "unknown"
+                    )
+                ),
+                "price_table_cost_usd": (
+                    str(usage.price_table_cost_usd)
+                    if usage.price_table_cost_usd is not None
+                    else None
+                ),
+                "cost_unknown_reason": usage.cost_unknown_reason or None,
+                "timed_out": timed_out,
                 "elapsed_ms": elapsed_ms,
             }
         )
@@ -3015,6 +3446,155 @@ class DebateProtocol:
                 budget="output_tokens",
                 stage=state.current_stage if state.current_stage in RunStage.values else "",
             )
+
+    def _reconcile_failed_call(
+        self, state: _RunState, stage_key: str, *, stage: str, exc: StageFailure
+    ) -> None:
+        """Account a failed call's reported usage, if the client published any.
+
+        A provider that charged for a call it then failed to answer has still
+        spent the operator's money. When the client's ``last_usage`` changed
+        during the failed attempt, it is accounted here so the retry budget check
+        sees the spend; when it did not change, nothing is invented and the
+        attempt is recorded as having no reported usage.
+        """
+        reported = getattr(self.client, "last_usage", None)
+        if not isinstance(reported, ModelUsage) or reported is self._accounted_client_usage:
+            self._attempts_record(
+                {
+                    "stage": stage_key,
+                    "kind": "failed_attempt_usage",
+                    "error": exc.detail,
+                    "usage_reported": False,
+                    "note": (
+                        "The failed attempt reported no usage; any charge it incurred is "
+                        "unknown and is not included in this run's cost."
+                    ),
+                }
+            )
+            return
+        self._accounted_client_usage = reported
+        self._account(
+            state,
+            stage_key,
+            reported,
+            elapsed_ms=0,
+        )
+        self._attempts_record(
+            {
+                "stage": stage_key,
+                "kind": "failed_attempt_usage",
+                "error": exc.detail,
+                "usage_reported": True,
+                "note": (
+                    "Usage reported for a failed attempt is counted: a call that errored "
+                    "can still be billed."
+                ),
+            }
+        )
+
+    def _account_timed_out(
+        self, state: _RunState, stage_key: str, *, stage: str, exc: StageTimeout
+    ) -> None:
+        """Reconcile an abandoned call where the client can, label it where it cannot.
+
+        The stage timeout stops waiting, not the provider. A client that can read
+        its own cumulative counters may be able to attribute the abandoned call;
+        when it cannot, the charge stays unknown and the run records an
+        unreconciled count instead of a zero.
+        """
+        self._usage.timed_out_calls += 1
+        reconciled: ModelUsage | None = None
+        reconciler = getattr(self.client, "reconcile_timed_out_call", None)
+        if callable(reconciler):
+            try:
+                reconciled = reconciler(stage=stage_key)
+            except Exception as reconcile_error:  # pragma: no cover - defensive
+                logger.warning(
+                    "Could not reconcile timed-out stage %s: %s", stage_key, reconcile_error
+                )
+                reconciled = None
+        if isinstance(reconciled, ModelUsage):
+            self._usage.reconciled_timeout_calls += 1
+            self._account(
+                state,
+                stage_key,
+                reconciled,
+                elapsed_ms=0,
+                timed_out=True,
+            )
+            self._accounted_client_usage = getattr(self.client, "last_usage", None)
+            self._attempts_record(
+                {
+                    "stage": stage_key,
+                    "kind": "timeout_reconciled",
+                    "detail": (
+                        "The abandoned call was attributed from provider counters after the "
+                        "stage timeout. Its billed cost is still whatever the provider reports."
+                    ),
+                }
+            )
+            return
+        self._usage.unreconciled_timeout_calls += 1
+        if not self._usage.billed_cost_unknown_reason:
+            self._usage.billed_cost_unknown_reason = UNKNOWN_UNRECONCILED_TIMEOUT
+        self._attempts_record(
+            {
+                "stage": stage_key,
+                "kind": "timeout_unreconciled",
+                "error": exc.detail,
+                "note": (
+                    "The provider may still bill this abandoned call; it is excluded from "
+                    "every cost figure on this run."
+                ),
+            }
+        )
+
+    def _cost_basis(self) -> str:
+        usage = self._usage
+        if usage.cost_reported:
+            return "billed_provider_reported"
+        if usage.price_table_cost_complete:
+            return "price_table_estimate"
+        if usage.calls or usage.timed_out_calls:
+            return "unknown"
+        return ""
+
+    def _cost_accounting(self) -> dict:
+        """The cost contract stored on every run (FIX-07A).
+
+        It states explicitly that the monetary ceiling is **not** a strict
+        billed-dollar cap. A provider can report tokens without dollars, an
+        abandoned call can still be billed, and a price table can be stale; a
+        ceiling that claimed otherwise would be promising a measurement the
+        system does not have.
+        """
+        usage = self._usage
+        return {
+            **usage.as_dict(),
+            "monetary_ceiling": {
+                "limit_usd": (
+                    str(self.budget.monetary_budget_usd)
+                    if self.budget.monetary_budget_usd is not None
+                    else None
+                ),
+                "enforced_on": usage.budget_basis,
+                "strict_billed_ceiling": False,
+                "late_charges_possible": True,
+                "note": (
+                    "The ceiling is checked before every attempt (retries included) "
+                    "against the best available basis: the provider-reported charge "
+                    "where one exists, otherwise the price-table estimate. It is not "
+                    "a guarantee that billed spend stayed under the limit: "
+                    "unreconciled timed-out calls and charges the provider reports "
+                    "later are not visible here."
+                ),
+            },
+            "deterministic_replay": (
+                "Cost figures replay from the recorded token and charge basis. A "
+                "provider charge reported after the run is not part of this record."
+            ),
+        }
 
     @property
     def _attempts(self) -> list[dict]:
@@ -3057,6 +3637,9 @@ def record_heuristic_attempt(
     error: str,
     snapshot: InputSnapshot | None = None,
     failed_run: DecisionRun | None = None,
+    fixture_id: str = "",
+    baseline: bool = False,
+    zero_cost: bool = False,
 ) -> DecisionRun:
     """Persist a deterministic-engine decision as its own run.
 
@@ -3070,6 +3653,12 @@ def record_heuristic_attempt(
     ``proposal`` is duck-typed: ``action``, ``amount``, ``sentiment``,
     ``reasoning``, plus optional ``thesis`` and ``invalidation``. Importing
     ``ai_agent.TradeProposal`` here would be a circular import.
+
+    ``baseline=True`` records the deterministic engine as an *experiment arm*
+    (V0) rather than as a replacement for a failed model attempt: there is no
+    ``fallback`` block and no failed run to name. ``zero_cost=True`` records the
+    only genuinely measured zero this module can: no model call was made, so the
+    provider charge is exactly zero by construction (``cost_basis`` says so).
     """
     protocol_version = HEURISTIC_PROTOCOL_VERSION
     reused_snapshot = snapshot is not None
@@ -3102,6 +3691,7 @@ def record_heuristic_attempt(
             quotes=quotes,
         )
 
+    cost_basis = "deterministic_no_model_call" if zero_cost else ""
     run = create_run(
         portfolio=portfolio,
         ticker=getattr(context, "ticker", ""),
@@ -3110,6 +3700,10 @@ def record_heuristic_attempt(
         source=RunSource.HEURISTIC_FALLBACK,
         snapshot=snapshot,
         started_at=timezone.now(),
+        fixture_id=fixture_id,
+        total_cost_usd=Decimal("0") if zero_cost else None,
+        estimated_cost_usd=Decimal("0") if zero_cost else None,
+        cost_basis=cost_basis,
         config_hash=content_hash(
             {"protocol": protocol_version, "engine": "HeuristicDecisionEngine"}
         ),
@@ -3126,13 +3720,45 @@ def record_heuristic_attempt(
                 "rounds": 0,
                 "limits": {"max_initial_claims": 0, "max_rebuttals_per_agent": 0},
             },
-            "fallback": {
-                "reason": str(error or "heuristic fallback")[:2000],
-                "failed_run_id": str(failed_run.id) if failed_run is not None else None,
-                "debate_executed": False,
-                "claims_recorded": 0,
-                "rebuttals_recorded": 0,
-                "reused_failed_attempt_snapshot": reused_snapshot,
+            **(
+                {
+                    "baseline": {
+                        "arm": "V0",
+                        "engine": "HeuristicDecisionEngine",
+                        "reason": str(error or "deterministic experiment baseline")[:2000],
+                        "model_calls": 0,
+                        "debate_executed": False,
+                        "claims_recorded": 0,
+                        "rebuttals_recorded": 0,
+                        "cost_basis": cost_basis,
+                    }
+                }
+                if baseline
+                else {
+                    "fallback": {
+                        "reason": str(error or "heuristic fallback")[:2000],
+                        "failed_run_id": (str(failed_run.id) if failed_run is not None else None),
+                        "debate_executed": False,
+                        "claims_recorded": 0,
+                        "rebuttals_recorded": 0,
+                        "reused_failed_attempt_snapshot": reused_snapshot,
+                    }
+                }
+            ),
+            "cost_accounting": {
+                "measured_tokens": {"input": 0, "output": 0},
+                "estimated_tokens": {"input": 0, "output": 0},
+                "price_table_cost_usd": "0" if zero_cost else None,
+                "billed_cost_usd": "0" if zero_cost else None,
+                "billed_cost_unknown_calls": 0 if zero_cost else 1,
+                "strict_billed_ceiling": False,
+                "monetary_ceiling_basis": "no_model_call" if zero_cost else "unknown",
+                "note": (
+                    "No model call was made, so the provider charge is zero by "
+                    "construction rather than unmeasured."
+                    if zero_cost
+                    else "No provider charge was reported; the billed cost is unknown."
+                ),
             },
             "deterministic_replay": (
                 "This proposal came from the deterministic engine: the same snapshot and "
@@ -3154,8 +3780,14 @@ def record_heuristic_attempt(
         agent_role=AgentRole.SYSTEM,
         payload={
             "limitation": (
-                "Heuristic fallback: no debate was executed and no claims or rebuttals "
-                "were recorded. The proposal comes from the deterministic engine."
+                "Deterministic experiment baseline: no model call was made, no debate was "
+                "executed, and no claims or rebuttals were recorded. The proposal comes "
+                "from the deterministic engine."
+                if baseline
+                else (
+                    "Heuristic fallback: no debate was executed and no claims or rebuttals "
+                    "were recorded. The proposal comes from the deterministic engine."
+                )
             )
         },
     )

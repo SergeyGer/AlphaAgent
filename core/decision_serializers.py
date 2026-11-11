@@ -127,7 +127,12 @@ class DecisionRunSerializer(serializers.ModelSerializer):
 
     def get_cost(self, obj: DecisionRun) -> dict:
         return {
+            # Billed only. The price-table estimate is beside it, never in it.
             "total_cost_usd": (str(obj.total_cost_usd) if obj.total_cost_usd is not None else None),
+            "estimated_cost_usd": (
+                str(obj.estimated_cost_usd) if obj.estimated_cost_usd is not None else None
+            ),
+            "cost_basis": obj.cost_basis or None,
             "input_tokens": obj.input_tokens,
             "output_tokens": obj.output_tokens,
             "cached_input_tokens": obj.cached_input_tokens,
@@ -492,6 +497,8 @@ def build_run_metadata(run: DecisionRun, *, events=None) -> dict:
         "prompt_hash": run.prompt_hash,
         "cost": {
             "total_cost_usd": _money(run.total_cost_usd),
+            "estimated_cost_usd": _money(run.estimated_cost_usd),
+            "cost_basis": run.cost_basis or None,
             "input_tokens": run.input_tokens,
             "output_tokens": run.output_tokens,
             "cached_input_tokens": run.cached_input_tokens,

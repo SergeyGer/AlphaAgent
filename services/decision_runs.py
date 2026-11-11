@@ -291,6 +291,8 @@ def create_run(
     config_hash: str | None = None,
     prompt_hash: str | None = None,
     total_cost_usd=None,
+    estimated_cost_usd=None,
+    cost_basis: str = "",
     input_tokens=None,
     output_tokens=None,
     cached_input_tokens=None,
@@ -318,6 +320,7 @@ def create_run(
         raise DecisionRunError("The legacy decision log belongs to a different portfolio.")
 
     cost = _decimal_or_none(total_cost_usd, field="total_cost_usd")
+    estimated = _decimal_or_none(estimated_cost_usd, field="estimated_cost_usd")
     tokens_in = _int_or_none(input_tokens, field="input_tokens")
     tokens_out = _int_or_none(output_tokens, field="output_tokens")
     tokens_cached = _int_or_none(cached_input_tokens, field="cached_input_tokens")
@@ -341,6 +344,8 @@ def create_run(
             prompt_hash=prompt_hash,
             started_at=started,
             total_cost_usd=cost,
+            estimated_cost_usd=estimated,
+            cost_basis=(cost_basis or "").strip()[:32],
             input_tokens=tokens_in,
             output_tokens=tokens_out,
             cached_input_tokens=tokens_cached,

@@ -451,7 +451,17 @@ class AgentDecisionLog(models.Model):
     output_tokens = models.IntegerField(default=0)
     cached_input_tokens = models.IntegerField(default=0)
     cache_write_tokens = models.IntegerField(default=0)
-    api_cost_usd = models.DecimalField(max_digits=8, decimal_places=5, default=Decimal("0.00000"))
+    #: The **billed** charge, when one was reported. Nullable on purpose: a run
+    #: whose provider reported no charge has an *unknown* cost, and storing a zero
+    #: there would turn a missing measurement into a measured one. Rows written
+    #: before this column was nullable carry the old default zero; their basis is
+    #: blank, which is how a reader can tell they were not re-measured.
+    api_cost_usd = models.DecimalField(max_digits=8, decimal_places=5, null=True, blank=True)
+    #: Price-table arithmetic over the token split. An estimate, never a bill.
+    estimated_cost_usd = models.DecimalField(max_digits=8, decimal_places=5, null=True, blank=True)
+    #: ``billed_provider_reported`` | ``price_table_estimate`` | ``unknown_pricing``
+    #: | ``unknown``. Blank means the basis was not recorded.
+    cost_basis = models.CharField(max_length=32, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:
@@ -598,6 +608,14 @@ class DecisionOutcome(models.Model):
 
     price_at_decision = models.DecimalField(max_digits=18, decimal_places=8)
     price_at_horizon = models.DecimalField(max_digits=18, decimal_places=8)
+    #: When each instrument price was *observed*, not when the row was written.
+    #: ``evaluated_at`` is the evaluation instant; it is not a market observation,
+    #: and using it as one (as the Phase 1 bridge did) made the interval look
+    #: verified when nothing about the observation had been recorded. Session-date
+    #: precision: the provider publishes daily closes.
+    price_observed_at_decision = models.DateTimeField(null=True, blank=True)
+    price_observed_at = models.DateTimeField(null=True, blank=True)
+    price_source = models.CharField(max_length=64, blank=True, default="")
 
     #: What the instrument did over the window. Sign is the market's, not ours.
     forward_return_pct = models.DecimalField(max_digits=12, decimal_places=4)
@@ -611,6 +629,22 @@ class DecisionOutcome(models.Model):
     benchmark_return_pct = models.DecimalField(
         max_digits=12, decimal_places=4, null=True, blank=True
     )
+
+    #: Benchmark provenance (FIX-07C). A benchmark *return* with no observation
+    #: record cannot be interval-checked against the instrument's window: two
+    #: prices from different sessions can produce a plausible number for the
+    #: wrong interval. These columns store the prices, their observation dates and
+    #: the source, so the report can verify the interval at session-date precision
+    #: (intraday instants are still not recorded) instead of assuming it.
+    benchmark_price_at_decision = models.DecimalField(
+        max_digits=18, decimal_places=8, null=True, blank=True
+    )
+    benchmark_price_at_horizon = models.DecimalField(
+        max_digits=18, decimal_places=8, null=True, blank=True
+    )
+    benchmark_observed_at_decision = models.DateTimeField(null=True, blank=True)
+    benchmark_price_observed_at = models.DateTimeField(null=True, blank=True)
+    benchmark_price_source = models.CharField(max_length=64, blank=True, default="")
 
     #: True when the direction was right, False when wrong, NULL when the action
     #: made no directional claim. A HOLD is not a call that can be scored this
