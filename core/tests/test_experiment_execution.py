@@ -228,9 +228,13 @@ class ExecutionPathTests(TestCase):
     def test_costs_keep_measured_estimated_and_unknown_apart(self):
         report = self.execute()
         cost = report["cost_breakdown"]
-        # The scripted provider estimates tokens from the text it received; it is
-        # not a provider tokenizer, so these are estimated, not measured.
-        self.assertEqual(cost["measured_tokens"], {"input": 0, "output": 0})
+        # A scripted provider reports no usage summary. The protocol still writes
+        # the counts it charged against to the run row, and the report falls back to
+        # them rather than showing a measured zero beside a non-zero estimate -
+        # which is the defect this assertion used to encode.
+        measured = cost["measured_tokens"]
+        self.assertGreater(measured["input"], 0)
+        self.assertGreater(measured["output"], 0)
         self.assertGreater(cost["estimated_tokens"]["input"], 0)
         self.assertGreater(cost["estimated_tokens"]["output"], 0)
         self.assertIsNotNone(cost["price_table_cost_usd"])
