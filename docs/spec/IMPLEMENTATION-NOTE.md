@@ -289,10 +289,13 @@ Divergences recorded:
 2. **Per-arm portfolio performance is a simulation, not the account's history.**
    It replays each arm's decisions against the frozen marks. It is not the demo
    account's realised trajectory and cannot be read as one.
-3. **The pre-registered primary metric is null.** It needs matured
-   `OutcomeRecord` rows; the execution produced none, so the report publishes the
-   registration, says it was not honoured for that metric, and returns
-   `null`/`no_matured_outcomes` rather than substituting a computable number.
+3. **The pre-registered primary metric is computed from the frozen marks when
+   the registered horizon is reached.** FIX-07 left it `null`/
+   `no_matured_outcomes` because no `OutcomeRecord` rows existed; steps 7-8
+   replace that placeholder with the metric defined in the pre-registration,
+   measured from each decision's snapshot quote and the first mark at or after
+   the registered horizon. A horizon no mark reaches is still `null`, with the
+   excluded observations and the missing input named.
 4. **The economic decision instant is the scheduled opportunity, not the
    wall-clock replay time.** Each run records both; pricing uses the scheduled
    instant, and the run metadata says so.
@@ -562,3 +565,82 @@ Divergences recorded rather than absorbed:
    increment the attempt count unless it can claim a lease; `max_attempts`
    (default 3) bounds repair re-queues. Exhaustion is `failed` with
    `attempts_exhausted`.
+
+## P1 remediation — experiment isolation and simulated time (steps 7 and 8)
+
+The acceptance review made two P1 findings: the comparison report always
+returned the registered seven-day metric as `null`, and experiment executions
+shared decision state with each other and with live runs; the simulator applied a
+later-priced fill immediately after the decision, and an archived report could
+not be rebuilt. Both are fixed here, without a model call.
+
+### 7 — isolated executions and the registered metric
+
+Reproduced before the repair:
+
+* `build_comparison_report` wrote `primary_metric_result.value = None` and
+  `reason = "no_matured_outcomes"` unconditionally. The committed opportunity
+  set has 2026-02-11 closing marks, which reach the AAPL and MSFT 7-day
+  horizons, so the data supported a value; the report still returned `null`.
+* two executions for two portfolios shared all 12 `DecisionRun` rows. The second
+  portfolio owned zero runs and its report quoted the first portfolio's decision
+  ids, snapshots and spend.
+* two opportunity sets with the same `opportunity_set_id` and different tickers
+  reused the first set's `fixture_id`s, because the id did not include the
+  content hash.
+* V4's null was a hard-coded placeholder beside an already-excluding
+  denominator.
+
+| Requirement | Where it is enforced | Evidence |
+| --- | --- | --- |
+| Execution namespace scoped to portfolio, content and provider | `execution_namespace`; namespace suffixes `fixture_id`; snapshot version includes the opportunity-set content hash; `cost_breakdown.scope` | `test_two_portfolios_do_not_share_decisions_snapshots_or_spend`, `test_two_universes_with_the_same_key_do_not_reuse_each_other_s_decisions` |
+| Metric definition read from the registration | `validate_opportunity_set` requires a supported id/family and a positive horizon; `compute_registered_metric` reads `pre_registration.primary_metric` | `test_the_registered_definition_controls_the_id_and_horizon`, `test_an_unsupported_registration_is_refused_instead_of_returning_a_null` |
+| Value, denominator, dispersion and contributing runs | `primary_metric_result.status/value/denominator/dispersion/interval/contributing_runs/by_arm` | `test_a_supported_horizon_carries_a_value_denominator_and_dispersion` |
+| Null means a named missing input | `no_usable_observations` + `missing_input` + `excluded_by_reason` | `test_a_run_without_the_registered_horizon_marks_is_null_with_a_specific_reason` |
+| V4 visibly unimplemented and outside the denominator | arm `implemented: false`, `status: not_executed`, `in_denominator: false`; absent from `denominators.implemented_arms` and `by_arm` | `test_a_supported_horizon_carries_a_value_denominator_and_dispersion` |
+| Committed fixtures recompute value and hash | `experiment_comparison.v2` embeds the opportunity set, snapshots, decisions and methods; `rebuild_experiment_report` reproduces the archive | `test_the_committed_archive_reproduces_its_value_and_hash` |
+
+### 8 — monotonic simulated time and archived rebuilds
+
+Reproduced before the repair: with AAPL's decision at 14:30 and its first
+executable mark at 14:35, the pre-fix simulator applied the fill immediately.
+A second decision at 14:31 already saw cash `9749.44` and an AAPL position; it
+should have seen the opening `10000.00` and no position. The trajectory carried
+no timeline, and there was no rebuild command.
+
+| Requirement | Where it is enforced | Evidence |
+| --- | --- | --- |
+| Monotonic clock; later fill deferred, not applied | `experiment_simulation.simulate_arm_timeline`: pending fills are applied only when the clock reaches their mark; stable reason `fill_priced_after_simulated_clock` | `test_a_fill_priced_after_the_clock_is_deferred_and_invisible_to_the_next_decision`, `test_the_same_sequence_with_a_price_at_the_decision_fills_immediately` |
+| A decision may not see its own future | opportunity-set validation rejects an `analysis_cutoff` or quote after the scheduled instant; the simulator rejects it with `decision_input_after_simulated_clock` | `test_a_decision_snapshot_from_its_own_future_is_rejected_with_a_stable_reason` |
+| Every step is auditable | `trajectory.simulation.steps` carries clock, known marks/quote, decision, fill, cash/positions after; `steps_hash`; `monotonic` | same tests |
+| Replay is deterministic | no wall-clock in steps; the recorded runs and decisions are the only inputs | `test_replaying_twice_produces_byte_identical_decision_records` |
+| Archived report rebuilt from recorded inputs | `services/experiment_rebuild.py`; `python manage.py rebuild_experiment_report`; dry run by default; differences named by path; unsupported version refused by name | `test_rebuild_reproduces_the_numbers_and_hash`, `test_an_altered_input_names_the_difference`, `test_an_unsupported_format_version_is_reported_by_name`, `test_the_rebuild_command_is_dry_run_by_default_and_execute_writes` |
+| Synthetic labelling survives | `honesty.simulated_content`, `synthetic_label: synthetic_simulation`, `real_market_outcome: false`; per-arm trajectories keep `provenance.synthetic` | `test_rebuilt_synthetic_content_stays_labelled_everywhere` |
+
+Divergences recorded rather than absorbed:
+
+1. **The headline signal metric pools the usable observations of the
+   implemented arms.** The per-arm values are published in `by_arm` and are the
+   comparison; the pooled value is the registered statistic over the experiment's
+   observations, with V4 excluded. A reader must not read the pooled number as a
+   protocol ranking.
+2. **A deferred fill is applied at its mark time, not rejected.** The fill rule
+   is `first_executable_mark_at_or_after_decision.v1`; rejecting every fill whose
+   mark is later would make a daily-close simulation impossible. The deferral is
+   visible in `orders[].fill_rule_status` and the timeline, and a fill whose mark
+   is after the window is `expired`, not silently dropped.
+3. **A rebuild proves the report, not the model.** It replays the recorded
+   decisions and marks; regenerating the same model output is outside its scope.
+   A method-version mismatch is named as a difference rather than hidden behind
+   today's constants.
+4. **LLM cost timing uses the decision's recorded time**, clamped to the window
+   end, so the original build and the rebuild attribute external spend at the
+   same instant. This is spend timing, not a portfolio flow.
+5. **The archive is larger.** Embedding the opportunity set, full snapshot
+   payloads and decisions roughly doubles the comparison JSON. That is what
+   makes a database-free rebuild possible; the alternative was a rebuild that
+   read today's fixture file.
+6. **V4's reason no longer names FIX-08 as an unfinished dependency.** FIX-08
+   supplies the allocation path, but no V4 arm has ever been scheduled or
+   measured, so the report says exactly that and keeps V4 outside the
+   denominator.

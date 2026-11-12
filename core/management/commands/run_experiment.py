@@ -22,6 +22,19 @@ What it guarantees
   configured model, V1-V3 are ``not_executed`` with the reason and remain in the
   denominator. ``--provider stub`` runs them through the real protocol with a
   scripted provider and labels the output ``engineering_validation_only``.
+* **An execution namespace.** A deterministic namespace is derived from the
+  portfolio, the opportunity-set content hash, the provider mode and the
+  client identity. Two
+  portfolios or two different universes cannot read or overwrite each other's
+  runs, snapshots or spend; rerunning the same inputs reuses its namespace.
+* **The registered metric is computed when the marks support it.** The metric
+  id, family and horizon come from ``pre_registration.primary_metric``, not a
+  constant. A horizon that no mark reaches is ``null`` with the missing input
+  named; V4 stays ``not_executed`` and outside the denominator.
+* **An archived report can be rebuilt.** The output embeds the opportunity-set
+  document, the snapshot payloads and the decisions, so
+  ``python manage.py rebuild_experiment_report --path <output>`` can reproduce
+  it from its recorded inputs.
 * **No model import when it does not run one.** V0 is deterministic and needs no
   provider.
 """
@@ -128,7 +141,11 @@ class Command(BaseCommand):
         denominators = report["denominators"]
         self.stdout.write(
             "scheduled={scheduled} completed={completed} failed={failed} "
-            "not_executed={not_executed} content_hash={hash}".format(
-                hash=report["contents_hash"], **denominators
+            "not_executed={not_executed} metric={metric} content_hash={hash} "
+            "execution={execution}".format(
+                hash=report["contents_hash"],
+                metric=report["pre_registration"]["primary_metric_result"]["value"],
+                execution=report["execution"]["execution_id"],
+                **denominators,
             )
         )

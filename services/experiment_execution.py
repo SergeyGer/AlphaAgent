@@ -20,9 +20,9 @@ Arm                     Protocol                    Configuration
 ``V3``                  ``debate.v1``               the Phase 2 protocol, with rebuttal
 ======================  ==========================  ===================================
 
-``V4`` (portfolio allocation) is declared and **not executed**: its dependency
-FIX-08 is not done. It is excluded from the equal-opportunity denominator rather
-than counted as a zero-opportunity arm.
+``V4`` (portfolio allocation) is declared and **not executed**: no V4 arm has
+been scheduled or measured. It is excluded from the equal-opportunity
+denominator rather than counted as a zero-opportunity arm.
 
 What is frozen and shared
 -------------------------
@@ -44,8 +44,15 @@ What the report will not claim
 * Per-arm accounting is a **simulation** of that arm's decisions under the same
   guard, fill rule and accounting method. It is not the account's realised
   history and it is labelled as simulated.
-* The pre-registered primary metric needs matured outcomes. If none exist, its
-  value is ``null`` with the reason, not a number built from something else.
+* The pre-registered primary metric is read from the registration and computed
+  from the frozen marks when they reach its horizon. A horizon no mark reaches
+  is ``null`` with the missing input named, never a number built from something
+  else.
+* Every execution has a deterministic namespace (portfolio, opportunity-set
+  content hash, provider mode and client identity), so two experiments cannot
+  read or overwrite each other's decisions, snapshots or spend.
+* The report embeds its recorded inputs, so
+  ``python manage.py rebuild_experiment_report`` can reproduce it.
 """
 
 from __future__ import annotations
@@ -82,32 +89,51 @@ from services.debate_protocol import (
     record_heuristic_attempt,
 )
 from services.evidence import create_evidence_item, create_snapshot
-from services.execution import Exposure, evaluate_proposal
-from services.ledger import PositionState
+from services.experiment_simulation import (
+    FILL_TIMING_RULE,
+    SIMULATION_METHOD_VERSION,
+    SUPPORTED_REGISTERED_METRICS,
+    DecisionInput,
+    SnapshotInput,
+    compute_registered_metric,
+    simulate_arm_timeline,
+)
 from services.portfolio_accounting import (
     FILL_RULE,
-    Fill,
     LlmCost,
     OpeningState,
     PriceBook,
     PriceMark,
     build_performance,
-    select_fill_price,
 )
 
 __all__ = [
+    "ARCHIVE_FORMAT",
     "ARM_ORDER",
+    "EXECUTION_NAMESPACE_VERSION",
+    "REPORT_SCHEMA_VERSION",
+    "ArmRun",
     "ExecutionError",
     "OpportunitySet",
     "build_comparison_report",
     "execute_opportunity_set",
+    "execution_namespace",
     "load_opportunity_set",
+    "methods_block",
+    "parse_at",
     "simulate_arm_accounting",
     "validate_opportunity_set",
 ]
 
 SCHEMA_VERSION = "1.0"
-REPORT_SCHEMA_VERSION = "1.0"
+#: The comparison report gained a recorded opportunity set, decisions, a
+#: monotonic timeline and a computed registered metric. A rebuild refuses an
+#: older document by name instead of interpreting it as this one.
+REPORT_SCHEMA_VERSION = "2.0"
+#: The archived format carries every input a rebuild needs (the opportunity set
+#: document, snapshot payloads, decisions and the metric result).
+ARCHIVE_FORMAT = "experiment_comparison.v2"
+EXECUTION_NAMESPACE_VERSION = "experiment_execution.v1"
 ZERO = Decimal("0")
 CENT = Decimal("0.01")
 
@@ -141,9 +167,9 @@ ARM_ENGINES = {
 
 UNEXECUTED_REASONS = {
     "V4": (
-        "V4 (portfolio allocation) is declared and not implemented: its dependency FIX-08 "
-        "is not done. It is excluded from the equal-opportunity denominator rather than "
-        "measured as a zero."
+        "V4 (portfolio allocation) is declared and not executed: no V4 arm has been "
+        "scheduled or measured. It is excluded from the equal-opportunity denominator "
+        "rather than measured as a zero."
     ),
     "provider_not_configured": (
         "No model provider is configured, so this arm could not be executed. It stays "
@@ -202,7 +228,7 @@ class OpportunitySet:
         return PriceBook(self.marks)
 
 
-def _parse_at(value, *, field_name: str) -> datetime:
+def parse_at(value, *, field_name: str) -> datetime:
     if isinstance(value, datetime):
         parsed = value
     elif isinstance(value, str) and value.strip():
@@ -248,7 +274,7 @@ def validate_opportunity_set(document: dict, *, source_path: str = "") -> Opport
     ).strip()
     if len(opportunity_set_id) > 96:
         raise ExecutionError("opportunity_set_id must be at most 96 characters.")
-    declared_at = _parse_at(document.get("declared_at"), field_name="declared_at")
+    declared_at = parse_at(document.get("declared_at"), field_name="declared_at")
 
     pre = document.get("pre_registration")
     if not isinstance(pre, dict):
@@ -256,7 +282,7 @@ def validate_opportunity_set(document: dict, *, source_path: str = "") -> Opport
             "pre_registration is required: the sample plan, primary metric, cost ceiling "
             "and drawdown criterion must be registered before any arm runs."
         )
-    registered_at = _parse_at(pre.get("registered_at"), field_name="pre_registration.registered_at")
+    registered_at = parse_at(pre.get("registered_at"), field_name="pre_registration.registered_at")
     if registered_at > declared_at:
         raise ExecutionError(
             "pre_registration.registered_at is after declared_at; a registration cannot be "
@@ -265,6 +291,26 @@ def validate_opportunity_set(document: dict, *, source_path: str = "") -> Opport
     primary = pre.get("primary_metric")
     if not isinstance(primary, dict) or not primary.get("id"):
         raise ExecutionError("pre_registration.primary_metric needs an id.")
+    metric_id = str(primary.get("id"))
+    metric_family = str(primary.get("family") or "")
+    if metric_id not in SUPPORTED_REGISTERED_METRICS:
+        raise ExecutionError(
+            f"pre_registration.primary_metric.id {metric_id!r} is not a registered metric "
+            f"this build can calculate; supported ids are "
+            f"{', '.join(sorted(SUPPORTED_REGISTERED_METRICS))}."
+        )
+    if SUPPORTED_REGISTERED_METRICS[metric_id] != metric_family:
+        raise ExecutionError(
+            f"pre_registration.primary_metric.family {metric_family!r} does not match the "
+            f"registered family {SUPPORTED_REGISTERED_METRICS[metric_id]!r} for {metric_id!r}."
+        )
+    if metric_family == "signal_diagnostics":
+        horizon = primary.get("horizon_days")
+        if not isinstance(horizon, int) or horizon <= 0:
+            raise ExecutionError(
+                "pre_registration.primary_metric.horizon_days must be a positive integer: the "
+                "registered definition, not a constant in this module, sets the horizon."
+            )
     sample_plan = pre.get("sample_plan")
     if not isinstance(sample_plan, dict):
         raise ExecutionError("pre_registration.sample_plan is required.")
@@ -279,8 +325,8 @@ def validate_opportunity_set(document: dict, *, source_path: str = "") -> Opport
     window = document.get("observation_window")
     if not isinstance(window, dict):
         raise ExecutionError("observation_window is required.")
-    window_start = _parse_at(window.get("start"), field_name="observation_window.start")
-    window_end = _parse_at(window.get("end"), field_name="observation_window.end")
+    window_start = parse_at(window.get("start"), field_name="observation_window.start")
+    window_end = parse_at(window.get("end"), field_name="observation_window.end")
     if window_end < window_start:
         raise ExecutionError("observation_window.end precedes its start.")
 
@@ -318,7 +364,7 @@ def validate_opportunity_set(document: dict, *, source_path: str = "") -> Opport
             raise ExecutionError(f"Duplicate opportunity key {key!r}.")
         seen.add(key)
         ticker = str(_require(raw.get("ticker"), field_name=f"opportunity {key}.ticker")).upper()
-        scheduled_at = _parse_at(
+        scheduled_at = parse_at(
             raw.get("scheduled_at"), field_name=f"opportunity {key}.scheduled_at"
         )
         if not (window_start <= scheduled_at <= window_end):
@@ -328,9 +374,64 @@ def validate_opportunity_set(document: dict, *, source_path: str = "") -> Opport
         snapshot_spec = raw.get("snapshot")
         if not isinstance(snapshot_spec, dict):
             raise ExecutionError(f"opportunity {key} needs a snapshot object.")
+        cutoff = parse_at(
+            snapshot_spec.get("analysis_cutoff") or scheduled_at,
+            field_name=f"opportunity {key}.snapshot.analysis_cutoff",
+        )
+        if cutoff > scheduled_at:
+            raise ExecutionError(
+                f"opportunity {key!r} has an analysis_cutoff after its scheduled decision time; "
+                "a decision may not see data from its own future."
+            )
+        quote_as_of = (
+            parse_at(
+                quote.get("as_of"),
+                field_name=f"opportunity {key}.snapshot.quotes.{ticker}.as_of",
+            )
+            if (quote := (snapshot_spec.get("quotes") or {}).get(ticker)) and quote.get("as_of")
+            else None
+        )
+        if quote_as_of is not None and quote_as_of > scheduled_at:
+            raise ExecutionError(
+                f"opportunity {key!r} has a quote observed after its scheduled decision time; "
+                "a decision may not see data from its own future."
+            )
         evidence = raw.get("evidence") or []
         if not isinstance(evidence, list):
             raise ExecutionError(f"opportunity {key}.evidence must be a list.")
+        for item_index, item in enumerate(evidence):
+            if not isinstance(item, dict):
+                raise ExecutionError(f"opportunity {key}.evidence[{item_index}] must be an object.")
+            published_at = (
+                parse_at(
+                    item.get("published_at"),
+                    field_name=f"opportunity {key}.evidence.published_at",
+                )
+                if item.get("published_at")
+                else None
+            )
+            retrieved_at = (
+                parse_at(
+                    item.get("retrieved_at"),
+                    field_name=f"opportunity {key}.evidence.retrieved_at",
+                )
+                if item.get("retrieved_at")
+                else cutoff
+            )
+            if item.get("available_at"):
+                available_at = parse_at(
+                    item.get("available_at"),
+                    field_name=f"opportunity {key}.evidence.available_at",
+                )
+            elif published_at is not None:
+                available_at = max(published_at, retrieved_at)
+            else:
+                available_at = retrieved_at
+            if available_at > cutoff:
+                raise ExecutionError(
+                    f"opportunity {key!r} has evidence available after its snapshot cutoff; "
+                    "the decision could not have seen it."
+                )
         opportunities.append(
             Opportunity(
                 key=key,
@@ -355,9 +456,9 @@ def validate_opportunity_set(document: dict, *, source_path: str = "") -> Opport
     for index, raw in enumerate(raw_marks):
         if not isinstance(raw, dict):
             raise ExecutionError(f"mark {index} must be an object.")
-        at = _parse_at(raw.get("at"), field_name=f"mark {index}.at")
+        at = parse_at(raw.get("at"), field_name=f"mark {index}.at")
         observed_at = (
-            _parse_at(raw.get("observed_at"), field_name=f"mark {index}.observed_at")
+            parse_at(raw.get("observed_at"), field_name=f"mark {index}.observed_at")
             if raw.get("observed_at")
             else None
         )
@@ -387,8 +488,8 @@ def validate_opportunity_set(document: dict, *, source_path: str = "") -> Opport
         raise ExecutionError("arms must declare every arm; missing " + ", ".join(missing) + ".")
     if bool((arms.get("V4") or {}).get("implemented")):
         raise ExecutionError(
-            "V4 is declared and unimplemented: its dependency FIX-08 is not done. It must not "
-            "be marked implemented."
+            "V4 is declared and unimplemented: no V4 arm has been scheduled or measured. It "
+            "must not be marked implemented."
         )
 
     normalised_document = json_safe(document)
@@ -405,7 +506,7 @@ def validate_opportunity_set(document: dict, *, source_path: str = "") -> Opport
         risk_rules=dict(risk_rules),
         benchmark=dict(benchmark),
         as_of=(
-            _parse_at(document.get("as_of"), field_name="as_of") if document.get("as_of") else None
+            parse_at(document.get("as_of"), field_name="as_of") if document.get("as_of") else None
         ),
         opportunities=tuple(opportunities),
         marks=tuple(marks),
@@ -423,10 +524,45 @@ def load_opportunity_set(path: str | Path) -> OpportunitySet:
 
 
 # ---------------------------------------------------------------------------
-# Shared snapshots and evidence
+# Execution namespace
 # ---------------------------------------------------------------------------
+def execution_namespace(
+    *,
+    portfolio_id,
+    opportunity_set_id: str,
+    opportunity_set_hash: str,
+    provider_mode: str,
+    client_identity: str = "",
+) -> str:
+    """The deterministic namespace of one experiment execution.
+
+    The content hash is part of the identity, so two opportunity sets that share
+    a natural key but differ in tickers, marks or starting state get separate
+    namespaces. The portfolio id is part of it too, so two portfolios cannot
+    read or overwrite each other's decisions. The provider mode is included so a
+    scripted arm is never silently reused as a live one.
+
+    A re-run with the same inputs resolves to the same namespace and therefore
+    reuses recorded runs instead of double-spending.
+    """
+    payload = {
+        "namespace_version": EXECUTION_NAMESPACE_VERSION,
+        "portfolio_id": str(portfolio_id),
+        "opportunity_set_id": opportunity_set_id,
+        "opportunity_set_hash": opportunity_set_hash,
+        "provider_mode": provider_mode,
+        "client_identity": client_identity,
+    }
+    return content_hash(payload)[:16]
+
+
 def _snapshot_version(opportunity_set: OpportunitySet, opportunity: Opportunity) -> str:
-    return f"{opportunity_set.opportunity_set_id}:{opportunity.key}"
+    version = f"{opportunity_set.opportunity_set_id}:{opportunity_set.content_hash[:16]}:{opportunity.key}"
+    if len(version) <= 64:
+        return version
+    # ``InputSnapshot.portfolio_version`` is bounded; keep it deterministic and
+    # collision-resistant rather than truncating the key and losing identity.
+    return f"{opportunity_set.opportunity_set_id[:16]}:{content_hash(version)[:16]}"
 
 
 def ensure_snapshot(
@@ -439,12 +575,12 @@ def ensure_snapshot(
     """
     spec = opportunity.snapshot
     version = _snapshot_version(opportunity_set, opportunity)
-    cutoff = _parse_at(
+    cutoff = parse_at(
         spec.get("analysis_cutoff") or opportunity.scheduled_at,
         field_name=f"snapshot {opportunity.key}.analysis_cutoff",
     )
     captured_at = (
-        _parse_at(spec.get("captured_at"), field_name=f"snapshot {opportunity.key}.captured_at")
+        parse_at(spec.get("captured_at"), field_name=f"snapshot {opportunity.key}.captured_at")
         if spec.get("captured_at")
         else cutoff
     )
@@ -476,7 +612,7 @@ def ensure_evidence(opportunity: Opportunity, snapshot: InputSnapshot) -> dict[s
         ).exists():
             continue
         retrieved_at = (
-            _parse_at(raw.get("retrieved_at"), field_name="evidence.retrieved_at")
+            parse_at(raw.get("retrieved_at"), field_name="evidence.retrieved_at")
             if raw.get("retrieved_at")
             else snapshot.analysis_cutoff
         )
@@ -486,12 +622,12 @@ def ensure_evidence(opportunity: Opportunity, snapshot: InputSnapshot) -> dict[s
             retrieved_at=retrieved_at,
             publisher=str(raw.get("publisher") or ""),
             published_at=(
-                _parse_at(raw.get("published_at"), field_name="evidence.published_at")
+                parse_at(raw.get("published_at"), field_name="evidence.published_at")
                 if raw.get("published_at")
                 else None
             ),
             available_at=(
-                _parse_at(raw.get("available_at"), field_name="evidence.available_at")
+                parse_at(raw.get("available_at"), field_name="evidence.available_at")
                 if raw.get("available_at")
                 else None
             ),
@@ -567,38 +703,117 @@ class ArmRun:
     failure_detail: str = ""
     protocol_version: str = ""
     cost: dict = field(default_factory=dict)
+    #: The recorded inputs a rebuild reads. Populated for a stored run and
+    #: reconstructed from an archive; both paths run the same pure simulator.
+    decision: DecisionInput | None = None
+    snapshot: SnapshotInput | None = None
+    decision_run_id: str = ""
 
     def as_dict(self) -> dict:
+        run_id = self.decision_run_id or (str(self.run.id) if self.run is not None else "")
+        snapshot_id = (
+            self.snapshot.id
+            if self.snapshot is not None
+            else (
+                str(self.run.snapshot_id) if self.run is not None and self.run.snapshot_id else ""
+            )
+        )
+        snapshot_hash = (
+            self.snapshot.content_hash
+            if self.snapshot is not None
+            else (
+                self.run.snapshot.content_hash
+                if self.run is not None and self.run.snapshot is not None
+                else ""
+            )
+        )
         return {
             "opportunity": self.opportunity,
             "fixture_id": self.fixture_id,
             "status": self.status,
             "failure_code": self.failure_code or None,
             "failure_detail": self.failure_detail or None,
-            "decision_run_id": str(self.run.id) if self.run is not None else None,
+            "decision_run_id": run_id or None,
             "protocol_version": self.protocol_version or None,
-            "snapshot_id": (
-                str(self.run.snapshot_id) if self.run is not None and self.run.snapshot_id else None
-            ),
-            "snapshot_hash": (
-                self.run.snapshot.content_hash
-                if self.run is not None and self.run.snapshot is not None
-                else None
+            "snapshot_id": snapshot_id or None,
+            "snapshot_hash": snapshot_hash or None,
+            "synthetic": True,
+            "decision": (
+                None
+                if self.decision is None
+                else {
+                    "run_id": self.decision.run_id,
+                    "opportunity": self.decision.opportunity_key,
+                    "ticker": self.decision.ticker,
+                    "action": self.decision.normalised_action,
+                    "requested_quantity": str(self.decision.requested_quantity),
+                    "rationale": self.decision.rationale,
+                    "recorded_at": utc_iso(self.decision.recorded_at),
+                }
             ),
             "cost": self.cost,
         }
 
 
-def _fixture_id(opportunity_set: OpportunitySet, arm: str, opportunity: Opportunity) -> str:
-    return f"{opportunity_set.opportunity_set_id}.{arm.lower()}.{opportunity.key}"
+def _fixture_id(
+    opportunity_set: OpportunitySet, arm: str, opportunity: Opportunity, namespace: str
+) -> str:
+    base = f"{opportunity_set.opportunity_set_id}.{arm.lower()}.{opportunity.key}"
+    if len(base) + 1 + len(namespace) > 64:
+        # ``DecisionRun.fixture_id`` is bounded. A digest of the full base keeps
+        # the identity while fitting; the namespace suffix still separates
+        # executions.
+        base = f"{opportunity_set.opportunity_set_id[:24]}.{arm.lower()}.{content_hash(base)[:12]}"
+    return f"{base}.{namespace}"
 
 
-def _existing_run(fixture_id: str) -> DecisionRun | None:
-    return (
-        DecisionRun.objects.select_related("snapshot", "decision")
-        .filter(fixture_id=fixture_id)
-        .first()
+def _existing_run(fixture_id: str, portfolio: Portfolio | None = None) -> DecisionRun | None:
+    queryset = DecisionRun.objects.select_related("snapshot", "decision").filter(
+        fixture_id=fixture_id
     )
+    if portfolio is not None:
+        queryset = queryset.filter(portfolio=portfolio)
+    return queryset.first()
+
+
+def _snapshot_input(snapshot: InputSnapshot) -> SnapshotInput:
+    return SnapshotInput(
+        id=str(snapshot.id),
+        content_hash=snapshot.content_hash,
+        portfolio_version=snapshot.portfolio_version,
+        analysis_cutoff=snapshot.analysis_cutoff,
+        captured_at=snapshot.captured_at,
+        holdings=tuple(dict(item) for item in snapshot.holdings or ()),
+        cash=dict(snapshot.cash or {}),
+        quotes=dict(snapshot.quotes or {}),
+    )
+
+
+def _decision_input(
+    run: DecisionRun, opportunity: Opportunity, snapshot: SnapshotInput
+) -> DecisionInput | None:
+    decision = DecisionRecord.objects.filter(run=run).first()
+    if decision is None:
+        return None
+    return DecisionInput(
+        run_id=str(run.id),
+        opportunity_key=opportunity.key,
+        ticker=run.ticker,
+        decision_at=opportunity.scheduled_at,
+        action=str(decision.action or "HOLD"),
+        requested_quantity=decision.requested_quantity or ZERO,
+        rationale=decision.concise_rationale or "",
+        snapshot=snapshot,
+        recorded_at=decision.created_at,
+    )
+
+
+def _populate_arm_run(result: ArmRun, run: DecisionRun, opportunity: Opportunity) -> None:
+    result.run = run
+    result.decision_run_id = str(run.id)
+    if run.snapshot is not None:
+        result.snapshot = _snapshot_input(run.snapshot)
+        result.decision = _decision_input(run, opportunity, result.snapshot)
 
 
 def _cost_of_run(run: DecisionRun | None) -> dict:
@@ -697,10 +912,11 @@ def _run_arm_once(
     provider_mode: str,
     budget: ProtocolBudget | None = None,
     force: bool = False,
+    namespace: str = "",
 ) -> ArmRun:
     from services.debate_protocol import DebateProtocol
 
-    fixture_id = _fixture_id(opportunity_set, arm, opportunity)
+    fixture_id = _fixture_id(opportunity_set, arm, opportunity, namespace)
     result = ArmRun(
         arm=arm,
         opportunity=opportunity.key,
@@ -708,13 +924,14 @@ def _run_arm_once(
         protocol_version=ARM_PROTOCOLS[arm],
     )
     if force:
-        # Delete only this arm's recorded row. The decision, guard and event rows
-        # cascade with it, which is the intent: this is a re-run, not an edit.
-        _existing_run(fixture_id) and DecisionRun.objects.filter(fixture_id=fixture_id).delete()
+        # Delete only this arm's recorded row in this execution namespace. The
+        # decision, guard and event rows cascade with it, which is the intent:
+        # this is a re-run, not an edit.
+        DecisionRun.objects.filter(fixture_id=fixture_id, portfolio=portfolio).delete()
 
-    existing = _existing_run(fixture_id)
+    existing = _existing_run(fixture_id, portfolio)
     if existing is not None:
-        result.run = existing
+        _populate_arm_run(result, existing, opportunity)
         result.protocol_version = existing.protocol_version
         result.status = (
             "completed"
@@ -782,7 +999,8 @@ def _run_arm_once(
                     fixture_id=fixture_id,
                 )
             run = outcome.run
-        result.run = run
+        if run is not None:
+            _populate_arm_run(result, run, opportunity)
         result.protocol_version = run.protocol_version if run is not None else ""
         result.status = "completed" if run is not None else "not_executed"
         if run is None:
@@ -790,7 +1008,8 @@ def _run_arm_once(
             result.failure_detail = "The protocol completed without persisting a run."
         result.cost = _cost_of_run(run)
     except StageFailure as exc:
-        result.run = exc.run
+        if exc.run is not None:
+            _populate_arm_run(result, exc.run, opportunity)
         result.status = "failed"
         result.failure_code = exc.code
         result.failure_detail = exc.detail[:2000]
@@ -910,185 +1129,92 @@ def simulate_arm_accounting(
     opportunity_set: OpportunitySet,
     runs: Sequence[ArmRun],
     portfolio: Portfolio,
-    snapshots_by_opportunity: dict[str, InputSnapshot],
+    snapshots_by_opportunity: dict[str, InputSnapshot] | None = None,
+    persist: bool = True,
 ) -> dict:
-    """Replay one arm's decisions into its own fills and equity trajectory.
+    """Replay one arm's decisions on a monotonic simulated clock.
 
     The guard, fill rule, fee assumption and accounting method are the *same*
     objects the live path uses (``services.execution.evaluate_proposal``,
     ``first_executable_mark_at_or_after_decision.v1``,
-    ``services.portfolio_accounting.build_performance``). What differs between
-    arms is the decisions and therefore the fills - which is the comparison.
+    ``services.portfolio_accounting.build_performance``). The fill is applied at
+    the mark's own instant, never at the decision instant when the mark is later.
+    What differs between arms is the decisions and therefore the fills.
 
-    The result is a simulation of that arm's decisions under frozen prices. It is
-    not realised history, and its provenance says so.
+    ``persist=False`` is the rebuild path: it performs no database write and
+    reads only the recorded inputs on ``ArmRun``.
     """
     book = opportunity_set.price_book()
-    opening_at = opportunity_set.window_start - timedelta(seconds=1)
-    cash = opportunity_set.starting_state["cash"]
-    positions: dict[str, Decimal] = dict(opportunity_set.starting_state["positions"])
-    average_cost: dict[str, Decimal] = dict.fromkeys(positions, ZERO)
-    fills: list[Fill] = []
-    orders: list[dict] = []
-    assumptions = opportunity_set.execution_assumptions
-    fee_bps = _decimal(assumptions.get("fee_bps") or 0, field_name="fee_bps")
-
+    snapshots_by_opportunity = snapshots_by_opportunity or {}
     by_opportunity = {item.opportunity: item for item in runs}
-    for opportunity in opportunity_set.opportunities:
-        arm_run = by_opportunity.get(opportunity.key)
-        decision: DecisionRecord | None = None
-        if arm_run is not None and arm_run.run is not None:
-            decision = DecisionRecord.objects.filter(run=arm_run.run).first()
-        if decision is None:
-            orders.append(
-                {
-                    "opportunity": opportunity.key,
-                    "status": "not_executed",
-                    "reason": (arm_run.failure_code or arm_run.failure_detail)
-                    if arm_run is not None
-                    else "no decision was recorded for this arm",
-                }
-            )
-            continue
-        action = str(decision.action or "HOLD").upper()
-        requested = decision.requested_quantity or ZERO
-        # The economic instant of the decision is the scheduled opportunity, not
-        # the wall-clock time this replay happened to run. Using ``created_at``
-        # (today) would place the order after every mark in the window, and using
-        # any mark later than the scheduled instant would be look-ahead.
-        decision_at = opportunity.scheduled_at
-        recorded_at = decision.created_at
-        marks = book
-        # The price the decision actually saw is the snapshot quote; the mark book
-        # is for the simulated fill and for valuation. Using a later mark as the
-        # trade price would be look-ahead, and using it as the guard price would
-        # misprice the exposure check the strategy faced.
-        quote = _quote_for(snapshots_by_opportunity[opportunity.key], opportunity.ticker)
-        quote_price = quote.get("price_usd") or quote.get("price")
-        price = (
-            _decimal(quote_price, field_name="quote.price")
-            if quote_price not in (None, "")
-            else (
-                valuation.price
-                if (valuation := marks.mark_at_or_before(opportunity.ticker, decision_at))
-                is not None
-                else None
-            )
-        )
-        positions_value = ZERO
-        for ticker, quantity in positions.items():
-            mark = marks.mark_at_or_before(ticker, decision_at)
-            if mark is not None:
-                positions_value += quantity * mark.price
-        equity = cash + positions_value
-        state = PositionState(
-            ticker=opportunity.ticker,
-            amount=positions.get(opportunity.ticker, ZERO),
-            avg_cost=average_cost.get(opportunity.ticker, ZERO),
-        )
-        from ai_agent import TradeProposal
 
-        proposal = TradeProposal(
-            action=action if action in {"BUY", "SELL", "HOLD"} else "HOLD",
-            amount=float(requested),
-            sentiment="NEUTRAL",
-            reasoning=(decision.concise_rationale or "")[:2000],
-        )
-        view = _guard_view(portfolio, opportunity_set.risk_rules, cash, positions_value)
-        exposure = Exposure(
-            positions_value_usd=positions_value,
-            ticker_value_usd=state.amount * price if price is not None else ZERO,
-            equity_usd=equity,
-            sector_value_usd=None,
-        )
-        guard = evaluate_proposal(
-            view,
-            proposal,
-            price,
-            state,
-            realised_pnl_today=ZERO,
-            exposure=exposure,
-        )
-        guard.policy_version = str(
-            opportunity_set.execution_assumptions.get("guard_policy_version")
-            or "services.execution.evaluate_proposal"
-        )
-        guard.evaluated_portfolio_version = f"{arm}:{opportunity.key}:cash={cash.quantize(CENT)}"
-        guard.quote_time = decision_at
-        guard_status = (
-            "hold_no_trade" if action == "HOLD" else ("approved" if guard.approved else "rejected")
-        )
-        order = {
-            "opportunity": opportunity.key,
-            "decision_run_id": str(arm_run.run.id),
-            "decision_at": utc_iso(decision_at),
-            "decision_recorded_at": utc_iso(recorded_at),
-            "proposal_action": action,
-            "requested_quantity": str(requested) if requested else None,
-            "price_at_decision_usd": None if price is None else str(price),
-            "guard_status": guard_status,
-            "guard_reason": guard.reason,
-            "binding_rule": guard.binding_rule or None,
-            "allowed_quantity": str(guard.amount) if guard.approved else "0",
-            "fill": None,
-            "equity_after_usd": None,
-            "reason": None,
-        }
-        if guard.approved and action != "HOLD" and guard.amount > ZERO:
-            selection = select_fill_price(
-                ticker=opportunity.ticker,
-                decision_at=decision_at,
-                marks=marks,
+    for arm_run in runs:
+        if arm_run.snapshot is None:
+            snapshot_row = snapshots_by_opportunity.get(arm_run.opportunity)
+            if snapshot_row is None and arm_run.run is not None:
+                snapshot_row = arm_run.run.snapshot
+            if snapshot_row is not None:
+                arm_run.snapshot = _snapshot_input(snapshot_row)
+        if arm_run.decision is None and arm_run.run is not None and arm_run.snapshot is not None:
+            opportunity = next(
+                (item for item in opportunity_set.opportunities if item.key == arm_run.opportunity),
+                None,
             )
-            if selection.price is None:
-                order["reason"] = selection.reason or "no_executable_price"
-            else:
-                notional = (guard.amount * selection.price).quantize(CENT)
-                fee = _fee_for(notional, assumptions)
-                fill = Fill(
-                    at=selection.at,
-                    ticker=opportunity.ticker,
-                    side=action,
-                    quantity=guard.amount,
-                    price=selection.price,
-                    fee=fee,
-                    executed_by="simulated",
-                    source=f"simulated_arm:{arm}",
-                )
-                fills.append(fill)
-                cash += fill.cash_effect
-                current = positions.get(opportunity.ticker, ZERO)
-                if action == "BUY":
-                    new_quantity = current + guard.amount
-                    if new_quantity > 0:
-                        average_cost[opportunity.ticker] = (
-                            (current * average_cost.get(opportunity.ticker, ZERO)) + notional
-                        ) / new_quantity
-                    positions[opportunity.ticker] = new_quantity
-                else:
-                    positions[opportunity.ticker] = max(current - guard.amount, ZERO)
-                order["fill"] = fill.as_dict()
-                order["fee_bps"] = str(fee_bps)
-        closing_marks = {
-            ticker: book.mark_at_or_before(ticker, decision_at) for ticker in positions
-        }
-        closing_value = sum(
-            (
-                quantity * mark.price
-                for ticker, quantity in positions.items()
-                if (mark := closing_marks.get(ticker)) is not None
-            ),
-            ZERO,
-        )
-        order["equity_after_usd"] = str((cash + closing_value).quantize(CENT))
-        _complete_simulated_run(
-            arm_run.run,
-            action=action,
-            guard=guard,
-            order=order,
-            decision_at=decision_at,
-        )
-        orders.append(order)
+            if opportunity is not None:
+                arm_run.decision = _decision_input(arm_run.run, opportunity, arm_run.snapshot)
+
+    decisions = {
+        arm_run.opportunity: arm_run.decision for arm_run in runs if arm_run.decision is not None
+    }
+
+    timeline = simulate_arm_timeline(
+        arm=arm,
+        opportunities=opportunity_set.opportunities,
+        decisions=decisions,
+        marks=opportunity_set.marks,
+        window_start=opportunity_set.window_start,
+        window_end=opportunity_set.window_end,
+        starting_state=opportunity_set.starting_state,
+        execution_assumptions=opportunity_set.execution_assumptions,
+        risk_rules=opportunity_set.risk_rules,
+        guard_portfolio_factory=lambda cash, positions_value: _guard_view(
+            portfolio, opportunity_set.risk_rules, cash, positions_value
+        ),
+        as_of=opportunity_set.as_of,
+    )
+    orders = timeline["orders"]
+    fills = timeline["fills"]
+    if persist:
+        for order in orders:
+            arm_run = by_opportunity.get(order["opportunity"])
+            if arm_run is None or arm_run.run is None or arm_run.decision is None:
+                continue
+            guard = timeline["guards"].get(order["opportunity"])
+            if guard is None:
+                if order["fill_rule_status"] == "rejected":
+                    arm_run.status = "failed"
+                    arm_run.failure_code = order["fill_reason"] or "simulated_input_rejected"
+                    arm_run.failure_detail = order["reason"] or arm_run.failure_code
+                    _reject_simulated_run(
+                        arm_run.run,
+                        reason=arm_run.failure_detail,
+                        code=arm_run.failure_code,
+                    )
+                continue
+            _complete_simulated_run(
+                arm_run.run,
+                action=arm_run.decision.normalised_action,
+                guard=guard,
+                order=order,
+                decision_at=arm_run.decision.decision_at,
+            )
+    fee_bps = _decimal(
+        opportunity_set.execution_assumptions.get("fee_bps") or ZERO,
+        field_name="execution_assumptions.fee_bps",
+    )
+    for order in orders:
+        if order["proposal_action"] is not None:
+            order["fee_bps"] = str(fee_bps)
 
     # LLM costs: a deterministic arm's zero is measured (no call was made); a
     # scripted or live arm whose provider reported no charge is *unknown*, and
@@ -1098,26 +1224,28 @@ def simulate_arm_accounting(
     for arm_run in runs:
         cost = arm_run.cost or {}
         billed = cost.get("billed_cost_usd")
-        run_key = arm_run.fixture_id
-        at = (
-            arm_run.run.completed_at or arm_run.run.started_at
-            if arm_run.run is not None
-            else opportunity_set.window_start
-        )
         if billed is None:
             missing += 1
             continue
+        # The decision's recording time is a recorded input, so a rebuild uses
+        # the same instant as the original build. It is external spend, clamped
+        # to the observation window.
+        at = (
+            arm_run.decision.recorded_at
+            if arm_run.decision is not None and arm_run.decision.recorded_at is not None
+            else opportunity_set.window_start
+        )
         llm_costs.append(
             LlmCost(
                 at=min(at, opportunity_set.window_end),
                 amount=_decimal(billed, field_name="billed_cost_usd"),
                 source=("deterministic_no_model_call" if arm == "V0" else "billed_provider"),
-                run_key=run_key,
+                run_key=arm_run.fixture_id,
             )
         )
 
     opening = OpeningState(
-        at=opening_at,
+        at=opportunity_set.window_start - timedelta(seconds=1),
         cash=opportunity_set.starting_state["cash"],
         positions=opportunity_set.starting_state["positions"],
         basis="declared_opportunity_set_starting_state",
@@ -1135,6 +1263,8 @@ def simulate_arm_accounting(
             "simulated_arm": arm,
             "price_source": sorted(book.source_counts().items()),
             "fill_rule": FILL_RULE,
+            "fill_timing": FILL_TIMING_RULE,
+            "simulation_method": SIMULATION_METHOD_VERSION,
             "fee_model": (
                 "declared_bps"
                 if opportunity_set.execution_assumptions.get("fee_bps") not in (None, "")
@@ -1145,8 +1275,8 @@ def simulate_arm_accounting(
                 or "evaluated_by_services.execution.evaluate_proposal"
             ),
             "llm_cost_timing": (
-                "A known LLM cost is attributed at the decision instant (clamped to the "
-                "window end) because it is external spend, not a portfolio flow."
+                "A known LLM cost is attributed at the decision's recorded time (clamped "
+                "to the window end) because it is external spend, not a portfolio flow."
             ),
             "note": (
                 "Simulated replay of this arm's recorded decisions under the frozen marks, "
@@ -1158,6 +1288,25 @@ def simulate_arm_accounting(
     result["orders"] = orders
     result["orders_count"] = len(orders)
     result["fill_count"] = len(fills)
+    result["simulation"] = {
+        "method_version": SIMULATION_METHOD_VERSION,
+        "fill_timing_rule": FILL_TIMING_RULE,
+        "fill_rule": FILL_RULE,
+        "clock_started_at": timeline["clock_started_at"],
+        "clock_ended_at": timeline["clock_ended_at"],
+        "steps": timeline["steps"],
+        "steps_hash": timeline["steps_hash"],
+        "decision_records": _decision_records(timeline["steps"]),
+        "decision_records_hash": content_hash(_decision_records(timeline["steps"])),
+        "step_count": len(timeline["steps"]),
+        "monotonic": _steps_are_monotonic(timeline["steps"]),
+        "expired_fills": timeline["expired_fills"],
+        "synthetic": True,
+        "note": (
+            "Each decision and fill carries the simulated clock and the data known at that "
+            "instant. A fill priced from a later mark is applied when the clock reaches it."
+        ),
+    }
     result["per_opportunity"] = [
         {
             "opportunity": item.key,
@@ -1167,6 +1316,75 @@ def simulate_arm_accounting(
         for item in opportunity_set.opportunities
     ]
     return result
+
+
+def _reject_simulated_run(run: DecisionRun | None, *, reason: str, code: str) -> None:
+    """Complete a run the simulator refused before a guard could be evaluated."""
+    if run is None or run.status != DecisionStatus.VALIDATING:
+        return
+    from services.decision_lifecycle import complete_run
+
+    complete_run(
+        run,
+        outcome="failed",
+        reason=reason[:2000],
+        error_code=code[:64],
+        error_detail=reason[:2000],
+    )
+    run.refresh_from_db()
+
+
+def _decision_records(steps: Sequence[dict]) -> list[dict]:
+    """The decision/fill records without generated ids.
+
+    Two independent replays of the same committed inputs have different
+    ``DecisionRun``/snapshot UUIDs, so their full timelines are not byte-equal.
+    These records are: the clock, the decision, the fill and the stable reason.
+    That is what "replaying the committed fixtures twice" can mean without
+    pretending the database generated the same UUID twice.
+    """
+    records: list[dict] = []
+    for step in steps:
+        if step["event"] == "decision":
+            records.append(
+                {
+                    "event": "decision",
+                    "clock": step["clock"],
+                    "opportunity": step["opportunity"],
+                    "ticker": step["ticker"],
+                    "action": (step.get("decision") or {}).get("action"),
+                    "requested_quantity": (step.get("decision") or {}).get("requested_quantity"),
+                    "fill_rule_status": step["order"]["fill_rule_status"],
+                    "fill_reason": step["order"]["fill_reason"],
+                }
+            )
+        elif step["event"] == "fill":
+            fill = step["fill"]
+            records.append(
+                {
+                    "event": "fill",
+                    "clock": step["clock"],
+                    "opportunity": step["opportunity"],
+                    "ticker": fill["ticker"],
+                    "side": fill["side"],
+                    "quantity": fill["quantity"],
+                    "price_usd": fill["price_usd"],
+                    "fee_usd": fill["fee_usd"],
+                }
+            )
+    return records
+
+
+def _steps_are_monotonic(steps: Sequence[dict]) -> bool:
+    previous: str | None = None
+    for step in steps:
+        clock = step.get("clock")
+        if not isinstance(clock, str):
+            return False
+        if previous is not None and clock < previous:
+            return False
+        previous = clock
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -1346,6 +1564,34 @@ def _risk_rules_check(opportunity_set: OpportunitySet, portfolio: Portfolio) -> 
     }
 
 
+def _portfolio_snapshot(portfolio: Portfolio | None) -> dict:
+    if portfolio is None:
+        return {"available": False}
+    return {
+        "available": True,
+        "portfolio_id": portfolio.id,
+        "risk_profile": portfolio.risk_profile,
+        "limits": {
+            key: str(getattr(portfolio, key)) for key in RISK_RULE_FIELDS if hasattr(portfolio, key)
+        },
+    }
+
+
+def methods_block(metric: dict) -> dict:
+    from services.portfolio_accounting import METHOD_VERSION as ACCOUNTING_METHOD_VERSION
+
+    return {
+        "report_schema_version": REPORT_SCHEMA_VERSION,
+        "archive_format": ARCHIVE_FORMAT,
+        "simulation": SIMULATION_METHOD_VERSION,
+        "fill_timing": FILL_TIMING_RULE,
+        "fill_rule": FILL_RULE,
+        "accounting": ACCOUNTING_METHOD_VERSION,
+        "metric": "registered_signal_metric.v1",
+        "registered_metric_id": metric.get("id"),
+    }
+
+
 def build_comparison_report(
     *,
     opportunity_set: OpportunitySet,
@@ -1354,6 +1600,7 @@ def build_comparison_report(
     provider_mode: str,
     generated_at: datetime | None = None,
     portfolio: Portfolio | None = None,
+    execution: dict | None = None,
 ) -> dict:
     """Assemble the V0-V3 comparison from the runs that actually happened.
 
@@ -1385,11 +1632,11 @@ def build_comparison_report(
                     not_executed_total += 1
                 snapshot = (
                     {
-                        "snapshot_id": str(run.run.snapshot_id),
-                        "content_hash": run.run.snapshot.content_hash,
+                        "snapshot_id": run.snapshot.id,
+                        "content_hash": run.snapshot.content_hash,
                         "opportunity": run.opportunity,
                     }
-                    if run.run is not None and run.run.snapshot is not None
+                    if run.snapshot is not None
                     else None
                 )
                 if snapshot is not None:
@@ -1468,11 +1715,38 @@ def build_comparison_report(
         identical_snapshots = False
         reference_snapshots = {}
 
+    decisions_by_arm = {
+        arm: [run.decision for run in arm_runs.get(arm, []) if run.decision is not None]
+        for arm in ("V0", "V1", "V2", "V3")
+    }
+    metric_result = compute_registered_metric(
+        metric=opportunity_set.primary_metric,
+        opportunities=opportunity_set.opportunities,
+        marks=opportunity_set.marks,
+        decisions_by_arm=decisions_by_arm,
+        trajectories=trajectories,
+        as_of=opportunity_set.as_of,
+        uncertainty=dict(opportunity_set.pre_registration.get("uncertainty") or {}),
+    )
+    for arm in arms:
+        arm["primary_metric"] = metric_result["by_arm"].get(arm["key"])
+        arm["synthetic"] = True
+        if arm["key"] == "V4":
+            arm["primary_metric"] = {
+                "arm": "V4",
+                "status": "not_executed",
+                "value": None,
+                "unit": "percent",
+                "in_denominator": False,
+                "reason": UNEXECUTED_REASONS["V4"],
+                "denominator_eligible": False,
+            }
+
     pre_registration = {
         "registered_at": opportunity_set.pre_registration.get("registered_at"),
         "registered_by": opportunity_set.pre_registration.get("registered_by"),
         "declared_before_first_opportunity": (
-            _parse_at(opportunity_set.pre_registration["registered_at"], field_name="registered_at")
+            parse_at(opportunity_set.pre_registration["registered_at"], field_name="registered_at")
             <= opportunity_set.opportunities[0].scheduled_at
         ),
         "sample_plan": sample_plan,
@@ -1494,36 +1768,39 @@ def build_comparison_report(
             >= int(sample_plan.get("minimum_opportunities") or 0),
             "completed_arms": completed_arms >= int(sample_plan.get("minimum_completed_arms") or 0),
             "primary_metric": {
-                "computed": False,
-                "reason": (
-                    "The pre-registered primary metric is a forward-return signal metric. It "
-                    "needs matured OutcomeRecord rows, and this execution produced none: the "
-                    "opportunities are scheduled inside a historical window whose outcomes "
-                    "were not evaluated. The registration is published as written and the "
-                    "metric is null with this reason rather than replaced by a different "
-                    "number."
-                ),
+                "computed": metric_result["status"] == "computed",
+                "status": metric_result["status"],
+                "value": metric_result["value"],
+                "denominator": metric_result["denominator"],
+                "reason": metric_result["reason"],
+                "missing_input": metric_result["missing_input"],
             },
         },
         "sample_gate": {
             "minimum_opportunities": sample_plan.get("minimum_opportunities"),
             "minimum_completed_arms": sample_plan.get("minimum_completed_arms"),
+            "minimum_observations": sample_plan.get("minimum_observations"),
             "opportunities": len(opportunity_set.opportunities),
             "completed_arms": completed_arms,
+            "observations": metric_result["denominator"]["usable"],
+            "observations_met": (
+                None
+                if not sample_plan.get("minimum_observations")
+                else metric_result["denominator"]["usable"]
+                >= int(sample_plan.get("minimum_observations") or 0)
+            ),
             "met": (
                 len(opportunity_set.opportunities)
                 >= int(sample_plan.get("minimum_opportunities") or 0)
                 and completed_arms >= int(sample_plan.get("minimum_completed_arms") or 0)
+                and (
+                    not sample_plan.get("minimum_observations")
+                    or metric_result["denominator"]["usable"]
+                    >= int(sample_plan.get("minimum_observations") or 0)
+                )
             ),
         },
-        "primary_metric_result": {
-            "id": opportunity_set.primary_metric.get("id"),
-            "value": None,
-            "unit": "percent",
-            "status": "not_computable",
-            "reason": "no_matured_outcomes",
-            "observations": 0,
-        },
+        "primary_metric_result": metric_result,
     }
 
     drawdown_gate = {
@@ -1551,15 +1828,35 @@ def build_comparison_report(
         }
 
     aggregate_cost = _aggregate_cost_across_arms(cost_by_arm)
+    run_ids = {
+        arm: [
+            run.decision_run_id or (str(run.run.id) if run.run is not None else "") for run in runs
+        ]
+        for arm, runs in arm_runs.items()
+    }
+    aggregate_cost["scope"] = {
+        "execution_id": (execution or {}).get("execution_id"),
+        "namespace": (execution or {}).get("namespace"),
+        "arms": ["V0", "V1", "V2", "V3"],
+        "run_count": sum(len([run_id for run_id in ids if run_id]) for ids in run_ids.values()),
+        "run_ids": {arm: [run_id for run_id in ids if run_id] for arm, ids in run_ids.items()},
+        "note": "The ledger is scoped to this execution's namespaced runs only.",
+    }
+    methods = methods_block(opportunity_set.primary_metric)
     manifest_payload = json_safe(opportunity_set.document)
     report = {
         "report_schema_version": REPORT_SCHEMA_VERSION,
+        "archive_format": ARCHIVE_FORMAT,
         "generated_at": utc_iso(now),
         "opportunity_set_id": opportunity_set.opportunity_set_id,
         "label": opportunity_set.label,
         "provider_mode": provider_mode,
+        "synthetic": True,
+        "methods": methods,
         "pre_registration": pre_registration,
+        "primary_metric_result": metric_result,
         "frozen": {
+            "opportunity_set": json_safe(opportunity_set.document),
             "opportunity_set_hash": opportunity_set.content_hash,
             "source_path": opportunity_set.source_path or None,
             "declared_at": utc_iso(opportunity_set.declared_at),
@@ -1574,9 +1871,11 @@ def build_comparison_report(
                     for ticker, quantity in opportunity_set.starting_state["positions"].items()
                 },
             },
+            "portfolio": _portfolio_snapshot(portfolio),
             "execution_assumptions": opportunity_set.execution_assumptions,
             "risk_rules": opportunity_set.risk_rules,
             "benchmark": opportunity_set.benchmark,
+            "methods": methods,
             "mark_count": len(opportunity_set.marks),
             "mark_sources": PriceBook(opportunity_set.marks).source_counts(),
             "mark_provenance": (
@@ -1585,12 +1884,23 @@ def build_comparison_report(
             ),
         },
         "arms": arms,
+        "execution": execution or {},
         "verification": {
             "distinct_protocol_ids": distinct_protocol_ids,
             "protocol_ids": protocol_ids,
             "identical_snapshots_across_arms": identical_snapshots,
             "reference_snapshots": reference_snapshots,
             "snapshot_sets": snapshot_sets,
+            "execution_id": (execution or {}).get("execution_id"),
+            "namespace": (execution or {}).get("namespace"),
+            "run_ids": run_ids,
+            "run_count": aggregate_cost["scope"]["run_count"],
+            "recompute_command": (
+                "python manage.py rebuild_experiment_report --path <archived-report.json>"
+            ),
+            "metric_path": "pre_registration.primary_metric_result",
+            "content_hash_path": "contents_hash",
+            "archive_format": ARCHIVE_FORMAT,
             "same_opportunity_set": all(
                 arm["scheduled_runs"] == len(opportunity_set.opportunities)
                 for arm in arms
@@ -1598,7 +1908,8 @@ def build_comparison_report(
             ),
             "note": (
                 "Protocol ids are read from the runs, not copied from the declaration. "
-                "Snapshot identity is compared by content hash per opportunity across arms."
+                "Snapshot identity is compared by content hash per opportunity across arms. "
+                "Run identity is namespaced to this execution."
             ),
         },
         "denominators": {
@@ -1619,9 +1930,19 @@ def build_comparison_report(
                     )
                 )
             ),
+            "metric_observations": metric_result["denominator"]["usable"],
+            "metric_scheduled_observations": metric_result["denominator"]["scheduled"],
+            "metric_excluded_observations": metric_result["denominator"]["excluded"],
+            "v4": {
+                "status": "not_executed",
+                "implemented": False,
+                "in_denominator": False,
+                "reason": UNEXECUTED_REASONS["V4"],
+            },
             "note": (
                 "A missing or failed run is counted in the denominator. Dropping it would "
-                "make an arm look complete by omission."
+                "make an arm look complete by omission. V4 is excluded because it did not "
+                "execute, not because its result was zero."
             ),
         },
         "fairness": {
@@ -1631,7 +1952,15 @@ def build_comparison_report(
                 "v4_excluded": True,
             },
             "same_snapshots": identical_snapshots,
-            "same_risk_rules": _risk_rules_check(opportunity_set, portfolio),
+            "same_risk_rules": (
+                _risk_rules_check(opportunity_set, portfolio)
+                if portfolio is not None
+                else {
+                    "status": "not_verifiable",
+                    "checks": {},
+                    "reason": "the portfolio configuration was not recorded",
+                }
+            ),
             "same_execution_assumptions": {
                 "declared": opportunity_set.execution_assumptions,
                 "applied_by_all_arms": True,
@@ -1652,6 +1981,8 @@ def build_comparison_report(
             "profitability_threshold": None,
             "simulated_provider": provider_mode == "stub",
             "simulated_content": True,
+            "synthetic_label": "synthetic_simulation",
+            "real_market_outcome": False,
             "comparative_protocol_claim": False,
             "reason": (
                 "The opportunity set, marks and arm trajectories are authored/simulated. "
@@ -1704,12 +2035,14 @@ def execute_opportunity_set(
 ) -> dict:
     """Schedule V0-V3 against the frozen opportunities and return the report.
 
-    Idempotent per ``(arm, opportunity)``: a run whose stable fixture id already
-    exists is reused rather than re-executed, so re-running the command neither
-    double-spends nor duplicates a decision.
+    Idempotent per ``(namespace, arm, opportunity)``: a run whose namespaced
+    fixture id already exists is reused rather than re-executed, so re-running
+    the command neither double-spends nor duplicates a decision. A different
+    portfolio, universe or provider mode has a different namespace and cannot
+    reuse these runs.
     """
     started = now or timezone.now()
-    registered_at = _parse_at(
+    registered_at = parse_at(
         opportunity_set.pre_registration.get("registered_at"),
         field_name="pre_registration.registered_at",
     )
@@ -1719,6 +2052,13 @@ def execute_opportunity_set(
             f"execution ({utc_iso(started)}): a registration written in the future cannot "
             "govern a run that has already started."
         )
+    namespace = execution_namespace(
+        portfolio_id=portfolio.id,
+        opportunity_set_id=opportunity_set.opportunity_set_id,
+        opportunity_set_hash=opportunity_set.content_hash,
+        provider_mode=provider_mode,
+        client_identity=(client.__class__.__name__ if client is not None else ""),
+    )
     snapshots: dict[str, InputSnapshot] = {}
     evidence: dict[str, dict] = {}
     for opportunity in opportunity_set.opportunities:
@@ -1741,7 +2081,7 @@ def execute_opportunity_set(
                         ArmRun(
                             arm=arm,
                             opportunity=opportunity.key,
-                            fixture_id=_fixture_id(opportunity_set, arm, opportunity),
+                            fixture_id=_fixture_id(opportunity_set, arm, opportunity, namespace),
                             status="not_executed",
                             failure_code="provider_not_configured",
                             failure_detail=reason,
@@ -1764,13 +2104,14 @@ def execute_opportunity_set(
                     provider_mode=arm_mode[arm],
                     budget=budget,
                     force=force,
+                    namespace=namespace,
                 )
             )
     arm_runs["V4"] = [
         ArmRun(
             arm="V4",
             opportunity=opportunity.key,
-            fixture_id=_fixture_id(opportunity_set, "V4", opportunity),
+            fixture_id=_fixture_id(opportunity_set, "V4", opportunity, namespace),
             status="not_executed",
             failure_code="unimplemented",
             failure_detail=UNEXECUTED_REASONS["V4"],
@@ -1798,6 +2139,38 @@ def execute_opportunity_set(
         provider_used = "stub"
     else:
         provider_used = "auto"
+    execution = {
+        "execution_id": namespace,
+        "execution_id_kind": "deterministic_namespace.v1",
+        "namespace": namespace,
+        "namespace_version": EXECUTION_NAMESPACE_VERSION,
+        "portfolio_id": portfolio.id,
+        "provider_mode_requested": provider_mode,
+        "provider_mode_used": provider_used,
+        "started_at": utc_iso(started),
+        "snapshots_used": {
+            key: _snapshot_input(snapshot).as_dict() for key, snapshot in snapshots.items()
+        },
+        "evidence": evidence,
+        "client_modes": arm_mode,
+        "run_ids": {
+            arm: [
+                run.decision_run_id or (str(run.run.id) if run.run is not None else "")
+                for run in arm_runs[arm]
+            ]
+            for arm in ("V0", "V1", "V2", "V3")
+        },
+        "run_count": sum(
+            len([run for run in arm_runs[arm] if run.decision_run_id or run.run is not None])
+            for arm in ("V0", "V1", "V2", "V3")
+        ),
+        "idempotent": True,
+        "note": (
+            "Re-running with the same inputs and provider mode reuses this namespace's runs. "
+            "A different portfolio, opportunity-set content or provider mode has its own "
+            "namespace and cannot read or overwrite these decisions or costs."
+        ),
+    }
     report = build_comparison_report(
         opportunity_set=opportunity_set,
         arm_runs=arm_runs,
@@ -1805,22 +2178,6 @@ def execute_opportunity_set(
         provider_mode=provider_used,
         generated_at=started,
         portfolio=portfolio,
-    )
-    report["execution"] = {
-        "started_at": utc_iso(started),
-        "snapshots_used": {
-            key: {"snapshot_id": str(snapshot.id), "content_hash": snapshot.content_hash}
-            for key, snapshot in snapshots.items()
-        },
-        "evidence": evidence,
-        "client_modes": arm_mode,
-        "idempotent": True,
-        "note": (
-            "Re-running reuses a run whose stable fixture id exists. It does not re-call a "
-            "provider for an arm/opportunity already recorded."
-        ),
-    }
-    report["contents_hash"] = content_hash(
-        {key: value for key, value in report.items() if key != "contents_hash"}
+        execution=execution,
     )
     return json_safe(report)

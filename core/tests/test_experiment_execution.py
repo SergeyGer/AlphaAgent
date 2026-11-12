@@ -198,7 +198,8 @@ class ExecutionPathTests(TestCase):
         self.assertFalse(v4["implemented"])
         self.assertTrue(v4["excluded_from_denominator"])
         self.assertEqual(v4["status"], "not_executed")
-        self.assertIn("FIX-08", v4["reason"])
+        self.assertIn("not executed", v4["reason"])
+        self.assertFalse(v4["primary_metric"]["in_denominator"])
         self.assertEqual(report["denominators"]["excluded_unimplemented_arms"], ["V4"])
         self.assertNotIn("V4", report["denominators"]["implemented_arms"])
         self.assertEqual(
@@ -314,13 +315,18 @@ class ExecutionPathTests(TestCase):
         }
         self.assertEqual(first_snapshots, second_snapshots)
 
-    def test_the_primary_metric_is_null_when_no_outcome_has_matured(self):
+    def test_the_registered_metric_is_computed_when_the_horizon_mark_exists(self):
         report = self.execute()
         result = report["pre_registration"]["primary_metric_result"]
         self.assertEqual(result["id"], "mean_action_score_pct")
-        self.assertIsNone(result["value"])
-        self.assertEqual(result["status"], "not_computable")
-        self.assertEqual(result["reason"], "no_matured_outcomes")
+        self.assertEqual(result["status"], "computed")
+        self.assertIsNotNone(result["value"])
+        self.assertGreater(result["denominator"]["usable"], 0)
+        self.assertIsNotNone(result["dispersion"]["std_dev_pct"])
+        # The TSLA 7-day target falls after the window's last mark, so that
+        # observation is excluded with its input named, not scored as a zero.
+        self.assertLess(result["denominator"]["usable"], result["denominator"]["scheduled"])
+        self.assertIn("no_session_at_or_after_target", result["denominator"]["excluded_by_reason"])
         self.assertTrue(report["pre_registration"]["sample_gate"]["met"])
 
     @override_settings(AI_CONFIG=NO_PROVIDER_CONFIG)

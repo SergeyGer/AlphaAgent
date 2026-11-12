@@ -298,8 +298,11 @@ V3 is the Phase 2 rebuttal protocol (`debate.v1`) and is identified by the
 recorded rebuttal round. V2 is the same producer with the rebuttal stage
 **omitted**: it records `debate.no_rebuttal.v1`, so the two arms have genuinely
 distinct protocol identities instead of being one run relabelled as two. A
-manifest must declare all five variants; V4 cannot be marked implemented. A
-report publishes V4 as `unimplemented` with a null result — not a measured zero.
+manifest must declare all five variants; V4 cannot be marked implemented. The
+Phase 3 report publishes V4 as `unimplemented` with a null result; the
+comparison execution report publishes `status: "not_executed"` and
+`implemented: false`. Either way the result is null, not a measured zero, and
+V4 is outside the denominator.
 
 ### 3.1a Execution path (`services/experiment_execution.py`)
 
@@ -341,10 +344,74 @@ completed model arm.
 The opportunity set must declare a pre-registration (`registered_at` at or
 before `declared_at` and before the first scheduled opportunity) containing the
 sample plan, primary metric, cost ceiling and acceptable drawdown. The report
-publishes the registration **and** whether it could be honoured. In particular,
-a pre-registered forward-return metric is `null` with
-`reason: "no_matured_outcomes"` when no outcome rows exist; it is not replaced
-by a different number.
+publishes the registration **and** whether it could be honoured.
+
+The comparison report's execution path has its own archive format,
+`experiment_comparison.v2` / `report_schema_version: "2.0"`. It is a different
+document from the Phase 3 `build_experiment` report and is not read as one.
+
+#### 3.1b Execution namespace and the registered metric
+
+Each execution has a **deterministic namespace**, derived from the portfolio id,
+the opportunity-set content hash, the provider mode and the injected client
+identity (`execution_namespace(...)`, 16 hex characters). The namespace suffixes every
+`DecisionRun.fixture_id` and is published as `execution.execution_id` and
+`execution.namespace`. Consequences:
+
+* two portfolios, or two opportunity sets that share a natural key but differ
+  in tickers, marks, starting state or provider mode, cannot read or overwrite
+  each other's decisions, snapshots or spend;
+* a rerun with the same inputs and provider mode resolves to the same namespace
+  and reuses its recorded runs, so it does not double-spend;
+* the cost ledger is scoped: `cost_breakdown.scope` names the execution and its
+  run ids, and `verification.run_ids` lists them per arm;
+* each execution's input snapshots are immutable `InputSnapshot` rows; the
+  snapshot version includes the opportunity-set content hash, so a changed
+  document gets a new snapshot rather than reusing the old one.
+
+The registered metric is read from the immutable pre-registration record - its
+id, family, horizon and direction - not from a module constant. For the
+`signal_diagnostics` family the calculator uses the decision's snapshot quote
+(or the latest mark known at the decision) as the entry and
+`first_mark_at_or_after_target_session.v1` for the exit, with the archive's
+`as_of` cut-off. The result publishes:
+
+| Field | Meaning |
+| --- | --- |
+| `status` | `computed` or `not_computable` |
+| `value` | Mean action score (or the registered id's value), as a Decimal string |
+| `denominator.scheduled` / `.usable` / `.excluded` | Decisions scheduled, decisions with a matured horizon price, and the exclusions by stable reason |
+| `contributing_runs` / `contributing_run_ids` | How many recorded runs produced a usable observation, and which |
+| `dispersion` | Sample standard deviation, min, max and range (null with `fewer_than_two_observations` when only one) |
+| `interval` | Seeded time-block bootstrap interval; null with a reason when it cannot be formed |
+| `by_arm` | The same fields per implemented arm; V4 is absent |
+| `reason` / `missing_input` | Null only when the metric is computed; otherwise the stable reason and the input that was missing |
+
+A `null` value therefore means "not measurable from this data", never "not
+implemented": an unsupported registered id or family is refused when the
+opportunity set is validated, and a horizon that no mark reaches reports
+`no_session_at_or_after_target` with the missing mark named. V4 remains
+`not_executed`, `value: null`, `in_denominator: false`; it is not a zero.
+
+The report embeds the recorded inputs a rebuild needs: `frozen.opportunity_set`
+(the full document), `frozen.portfolio`, `execution.snapshots_used` (the
+snapshot payloads and hashes), each run's recorded decision, and
+`frozen.methods`. Rebuilding therefore reads the archive, not the current
+fixture file:
+
+```bash
+python manage.py rebuild_experiment_report --path /tmp/comparison.json
+python manage.py rebuild_experiment_report --path /tmp/comparison.json --execute
+```
+
+The command is a dry run by default. It reports `reproduced` or `differs`, the
+metric value and the archived/rebuilt content hashes, and every difference by
+path. `--execute` writes the rebuilt document to `--output` (default
+`<archive>.rebuilt.json`) and never overwrites the archive it is checking. An
+unsupported `report_schema_version` or `archive_format` is refused by name; a
+tampered opportunity set or snapshot is refused by hash. The rebuilt document
+keeps `honesty.simulated_content: true` and `synthetic_label:
+"synthetic_simulation"`.
 
 ### 3.2 Manifest (version 1, schema 1.0)
 
@@ -559,6 +626,20 @@ The V0-V3 execution path has its own example output:
 It is generated by `python manage.py run_experiment --provider stub` and, like
 the Phase 3 report, is labelled engineering validation. Its arm trajectories are
 simulations under authored marks; they are not the demo account's history.
+The committed archive carries its own opportunity-set document, snapshot
+payloads and decisions, so its metric, trajectories and `contents_hash` can be
+recomputed without a database:
+
+```bash
+python manage.py rebuild_experiment_report \
+  --path docs/spec/fixtures/experiments/alphaagent-arms.v1.comparison.json
+```
+
+The committed metric is `mean_action_score_pct` at the 7-day horizon. The AAPL
+and MSFT horizons are reached by the 2026-02-11 closing marks; the TSLA target is
+after the last mark and is counted in `denominator.excluded_by_reason` as
+`no_session_at_or_after_target`, not scored as a zero. V4 is `not_executed` and
+outside the denominator.
 
 ## 6. Tests that hold the gate
 
