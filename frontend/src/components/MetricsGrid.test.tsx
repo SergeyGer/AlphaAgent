@@ -98,6 +98,30 @@ describe('MetricsGrid', () => {
     expect(screen.getByText('$1.75 of $5.00 · not enforced')).toBeInTheDocument();
   });
 
+  it('shows reserved and unknown cost instead of a zero-spend day', () => {
+    const portfolio = basePortfolio();
+    Object.assign(portfolio.ai_budget as object, {
+      spent_usd: '0.00',
+      estimated_spend_usd: '0.00',
+      reserved_usd: '1.00',
+      unknown_reserved_usd: '1.00',
+      committed_usd: '1.00',
+      remaining_usd: '4.00',
+      unknown_cost_runs: 1,
+      unknown_amount_usd: null,
+      lower_bound: true,
+      basis: 'lower_bound',
+    });
+
+    render(<MetricsGrid portfolio={portfolio} loading={false} />);
+
+    expect(
+      screen.getByText(/AI spend is a lower bound: \$1\.00 reserved · 1 run with unknown cost/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText('$0.00 billed + $1.00 reserved · lower bound')).toBeInTheDocument();
+    expect(screen.getByText('$4.00')).toBeInTheDocument();
+  });
+
   it('raises a visible alert once the ceiling halts runs', () => {
     const portfolio = basePortfolio();
     Object.assign(portfolio.ai_budget as object, { exhausted: true, spent_usd: '5.00', remaining_usd: '0.00' });

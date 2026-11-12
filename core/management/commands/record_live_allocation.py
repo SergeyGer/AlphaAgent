@@ -67,6 +67,7 @@ from services.portfolio_brief import (
 )
 from services.portfolio_policy import AllocationPolicy, CostModel
 from services.portfolio_review import build_plan_review
+from services.recording_provenance import RecordingRefused, require_clean_for_recording
 
 DEFAULT_INPUT = Path("docs/spec/fixtures/fix08-live-input.v1.json")
 DEFAULT_OUTPUT = Path("docs/spec/fixtures/fix08-live-allocation.v1.json")
@@ -94,6 +95,13 @@ class Command(BaseCommand):
     def handle(self, *args, **options) -> None:
         input_path = self._resolve(options["input"])
         output_path = self._resolve(options["output"])
+        # Provenance is checked before anything else - including the overwrite
+        # guard and provider configuration - so a dirty tree or missing
+        # acceptance record has one stable reason and cannot make a paid call.
+        try:
+            recording = require_clean_for_recording()
+        except RecordingRefused as exc:
+            raise CommandError(f"Recording refused ({exc.code}): {exc.detail}") from exc
         if output_path.exists() and not options["overwrite"]:
             raise CommandError(
                 f"{output_path} already exists. Re-running would be a second billed provider "
@@ -157,6 +165,7 @@ class Command(BaseCommand):
             "protocol_version": PROTOCOL_VERSION,
             "prompt_template_version": PROMPT_TEMPLATE_VERSION,
             "recorded_at": recorded_at.isoformat(),
+            "recording": recording,
             "parameters": dict(client.parameters),
             "budget": budget.as_dict(),
             "input": {

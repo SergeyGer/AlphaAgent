@@ -56,6 +56,13 @@ from core.decision_json import content_hash, json_safe, utc_iso
 from core.log_safety import log_safe
 from core.models import Asset, Portfolio
 from services.allocation_provider import allocation_budget, build_allocation_client
+from services.budget import (
+    check_and_reserve,
+    logical_call_key,
+    mark_unknown,
+    reconcile_report,
+    reserve_bound_for_run,
+)
 from services.execution import Mark
 from services.market_data import get_latest_quote
 from services.portfolio_allocation import (
@@ -1275,15 +1282,60 @@ def process_submission(
                     now=timezone.now(),
                 )
             context = _build_analysis_context(submission)
+            client, max_repairs = _client_for(submission, context["brief"])
+            # A live analysis is a paid call with an unknown final price. Reserve
+            # the configured upper bound before the provider is called; a refused
+            # submission writes no provider_started checkpoint and makes no call.
+            ledger_key = None
+            if submission.mode == "live":
+                ledger_key = logical_call_key("allocation", submission.idempotency_key)
+                reserve = check_and_reserve(
+                    call_key=ledger_key,
+                    upper_bound_usd=reserve_bound_for_run("allocation"),
+                    provider=getattr(client, "provider", "") or "",
+                    model=getattr(client, "model", "") or "",
+                    stage="portfolio_analysis",
+                    metadata={"submission_id": str(submission.id)},
+                )
+                if not reserve.allowed:
+                    return _finish_submission(
+                        submission.pk,
+                        status=AllocationSubmissionStatus.FAILED,
+                        code=reserve.reason,
+                        detail=(
+                            f"The daily AI spend ceiling would be exceeded: committed "
+                            f"${reserve.committed_usd} plus a reserved upper bound of "
+                            f"${reserve.upper_bound_usd} against a ${reserve.limit_usd} "
+                            f"ceiling (billed ${reserve.spent_usd}, estimated "
+                            f"${reserve.estimated_spend_usd}, reserved "
+                            f"${reserve.reserved_usd}, unknown-cost runs "
+                            f"{reserve.unknown_cost_runs}). The provider was not called."
+                        ),
+                        owner=owner,
+                        now=timezone.now(),
+                    )
             started = _begin_provider_call(submission.pk, owner=owner, now=moment)
             if started is None:
                 return AllocationSubmission.objects.get(pk=submission.pk)
-            client, max_repairs = _client_for(submission, context["brief"])
             proposal = PortfolioCIO(
                 client=client,
                 policy=context["policy"],
                 max_repairs=max_repairs,
             ).decide(context["brief"])
+            if ledger_key is not None:
+                try:
+                    reconcile_report(ledger_key, client.report())
+                except Exception as ledger_exc:  # pragma: no cover - accounting is best effort
+                    logger.exception(
+                        "Could not reconcile allocation usage %s: %s",
+                        log_safe(ledger_key),
+                        log_safe(ledger_exc),
+                    )
+                    mark_unknown(
+                        call_key=ledger_key,
+                        reason="allocation_usage_reconciliation_failed",
+                        metadata={"error_type": type(ledger_exc).__name__},
+                    )
             metadata = _provider_metadata(submission, proposal, context)
             checkpoint = _checkpoint_provider_result(
                 submission.pk,
@@ -1311,6 +1363,15 @@ def process_submission(
     except Exception as exc:
         code = str(getattr(exc, "code", "") or type(exc).__name__)
         detail = str(getattr(exc, "detail", "") or exc)
+        if "ledger_key" in locals() and ledger_key is not None:
+            try:
+                mark_unknown(
+                    call_key=ledger_key,
+                    reason=f"allocation_failed_{code}"[:64],
+                    metadata={"error_code": code},
+                )
+            except Exception:  # pragma: no cover - never mask the original failure
+                logger.exception("Could not mark allocation usage %s unknown", log_safe(ledger_key))
         timed_out = code in {"run_deadline_exceeded", "stage_timeout", "analysis_timeout"}
         data_quality = None
         if context:

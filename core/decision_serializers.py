@@ -47,6 +47,7 @@ from core.models import DecisionOutcome
 from services.decision_outcomes import OUTCOME_METHOD_VERSION
 from services.decision_runs import stage_states
 from services.evidence import claims_for_run, evidence_for_run, rebuttals_for_run
+from services.recording_provenance import recording_provenance
 
 __all__ = [
     "BUNDLE_SCHEMA_VERSION",
@@ -864,6 +865,10 @@ def build_export_bundle(run: DecisionRun, *, events=None) -> dict:
             }
             for event in events
         ],
+        # The commit and acceptance digest this export was produced under. The
+        # shape is stable when no record exists; the status says why it is not
+        # verified rather than omitting the block and letting a reader assume it.
+        "recording": recording_provenance(),
         "redaction": {
             "version": "1.0",
             "dropped_key_count": len(SENSITIVE_KEYS),

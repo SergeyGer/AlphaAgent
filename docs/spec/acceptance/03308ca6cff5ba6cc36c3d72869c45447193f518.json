@@ -1,0 +1,55 @@
+{
+  "command": "venv/bin/python scripts/verify_application.py --record",
+  "commit": "03308ca6cff5ba6cc36c3d72869c45447193f518",
+  "counts": {
+    "backend_tests": 955,
+    "frontend_tests": 0
+  },
+  "digest_scope": "sha256 of compact sorted-key JSON containing the schema version, commit, tree_clean, verdict and each stage's id/status/exit_code/counts. Durations, timestamps, host paths and command output are excluded so the same commit reproduces the same digest.",
+  "dirty_paths": [],
+  "output_digest": "4debda9c1de037f52c78fdd900b96c6c3fc3dc936491918aa423d035a7421d23",
+  "recorded_at": "2026-11-12T18:57:48.295529Z",
+  "schema_version": "application.acceptance.v1",
+  "stages": [
+    {
+      "command": "/root/projects/AlphaAgent/venv/bin/python manage.py test core.tests --noinput",
+      "counts": {
+        "tests": 955
+      },
+      "exit_code": 0,
+      "id": "backend-tests",
+      "status": "pass",
+      "title": "Backend tests (sequential, --noinput)"
+    },
+    {
+      "command": "/root/projects/AlphaAgent/venv/bin/ruff check . --line-length 100",
+      "counts": {},
+      "exit_code": 0,
+      "id": "lint",
+      "status": "pass",
+      "title": "Ruff lint"
+    },
+    {
+      "command": "/root/projects/AlphaAgent/venv/bin/ruff format --check .",
+      "counts": {},
+      "exit_code": 0,
+      "id": "format",
+      "status": "pass",
+      "title": "Ruff format check"
+    },
+    {
+      "command": "/root/projects/AlphaAgent/venv/bin/python manage.py makemigrations --check --dry-run",
+      "counts": {},
+      "exit_code": 0,
+      "id": "migration-check",
+      "status": "pass",
+      "title": "No uncommitted model migrations"
+    }
+  ],
+  "subject": "fix: remediation steps 9 and 10 - the spend limiter and a verified application",
+  "tree_clean": true,
+  "usable_for_recording": true,
+  "verdict": "pass",
+  "verifier": "scripts/verify_application.py",
+  "verifier_version": "1.0"
+}

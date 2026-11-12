@@ -1,0 +1,75 @@
+{
+  "command": "venv/bin/python scripts/verify_application.py --record",
+  "commit": "4e6c71f7e01c50b4e43ff44b40e90265837a3a0a",
+  "counts": {
+    "backend_tests": 928,
+    "frontend_tests": 275
+  },
+  "digest_scope": "sha256 of compact sorted-key JSON containing the schema version, commit, tree_clean, verdict and each stage's id/status/exit_code/counts. Durations, timestamps, host paths and command output are excluded so the same commit reproduces the same digest.",
+  "dirty_paths": [],
+  "output_digest": "af900b9f4f4fe0b4866b5fb925dca178d2a27501574a1b13424c6bb5ab0b0a95",
+  "recorded_at": "2026-11-12T18:20:37.680651Z",
+  "schema_version": "application.acceptance.v1",
+  "stages": [
+    {
+      "counts": {
+        "tests": 928
+      },
+      "exit_code": 0,
+      "id": "backend-tests",
+      "status": "pass"
+    },
+    {
+      "counts": {
+        "tests": 275
+      },
+      "exit_code": 0,
+      "id": "frontend-tests",
+      "status": "pass"
+    },
+    {
+      "counts": {},
+      "exit_code": 0,
+      "id": "typecheck",
+      "status": "pass"
+    },
+    {
+      "counts": {},
+      "exit_code": 0,
+      "id": "build",
+      "status": "pass"
+    },
+    {
+      "counts": {},
+      "exit_code": 0,
+      "id": "lint",
+      "status": "pass"
+    },
+    {
+      "counts": {},
+      "exit_code": 0,
+      "id": "format",
+      "status": "pass"
+    },
+    {
+      "counts": {},
+      "exit_code": 0,
+      "id": "migration-check",
+      "status": "pass"
+    },
+    {
+      "counts": {
+        "http_status": 200
+      },
+      "exit_code": 0,
+      "id": "smoke",
+      "status": "pass"
+    }
+  ],
+  "subject": "fix: remediation steps 7 and 8 - the registered metric and simulated time (#63)",
+  "tree_clean": true,
+  "usable_for_recording": true,
+  "verdict": "pass",
+  "verifier": "scripts/verify_application.py",
+  "verifier_version": "1.0"
+}
