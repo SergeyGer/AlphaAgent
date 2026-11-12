@@ -28,6 +28,7 @@ or rejects it and the same guard runs again against live prices.
 from __future__ import annotations
 
 import logging
+import uuid
 from datetime import timedelta
 from decimal import Decimal
 from typing import Any
@@ -57,7 +58,14 @@ from core.models import (
     TradeRecommendation,
     Transaction,
 )
-from services.budget import budget_state
+from services.budget import (
+    budget_state,
+    check_and_reserve,
+    logical_call_key,
+    mark_unknown,
+    reconcile_decision_run,
+    reserve_bound_for_run,
+)
 from services.decision_lifecycle import complete_run
 from services.decision_outcomes import sync_outcomes_for_run
 from services.decision_runs import link_legacy_log
@@ -174,55 +182,7 @@ def run_alpha_agent_task(
                 "decision_run_id": None,
             }
 
-    # ---- 0. AI spend ceiling ---------------------------------------------
-    # Checked after the throttle but before any work that costs money, and before
-    # the context is built. The guard limits what the system may trade; this
-    # limits what it may spend. Without it an unattended Beat schedule keeps
-    # calling the model forever, refusing every trade on risk grounds while the
-    # API bill grows.
-    #
-    # Deliberately checked whole-run rather than mid-run: a run that starts
-    # finishes and writes its audit row, so the log never contains a half-recorded
-    # decision.
-    budget = budget_state()
-    if budget.exhausted:
-        # The ceiling is checked before the ticker reaches normalise_ticker, so
-        # this is the one log line in the task that still sees the raw argument.
-        # Wrapped for the same reason as every other sink: a value containing a
-        # newline would otherwise forge an extra log entry.
-        logger.warning(
-            "AI spend ceiling reached: $%s of $%s today; skipping %s on portfolio %s",
-            budget.spent_usd,
-            budget.limit_usd,
-            log_safe(ticker),
-            portfolio_id,
-        )
-        # Recorded as a decision row so the halt is auditable in the same place as
-        # every other decision, rather than only in the worker log.
-        AgentDecisionLog.objects.create(
-            portfolio=portfolio,
-            ticker=ticker,
-            action_taken="HALT - AI spend ceiling reached",
-            market_sentiment=MarketSentiment.NEUTRAL,
-            reasoning=(
-                f"Daily AI spend ceiling reached: ${budget.spent_usd} of "
-                f"${budget.limit_usd} spent today. Skipped {ticker}. No further "
-                f"agent runs are dispatched until 00:00 UTC. Raise "
-                f"AI_DAILY_SPEND_LIMIT_USD or set AI_SPEND_LIMIT_ENFORCED=false "
-                f"to keep running."
-            ),
-        )
-        emit_budget_exhausted(user_id, budget.as_dict())
-        return {
-            "status": "halted",
-            "reason": "ai_spend_ceiling",
-            "portfolio_id": portfolio_id,
-            "ticker": ticker,
-            "spent_usd": str(budget.spent_usd),
-            "limit_usd": str(budget.limit_usd),
-        }
-
-    # ---- 1. Throttle ------------------------------------------------------
+    # ---- 0. Throttle ------------------------------------------------------
     # Claimed before any expensive work. The allocation ceiling is per-trade, so
     # without this two overlapping sweeps could each trade inside their own
     # limit and compound the portfolio's real exposure.
@@ -232,6 +192,95 @@ def run_alpha_agent_task(
             "reason": "ticker_cooldown",
             "portfolio_id": portfolio_id,
             "ticker": ticker,
+        }
+
+    # ---- 1. AI spend ceiling ---------------------------------------------
+    # Checked after the throttle but before any work that costs money, and before
+    # the context is built. The guard limits what the system may trade; this
+    # limits what it may spend. Without it an unattended Beat schedule keeps
+    # calling the model forever, refusing every trade on risk grounds while the
+    # API bill grows.
+    #
+    # The check reserves the *declared upper bound* for the run before the
+    # provider is called. A provider that reports tokens but no dollars cannot
+    # make a day look free: the bound is held while the call is open and is
+    # reconciled to a price-table estimate (or kept as unknown) afterwards.
+    #
+    # The call key is the durable task delivery id. A retry of the same delivery
+    # returns the existing reservation instead of adding a second one.
+    ledger_key = logical_call_key("decision", execution_key or f"task-{uuid.uuid4().hex}")
+    reserve = check_and_reserve(
+        call_key=ledger_key,
+        upper_bound_usd=reserve_bound_for_run("decision"),
+        provider=str(getattr(settings, "AI_LLM_PROVIDER", "") or ""),
+        model=str(
+            (getattr(settings, "AI_CONFIG", {}) or {}).get("MODEL")
+            or getattr(settings, "AI_LLM_MODEL", "")
+            or ""
+        ),
+        stage="decision_run",
+        metadata={
+            "portfolio_id": portfolio_id,
+            "ticker": ticker,
+            "execution_key": execution_key or None,
+        },
+    )
+    if not reserve.allowed:
+        # Wrapped for the same reason as every other sink: a value containing a
+        # newline would otherwise forge an extra log entry.
+        logger.warning(
+            "AI spend reservation refused (%s): bound $%s, committed $%s of $%s; "
+            "skipping %s on portfolio %s",
+            log_safe(reserve.reason),
+            reserve.upper_bound_usd,
+            reserve.committed_usd,
+            reserve.limit_usd,
+            log_safe(ticker),
+            portfolio_id,
+        )
+        # Recorded as a decision row so the refusal is auditable in the same
+        # place as every other decision, rather than only in the worker log.
+        AgentDecisionLog.objects.create(
+            portfolio=portfolio,
+            ticker=ticker,
+            action_taken=(
+                "HALT - AI spend ceiling reached"
+                if reserve.reason == "ai_spend_ceiling"
+                else "HALT - AI spend reserve exceeded"
+            ),
+            market_sentiment=MarketSentiment.NEUTRAL,
+            reasoning=(
+                (
+                    "Daily AI spend ceiling reached: committed "
+                    if reserve.reason == "ai_spend_ceiling"
+                    else "Daily AI spend ceiling would be exceeded: committed "
+                )
+                + f"${reserve.committed_usd} plus a reserved upper bound of "
+                f"${reserve.upper_bound_usd} against a ${reserve.limit_usd} ceiling "
+                f"(billed ${reserve.spent_usd}, estimated "
+                f"${reserve.estimated_spend_usd}, reserved "
+                f"${reserve.reserved_usd}, unknown-cost runs "
+                f"{reserve.unknown_cost_runs}). Skipped {ticker}; the provider was "
+                f"not called. No further agent runs are dispatched until 00:00 UTC. "
+                f"Raise AI_DAILY_SPEND_LIMIT_USD or set "
+                f"AI_SPEND_LIMIT_ENFORCED=false to keep running."
+            ),
+        )
+        emit_budget_exhausted(user_id, budget_state().as_dict())
+        return {
+            "status": "halted",
+            "reason": reserve.reason,
+            "portfolio_id": portfolio_id,
+            "ticker": ticker,
+            "spent_usd": str(reserve.spent_usd),
+            "estimated_spend_usd": str(reserve.estimated_spend_usd),
+            "reserved_usd": str(reserve.reserved_usd),
+            "committed_usd": str(reserve.committed_usd),
+            "reserved_upper_bound_usd": str(reserve.upper_bound_usd),
+            "limit_usd": str(reserve.limit_usd),
+            "remaining_usd": str(reserve.remaining_usd),
+            "unknown_cost_runs": reserve.unknown_cost_runs,
+            "call_key": ledger_key,
         }
 
     # ---- 2. Read-only context -------------------------------------------
@@ -304,6 +353,21 @@ def run_alpha_agent_task(
             market_sentiment=MarketSentiment.NEUTRAL,
         )
         emit_agent_thinking(user_id, portfolio.id, ticker, "failed", str(exc)[:200])
+        # The provider may have been called before the crash. The charge is
+        # therefore unknown, not zero; the reservation stays held so the day's
+        # ceiling remains conservative.
+        try:
+            mark_unknown(
+                call_key=ledger_key,
+                reason="agent_pipeline_failed",
+                metadata={"error_type": type(exc).__name__},
+            )
+        except Exception as ledger_exc:  # pragma: no cover - accounting must not mask
+            logger.exception(
+                "Could not mark AI usage %s unknown: %s",
+                log_safe(ledger_key),
+                log_safe(ledger_exc),
+            )
         emit_decision(user_id, failure_log)
         emit_budget_updated(user_id, budget_state().as_dict())
         return {"status": "error", "ticker": ticker, "error": str(exc)}
@@ -573,7 +637,18 @@ def run_alpha_agent_task(
             api_cost_usd=run_result.api_cost_usd,
             estimated_cost_usd=run_result.estimated_cost_usd,
             cost_basis=run_result.cost_basis,
+            cost_ledger_key=ledger_key,
         )
+        # Reconcile the reservation before publishing the budget: the event must
+        # show the estimate (or the held unknown bound), not the pre-call reserve.
+        try:
+            reconcile_decision_run(ledger_key, run_result)
+        except Exception as ledger_exc:  # pragma: no cover - accounting is best effort
+            logger.exception(
+                "Could not reconcile AI usage %s: %s",
+                log_safe(ledger_key),
+                log_safe(ledger_exc),
+            )
         emit_decision(user_id, decision_log)
         # Re-read rather than adding this run's cost locally: the figure must
         # match what the audit trail says, including any run from another worker.

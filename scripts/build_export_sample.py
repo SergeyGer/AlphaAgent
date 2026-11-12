@@ -64,10 +64,18 @@ def main() -> int:
 
     from core.models import Portfolio
     from core.tests.export_sample import create_export_sample_run
+    from services.recording_provenance import RecordingRefused, require_clean_for_recording
 
     output = Path(args.out).resolve()
     if output.exists() and not args.force:
         print(f"REFUSED: {output} exists. Pass --force to regenerate it.", file=sys.stderr)
+        return 2
+    # A captured export is a recording. Refuse to produce one from a tree that
+    # cannot be reproduced from the commit it would name.
+    try:
+        require_clean_for_recording()
+    except RecordingRefused as exc:
+        print(f"REFUSED {exc.code}: {exc.detail}", file=sys.stderr)
         return 2
 
     # Capture inside one transaction and roll it back: the export file is the

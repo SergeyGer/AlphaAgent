@@ -226,6 +226,7 @@ used instead.
 | `AI_MAX_RETRIES` | `MAX_RETRIES` | `2` | No | LLM retries; also drives market-data attempts (`retries + 1` = 3) |
 | `AI_ALLOW_HEURISTIC_FALLBACK` | `ALLOW_HEURISTIC_FALLBACK` | `true` | No | See the fallback table below |
 | `AI_DAILY_SPEND_LIMIT_USD` | `AI_DAILY_SPEND_LIMIT_USD` | `5.00` | **Yes, in effect** | Hard daily ceiling on model spend across every portfolio. Must be non-zero — a ceiling of `0` would be indistinguishable from "disabled" |
+| `AI_RUN_COST_UPPER_BOUND_USD` | — | `1.00` | **Yes, in effect** | Upper bound reserved against the daily ceiling **before** a run calls the provider. A provider that reports tokens but no dollars is charged against this bound while the call is open, then reconciled to a price-table estimate or left unknown with the bound held. A value of `0` is treated as misconfiguration and replaced by `1.00` |
 | `AI_SPEND_LIMIT_ENFORCED` | `AI_SPEND_LIMIT_ENFORCED` | `true` | No | `false` tracks and displays spend without halting runs. A demo convenience, a production footgun |
 | `AI_NEWS_ARTICLE_LIMIT` | `NEWS_ARTICLE_LIMIT` | `10` | No | Headlines fetched per ticker when the caller does not pass `limit` |
 | `AI_PRICE_CACHE_TTL` | `PRICE_CACHE_TTL` | `60` | No | Quote cache TTL in seconds |
@@ -236,8 +237,11 @@ used instead.
 | `AI_LLM_WORKSPACE_ID` | `WORKSPACE_ID` | — | For unscoped Anthropic keys | Injects the `anthropic-workspace-id` request header |
 | `AI_LLM_EXTRA_HEADERS` | `EXTRA_HEADERS` | — | No | JSON **object** of extra request headers; invalid JSON is logged and ignored |
 
-`AI_MODEL_PRICING` (USD per 1M tokens, used to fill `AgentDecisionLog.api_cost_usd`) is hard-coded in
-settings — `deepseek-reasoner`, `deepseek-chat`, `gpt-4o`, `gpt-4o-mini`, with a DeepSeek-shaped
+`AI_MODEL_PRICING` (USD per 1M tokens) is hard-coded in settings and is used only for the
+**price-table estimate**; it never fills `AgentDecisionLog.api_cost_usd`, which stays null unless a
+provider reported a billed charge. Tokens, estimated tokens, price-table cost, billed cost and
+unknown are separate quantities. Models listed include `deepseek-reasoner`, `deepseek-chat`,
+`gpt-4o`, `gpt-4o-mini`, with a DeepSeek-shaped
 `AI_DEFAULT_PRICING` fallback for unknown models.
 
 ### `ALLOW_HEURISTIC_FALLBACK`

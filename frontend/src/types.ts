@@ -89,14 +89,31 @@ export interface Asset {
  * wire, so they are parsed before formatting rather than coerced.
  */
 export interface AiBudget {
+  /** Billed spend only. A null provider charge is not added here. */
   spent_usd: Decimal;
   limit_usd: Decimal;
+  /** Remaining against the conservative committed figure, not billed alone. */
   remaining_usd: Decimal;
   used_pct: number;
   /** False when the ceiling is tracked but not enforced. */
   enforced: boolean;
   /** True when runs are halted until the UTC day rolls over. */
   exhausted: boolean;
+  /** Price-table estimate for calls whose provider reported no dollars. */
+  estimated_spend_usd?: Decimal;
+  /** Upper bounds held for calls that have not settled (including unknown). */
+  reserved_usd?: Decimal;
+  /** The part of reserved_usd held against unknown-cost calls. */
+  unknown_reserved_usd?: Decimal;
+  /** billed + estimated + reserved: the figure the ceiling is enforced on. */
+  committed_usd?: Decimal;
+  /** Count of runs whose charge was never reported; no dollar value is implied. */
+  unknown_cost_runs?: number;
+  /** Always null when published: an unreported charge cannot be quantified. */
+  unknown_amount_usd?: Decimal | null;
+  /** True when spent/committed is a lower bound rather than a complete total. */
+  lower_bound?: boolean;
+  basis?: string;
 }
 
 export interface Portfolio {

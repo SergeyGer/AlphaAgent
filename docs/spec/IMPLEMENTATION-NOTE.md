@@ -644,3 +644,95 @@ Divergences recorded rather than absorbed:
    supplies the allocation path, but no V4 arm has ever been scheduled or
    measured, so the report says exactly that and keeps V4 outside the
    denominator.
+
+## P1 remediation — provider cost accounting and verified acceptance (steps 9 and 10)
+
+The acceptance review made two P1 findings: the daily limiter counted known
+billed charges only while the main provider adapter reports no dollars at all,
+and the recorded demo had no acceptance record tied to the commit that produced
+it. Both are fixed without changing the provider adapter's honest behaviour - it
+still reports tokens and no bill - by making the limiter reserve before the call
+and reconcile afterwards, and by making recording refuse a state the verifier
+did not accept.
+
+### 9 — the daily limiter is a conservative, durable reservation ledger
+
+Reproduced before the repair: one run recording 500 input / 300 output tokens
+and `estimated_cost_usd = 0.00150` with `api_cost_usd = NULL` produced
+`spent_usd = 0.00`, `estimated_spend_usd = 0.00` (the cents quantiser rounded
+the estimate away), and `exhausted = False` against a `$0.001` ceiling. A second
+call would have been dispatched with the day already over the limit.
+
+| Requirement | Where it is enforced | Evidence |
+| --- | --- | --- |
+| Reserve an unknown cost before the call | `services.budget.check_and_reserve`; called by `tasks.run_alpha_agent_task` and the live allocation path. The bound is `AI_RUN_COST_UPPER_BOUND_USD`, falling back to the protocol's declared monetary ceiling; a zero bound is replaced, never used. | `test_the_provider_is_not_called_when_the_reserved_bound_breaches`, `test_the_reserve_is_visible_while_the_call_is_open` |
+| Reconcile tokens-without-dollars to a labelled estimate | `services.budget.reconcile_decision_run` / `reconcile_report`; `settle_call` stores billed, estimated and unknown as distinct states. A billed figure is never synthesised from the price table. | `test_tokens_without_dollars_reconcile_to_an_estimate_not_zero` |
+| A provider that reports nothing stays unknown | `settle_call` keeps `state="unknown"`, a typed `unknown_reason`, `billed_usd=None`, `estimated_usd=None` and the reservation held. | `test_a_provider_that_reports_nothing_stays_unknown_not_zero` |
+| Refuse before the provider call | The task checks the reservation before it builds context, reads quotes or calls `run_alpha_agent`; the allocation worker does the same before `provider_call_started_at`. Stable reasons: `ai_spend_reserve_exceeded` when the bound crosses the ceiling, `ai_spend_ceiling` when the day was already at it. | `test_the_provider_is_not_called_when_the_reserved_bound_breaches` |
+| Durable and restart-safe | `core.models.AIUsageLedger` has a unique `call_key`, a UTC `day` and state columns; `check_and_reserve` serialises same-day reservations with `pg_advisory_xact_lock` and returns the existing row on replay. | `test_a_reservation_is_durable_across_a_connection_restart`, `test_replaying_a_settled_key_changes_nothing` |
+| Expose spent, reserved, remaining and unknown | `BudgetState` / `budget_state().as_dict()` publishes `spent_usd`, `estimated_spend_usd`, `reserved_usd`, `unknown_reserved_usd`, `committed_usd`, `remaining_usd`, `unknown_cost_runs`, `unknown_amount_usd: null` and `basis: "lower_bound"`. The portfolio payload already exposes it as `ai_budget`. | `test_the_state_distinguishes_every_basis_and_reconciles` |
+
+Divergences recorded rather than absorbed:
+
+1. **The reservation is an upper bound, not a forecast.** A run that ultimately
+   costs a fraction of a cent still holds the declared bound until it settles.
+   That can refuse a call that would in fact have fitted, which is the intended
+   direction of the error for a spend ceiling.
+2. **An unknown charge keeps its reservation.** The operator cannot prove the
+   call was free, so the day's committed total stays conservative and
+   `unknown_amount_usd` is null. The state says the total is a lower bound; it
+   does not invent a number for the missing charge.
+3. **Legacy `AgentDecisionLog` rows are counted but not retro-reserved.** Rows
+   written before the ledger have no reservation to hold. They contribute their
+   billed or estimated figures and are counted in `unknown_cost_runs`; they are
+   never given an invented reserve after the fact.
+4. **Only real (live) allocation calls are reserved.** A stub run makes no
+   provider call and has no cost to reserve; its plan already records the stub.
+5. **The provider adapter is unchanged.** `CrewAIStageClient` still returns
+   `cost_usd=None` with a reason; the fix is in what the limiter does with that
+   silence, not in pretending the adapter received a bill.
+6. **The ledger is not a provider invoice.** A charge reported after the run
+   ends, or for a call this process never made, is outside it. `basis:
+   "lower_bound"` says so on every payload.
+
+### 10 — acceptance is verified before an artefact is recorded
+
+Reproduced before the repair: there was no verification command and no
+acceptance record; `record_live_allocation` would record from any working tree;
+nothing checked that a committed recording named a passing commit. The
+committed export and FIX-08 recording therefore carried no commit provenance at
+all.
+
+| Requirement | Where it is enforced | Evidence |
+| --- | --- | --- |
+| One command runs every check and exits non-zero on failure | `scripts/verify_application.py`; stages run sequentially: backend tests, frontend tests, type check, build, lint, format, migration check and an HTTP smoke test. `VERIFY_SUMMARY` is one machine-readable JSON line. | `test_a_passing_stage_reports_its_exit_and_count`, `test_a_failing_stage_exits_non_zero_with_the_stage_named`, `test_an_injected_failure_makes_the_verdict_non_zero` |
+| Acceptance file tied to the commit | `--record` writes `docs/spec/acceptance/<commit>.json` with commit, subject, tree state, verdict, per-stage results, parsed test counts, UTC timestamp and `output_digest`. Durations, paths and timestamps are excluded from the digest, so the same commit reproduces the verdict and digest. | `test_the_record_contains_the_commit_stages_counts_and_digest`, `test_re_running_the_same_commit_reproduces_the_verdict_and_digest` |
+| Refuse a dirty tree | `services.recording_provenance.require_clean_for_recording` reads real `git status` and refuses with stable codes; `record_live_allocation` calls it **before** configuring the provider, so a refusal spends nothing. The exactly expected untracked acceptance file for HEAD is ignored so the documented verify-then-record order is possible; every other change is refused. | `test_an_uncommitted_change_is_refused_before_recording`, `test_a_clean_tree_with_a_passing_record_is_allowed`, `test_a_clean_tree_without_an_acceptance_record_is_refused` |
+| Every committed recording names commit + digest, and the pairing is checked | The Step 5 export builder and `record_live_allocation` emit a stable `recording` block; `python manage.py check_recordings` loads the published record for the named commit and fails on absent/incomplete provenance, a missing record, a digest mismatch or a non-passing verdict. | `test_a_matching_artefact_passes`, `test_a_different_commit_fails`, `test_a_different_digest_fails`, `test_a_missing_provenance_block_fails`, `test_every_committed_recording_names_a_passing_record` |
+| Exact commands are documented | [`ACCEPTANCE.md`](ACCEPTANCE.md) is the definition-of-record; [`DEMO.md`](DEMO.md) §0 quotes the command and the recording order. | documentation-link tests |
+
+Divergences recorded rather than absorbed:
+
+1. **A commit cannot contain the acceptance record that names its own hash.**
+   The documented order is commit, verify `--record`, record the artefact, then
+   commit the artefact and record together. The guard ignores exactly the
+   untracked `docs/spec/acceptance/<HEAD>.json` file; every other change remains
+   a refusal. After the record is committed, HEAD has moved on, so a *new*
+   recording correctly needs a new verification of the new commit.
+2. **The record proves the checks, not the model.** It says the backend,
+   frontend, build, lint, migration and smoke checks passed on that commit. It
+   does not prove a provider response is authentic or that a recorded run is
+   profitable; those remain the artefact's own labels and the review's job.
+3. **`--allow-dirty` exists for developers.** It writes a record marked
+   `tree_clean: false`, `usable_for_recording: false`; the recording guard
+   refuses such a record. The dirty record cannot overwrite a clean one unless
+   the caller points it at the published directory deliberately.
+4. **The smoke stage needs a running stack.** It fails, rather than skips, when
+   the URL is unreachable, so a CI job that forgot to start the application
+   cannot produce a passing verdict. `--skip smoke` is explicit and, without
+   `--allow-skipped`, is also a non-zero verdict.
+5. **Existing committed recordings had provenance attached when the mechanism
+   was introduced.** The FIX-08 artefact predates it; its block says
+   `provenance_kind: "attached_at_remediation"` and names the commit whose clean
+   acceptance record was used. It does not claim the recorder emitted the block.
+   New recordings write it at creation time.

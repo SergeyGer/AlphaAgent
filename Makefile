@@ -10,7 +10,8 @@ PIP_COMPILE ?= venv/bin/pip-compile
 .PHONY: help venv lock lock-dev install install-dev env up down start stop status logs migrate makemigrations audit \
         wiki-push \
         coverage coverage-badge \
-        seed shell test test-guardrails lint format check docker-build docker-up \
+        seed shell test test-guardrails lint format check verify acceptance recordings \
+        docker-build docker-up \
         docker-down dry-run clean
 
 help: ## Show this help
@@ -64,6 +65,15 @@ shell: ## Open a Django shell
 
 test: ## Run the full test suite
 	$(PYTHON) manage.py test core.tests
+
+verify: ## Run the whole application check (tests, frontend, lint, migrations, smoke)
+	$(PYTHON) scripts/verify_application.py
+
+acceptance: ## Run the whole check and write docs/spec/acceptance/<commit>.json
+	$(PYTHON) scripts/verify_application.py --record
+
+recordings: ## Check committed recordings against their acceptance records
+	$(PYTHON) manage.py check_recordings
 
 wiki-push: ## Mirror docs/wiki/ to the GitHub Wiki (README.md is repo-only, not a page)
 	@# The wiki is a separate repository, so it needs its own credentials. When

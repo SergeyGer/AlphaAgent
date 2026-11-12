@@ -29,6 +29,8 @@ from django.utils import timezone
 # is also what tells linters that the bottom-of-file imports are intentional.
 __all__ = [
     "ZERO_USD",
+    "AICostState",
+    "AIUsageLedger",
     "AgentDecisionLog",
     "AgentRole",
     "AllocationSubmission",
@@ -409,6 +411,96 @@ class Transaction(models.Model):
         return -value if self.tx_type == TxType.BUY else value
 
 
+class AICostState(models.TextChoices):
+    """Lifecycle of one logical model call in the daily spend ledger.
+
+    ``reserved``  an upper bound is held before the provider is called.
+    ``billed``    the provider reported the charge; this is a measurement.
+    ``estimated`` the provider reported tokens but no dollars; the price-table
+                  figure is stored and labelled an estimate, never a bill.
+    ``unknown``   no usable cost was reported. The reservation stays held (so
+                  the ceiling remains conservative) and the row carries a typed
+                  reason. This is never stored as a measured zero.
+    """
+
+    RESERVED = "reserved", "Reserved"
+    BILLED = "billed", "Billed"
+    ESTIMATED = "estimated", "Estimated"
+    UNKNOWN = "unknown", "Unknown"
+
+
+class AIUsageLedger(models.Model):
+    """Durable, idempotent daily AI-spend accounting.
+
+    One row per **logical** call, keyed by ``call_key``. The key is unique so a
+    Celery redelivery, a retried submission or a replay cannot book the same
+    call twice. The reservation is written before the provider is called; the
+    row is then reconciled to one of four states and never moved backwards. A
+    process restart loses nothing because the state lives here, not in memory.
+
+    ``reserved_usd`` is the amount currently *held* against the ceiling. It is
+    released when the charge becomes billed or estimated, and deliberately kept
+    for an ``unknown`` charge: the operator cannot prove the call was free, so
+    the conservative bound remains committed. ``reserved_upper_bound_usd``
+    preserves the bound the run was authorised against, even after release.
+    """
+
+    call_key = models.CharField(max_length=255, unique=True)
+    #: UTC date the reservation belongs to. Set at reserve time, so a call that
+    #: settles after midnight is still counted against the day it was authorised
+    #: on rather than silently moving to the next day's budget.
+    day = models.DateField(db_index=True, default=timezone.localdate)
+    provider = models.CharField(max_length=64, blank=True, default="")
+    model = models.CharField(max_length=128, blank=True, default="")
+    stage = models.CharField(max_length=64, blank=True, default="")
+    state = models.CharField(
+        max_length=16, choices=AICostState.choices, default=AICostState.RESERVED
+    )
+    reserved_upper_bound_usd = models.DecimalField(
+        max_digits=14, decimal_places=6, default=Decimal("0")
+    )
+    reserved_usd = models.DecimalField(max_digits=14, decimal_places=6, default=Decimal("0"))
+    billed_usd = models.DecimalField(max_digits=14, decimal_places=6, null=True, blank=True)
+    estimated_usd = models.DecimalField(max_digits=14, decimal_places=6, null=True, blank=True)
+    unknown_reason = models.CharField(max_length=64, blank=True, default="")
+    cost_basis = models.CharField(max_length=32, blank=True, default="")
+    input_tokens = models.IntegerField(default=0)
+    output_tokens = models.IntegerField(default=0)
+    tokens_measured = models.BooleanField(default=False)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    settled_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "AI usage ledger entry"
+        verbose_name_plural = "AI usage ledger"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["day", "state"], name="ai_ledger_day_state_idx"),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(reserved_upper_bound_usd__gte=0),
+                name="ai_ledger_upper_bound_non_negative",
+            ),
+            models.CheckConstraint(
+                condition=Q(reserved_usd__gte=0), name="ai_ledger_reserved_non_negative"
+            ),
+            models.CheckConstraint(
+                condition=Q(billed_usd__isnull=True) | Q(billed_usd__gte=0),
+                name="ai_ledger_billed_non_negative",
+            ),
+            models.CheckConstraint(
+                condition=Q(estimated_usd__isnull=True) | Q(estimated_usd__gte=0),
+                name="ai_ledger_estimated_non_negative",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.call_key} [{self.state}]"
+
+
 class AgentDecisionLog(models.Model):
     """Explainable-AI audit record for one agent invocation."""
 
@@ -478,6 +570,12 @@ class AgentDecisionLog(models.Model):
     #: ``billed_provider_reported`` | ``price_table_estimate`` | ``unknown_pricing``
     #: | ``unknown``. Blank means the basis was not recorded.
     cost_basis = models.CharField(max_length=32, blank=True, default="")
+    #: The ``AIUsageLedger.call_key`` this row was booked under, when the call
+    #: went through the daily-spend ledger. The ledger is the authoritative
+    #: count for these calls, so ``services.budget.cost_state`` excludes linked
+    #: legacy rows instead of adding the same charge twice. Blank means the row
+    #: predates the ledger and is counted from ``api_cost_usd`` / tokens.
+    cost_ledger_key = models.CharField(max_length=255, blank=True, default="", db_index=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:

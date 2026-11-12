@@ -610,6 +610,15 @@ RECOMMENDATION_TTL_MINUTES = env_int("RECOMMENDATION_TTL_MINUTES", 60)
 # runaway loop is caught within one billing cycle.
 AI_DAILY_SPEND_LIMIT_USD = env_decimal("AI_DAILY_SPEND_LIMIT_USD", "5.00")
 
+# The declared upper bound for one logical model run, in USD. The daily limiter
+# reserves this *before* the provider is called, so a provider that reports
+# tokens but not dollars cannot make a day of real spending look like zero.
+# It is a ceiling, not a target: the run's own ProtocolBudget remains the
+# tighter control when it is lower. The value deliberately does not default to
+# zero - a zero reserve would reintroduce the defect this setting exists to
+# prevent. One dollar matches the default AI_DEBATE_MONETARY_BUDGET_USD.
+AI_RUN_COST_UPPER_BOUND_USD = env_decimal("AI_RUN_COST_UPPER_BOUND_USD", "1.00")
+
 # Behaviour once the ceiling is reached. The ceiling is checked before a run is
 # dispatched, never mid-run, so a single run always completes rather than leaving
 # a half-written decision.

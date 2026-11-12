@@ -50,12 +50,19 @@ export function MetricsGrid({ portfolio, loading }: MetricsGridProps): ReactElem
   // just as absolutely as the loss limit halts trading - so it is shown with the
   // same weight rather than buried in the meta strip.
   const aiBudget = portfolio?.ai_budget ?? null;
-  const aiSpent = toNumberOrZero(aiBudget?.spent_usd);
   const aiLimit = toNumberOrZero(aiBudget?.limit_usd);
   const aiRemaining = toNumber(aiBudget?.remaining_usd);
   const aiEnforced = aiBudget?.enforced ?? true;
   const aiExhausted = aiBudget?.exhausted ?? false;
-  const aiUsedRatio = aiLimit > 0 ? aiSpent / aiLimit : 0;
+  // The ceiling is enforced on the committed figure (billed + estimated +
+  // reserved), not on billed alone. A day whose provider reported tokens but no
+  // dollars must not look like a day that spent nothing.
+  const aiCommitted = toNumberOrZero(aiBudget?.committed_usd ?? aiBudget?.spent_usd);
+  const aiReserved = toNumberOrZero(aiBudget?.reserved_usd);
+  const aiUnknownRuns = aiBudget?.unknown_cost_runs ?? 0;
+  const aiLowerBound =
+    (aiBudget?.lower_bound ?? false) && (aiReserved > 0 || aiUnknownRuns > 0);
+  const aiUsedRatio = aiLimit > 0 ? aiCommitted / aiLimit : 0;
   const unpriced = metrics?.unpriced_tickers ?? [];
 
   const equityShare =
@@ -84,6 +91,18 @@ export function MetricsGrid({ portfolio, loading }: MetricsGridProps): ReactElem
       {unpriced.length > 0 ? (
         <p className="font-mono text-[10px] uppercase tracking-wider text-amber-300/80">
           Unpriced: {unpriced.join(', ')} — marked at cost
+        </p>
+      ) : null}
+
+      {aiLowerBound ? (
+        <p
+          role="status"
+          className="font-mono text-[10px] uppercase tracking-wider text-amber-300/80"
+        >
+          AI spend is a lower bound: {formatCurrency(aiBudget?.reserved_usd)} reserved
+          {aiUnknownRuns > 0
+            ? ` · ${aiUnknownRuns} run${aiUnknownRuns === 1 ? '' : 's'} with unknown cost`
+            : ''}
         </p>
       ) : null}
 
@@ -177,11 +196,15 @@ export function MetricsGrid({ portfolio, loading }: MetricsGridProps): ReactElem
                 : 'text-slate-100'
           }
           hint={
-            aiEnforced
-              ? `${formatCurrency(aiBudget?.spent_usd)} of ${formatCurrency(aiBudget?.limit_usd)} · enforced`
-              : `${formatCurrency(aiBudget?.spent_usd)} of ${formatCurrency(aiBudget?.limit_usd)} · not enforced`
+            aiLowerBound
+              ? `${formatCurrency(aiBudget?.spent_usd)} billed + ${formatCurrency(
+                  aiBudget?.reserved_usd,
+                )} reserved · lower bound`
+              : aiEnforced
+                ? `${formatCurrency(aiBudget?.spent_usd)} of ${formatCurrency(aiBudget?.limit_usd)} · enforced`
+                : `${formatCurrency(aiBudget?.spent_usd)} of ${formatCurrency(aiBudget?.limit_usd)} · not enforced`
           }
-          progress={{ value: aiSpent, max: aiLimit }}
+          progress={{ value: aiCommitted, max: aiLimit }}
         />
       </div>
 

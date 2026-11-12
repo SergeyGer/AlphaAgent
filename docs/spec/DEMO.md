@@ -51,6 +51,25 @@ No `AI_LLM_API_KEY` is needed. Leaving it empty selects the deterministic engine
 the five commands below never ask for a model. `config/settings.py` still
 requires `POSTGRES_PASSWORD`, so a completely empty `.env` will fail at import.
 
+## 0. Verify the application before recording anything
+
+A recording is only evidence if it names a verified commit. The one command that
+runs the backend tests, frontend tests, type check, build, lint, migration check
+and a running-stack smoke test is:
+
+```bash
+venv/bin/python scripts/verify_application.py --record
+```
+
+It prints one line per stage plus `VERIFY_SUMMARY {json}` and exits non-zero if
+any stage fails. On a clean tree it writes
+`docs/spec/acceptance/<commit>.json`; `record_live_allocation` refuses to run
+from a dirty tree or without that record, and
+`venv/bin/python manage.py check_recordings` confirms every committed recording
+names the record's commit and digest. The schema, refusal codes and the
+commit/record ordering are in [`ACCEPTANCE.md`](ACCEPTANCE.md); this page only
+quotes the commands.
+
 ## 1. Offline Streamlit demo
 
 **Command** (from the repository root, because the demo imports `services/` and
@@ -278,6 +297,14 @@ operator-supplied demonstration data; the artifact states that separately.
 makes one real, billed provider call, has no stub mode, and refuses to overwrite
 the committed artifact without `--overwrite`. Reproduce only its *shape*: the
 prompt and template version are recorded; the model answer is not reproducible.
+
+The recorder refuses a dirty tree, a missing acceptance record, or a record
+whose verdict did not pass, and writes the record's commit and digest into the
+artefact's `recording` block. The committed FIX-08 artefact predates that
+mechanism, so its block was attached when the mechanism was introduced and says
+so via its `status` and `provenance_kind` fields rather than pretending the
+recorder emitted it. `python manage.py check_recordings` verifies the pairing;
+see [`ACCEPTANCE.md`](ACCEPTANCE.md).
 
 ## 4. Report build (Phase 3)
 
