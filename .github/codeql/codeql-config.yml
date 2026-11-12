@@ -40,3 +40,12 @@ paths-ignore:
   # response contains no exception class, message or file path - so the property this
   # rule exists to protect is checked, from the other direction.
   - core/decision_views.py
+
+  # core/allocation_views.py: py/stack-trace-exposure
+  #
+  # Same shape as decision_views.py: every projection that can raise is wrapped, the
+  # traceback is logged under a correlation id, and the response carries only that id.
+  # CodeQL flags a return inside an error-handling block regardless of what it
+  # returns, so the file is excluded here and the property is covered by tests that
+  # force a failure and assert the body has no exception class, message or path.
+  - core/allocation_views.py
