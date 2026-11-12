@@ -41,6 +41,7 @@ from rest_framework.views import APIView
 
 from core.allocation_models import PortfolioPlan
 from services.allocation_submission import collect_quotes
+from services.execution import ExecutionError, ExecutionRejected
 from services.portfolio_allocation import (
     PlanLegFailed,
     PlanNotApplicableError,
@@ -118,6 +119,12 @@ def _submission_status(plan: PortfolioPlan) -> Response:
 
 
 def _approval_error_response(exc: PlanApprovalError) -> Response:
+    """Typed approval failures carry operator-facing text, so the text is served.
+
+    These are declared messages - a plan version is stale, an approval expired -
+    not arbitrary exception dumps. The distinction matters: an unexpected exception
+    goes through , which quotes nothing.
+    """
     code = getattr(exc, "code", "plan_approval_error")
     if code == "plan_not_found":
         return error_response(status.HTTP_404_NOT_FOUND, str(exc), code=code)
@@ -127,11 +134,23 @@ def _approval_error_response(exc: PlanApprovalError) -> Response:
 
 
 def _execution_error_response(exc: Exception) -> Response:
-    if isinstance(exc, (PlanStaleError, PlanReapprovalRequired, PlanNotApplicableError)):
-        return error_response(status.HTTP_409_CONFLICT, str(exc))
-    if isinstance(exc, (PlanQuoteUnavailable, PlanLegFailed)):
-        return error_response(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
-    return error_response(status.HTTP_400_BAD_REQUEST, str(exc))
+    """Map an execution failure to a status without quoting the exception.
+
+    The message of a database or service exception can carry a table name, a file
+    path or a fragment of a query. The client gets a correlation id; the traceback
+    goes to the log.
+    """
+    correlation = uuid4().hex[:12]
+    logger.exception("Plan execution failed [%s]", correlation)
+    detail = (
+        "The plan could not be executed. "
+        f"The cause was logged on the server with correlation id {correlation}."
+    )
+    if isinstance(exc, ExecutionRejected):
+        return error_response(status.HTTP_409_CONFLICT, detail)
+    if isinstance(exc, ExecutionError):
+        return error_response(status.HTTP_422_UNPROCESSABLE_ENTITY, detail)
+    return error_response(status.HTTP_400_BAD_REQUEST, detail)
 
 
 def _plan_tickers(plan: PortfolioPlan) -> list[str]:
