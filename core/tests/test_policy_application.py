@@ -34,6 +34,30 @@ from services.portfolio_targets import validate_target_proposal
 
 D = Decimal
 CLAIM_IDS = {"MSFT": ["claim-msft"], "JPM": ["claim-jpm"], "XYZ": ["claim-xyz"]}
+TIMED_QUOTES = {
+    ticker: PriceQuote(
+        ticker=ticker,
+        symbol=ticker,
+        price=price,
+        source="test_market_data",
+        as_of=timezone.now(),
+    )
+    for ticker, price in QUOTES.items()
+}
+
+
+def timed(prices=None):
+    as_of = timezone.now()
+    return {
+        ticker: PriceQuote(
+            ticker=ticker,
+            symbol=ticker,
+            price=price,
+            source="test_market_data",
+            as_of=as_of,
+        )
+        for ticker, price in (prices or QUOTES).items()
+    }
 
 
 def plan_for(portfolio, brief, weights, *, key, **kwargs):
@@ -59,7 +83,7 @@ class PolicyAtApplicationTests(TestCase):
         self.portfolio.max_sector_concentration_pct = D("20.00")
         self.portfolio.save(update_fields=["max_sector_concentration_pct"])
         with self.assertRaises(PlanReapprovalRequired):
-            apply_plan(plan.id, quotes=QUOTES)
+            apply_plan(plan.id, quotes=timed())
         self._assert_no_ledger()
         plan.refresh_from_db()
         self.assertTrue(plan.revalidation_required)
@@ -69,7 +93,7 @@ class PolicyAtApplicationTests(TestCase):
         plan = plan_for(self.portfolio, self.brief, self.weights, key="price-double")
         doubled = {**QUOTES, "MSFT": D("200")}
         with self.assertRaises(PlanReapprovalRequired) as caught:
-            apply_plan(plan.id, quotes=doubled)
+            apply_plan(plan.id, quotes=timed(doubled))
         self.assertIn("no longer matches", str(caught.exception))
         self._assert_no_ledger()
 
@@ -79,7 +103,7 @@ class PolicyAtApplicationTests(TestCase):
             self.portfolio, overrides={"max_sector_weight": D("0.20")}
         )
         with self.assertRaises(PlanReapprovalRequired):
-            apply_plan(plan.id, quotes=QUOTES, policy=tightened)
+            apply_plan(plan.id, quotes=timed(), policy=tightened)
         self._assert_no_ledger()
 
     def test_tightening_the_cash_buffer_after_planning_requires_reapproval(self):
@@ -87,7 +111,7 @@ class PolicyAtApplicationTests(TestCase):
         self.portfolio.min_cash_buffer_pct = D("80.00")
         self.portfolio.save(update_fields=["min_cash_buffer_pct"])
         with self.assertRaises(PlanReapprovalRequired):
-            apply_plan(plan.id, quotes=QUOTES)
+            apply_plan(plan.id, quotes=timed())
         self._assert_no_ledger()
 
     def test_a_changed_classification_after_planning_requires_reapproval(self):
@@ -96,14 +120,14 @@ class PolicyAtApplicationTests(TestCase):
             sector="consumer"
         )
         with self.assertRaises(PlanReapprovalRequired):
-            apply_plan(plan.id, quotes=QUOTES)
+            apply_plan(plan.id, quotes=timed())
         self._assert_no_ledger()
 
     def test_removing_a_recorded_classification_after_planning_requires_reapproval(self):
         plan = plan_for(self.portfolio, self.brief, self.weights, key="classification-removed")
         InstrumentClassification.objects.filter(portfolio=self.portfolio, ticker="MSFT").delete()
         with self.assertRaises(PlanReapprovalRequired):
-            apply_plan(plan.id, quotes=QUOTES)
+            apply_plan(plan.id, quotes=timed())
         self._assert_no_ledger()
 
     def test_removing_the_quote_of_an_untouched_holding_fails_without_a_ledger_row(self):
@@ -117,7 +141,7 @@ class PolicyAtApplicationTests(TestCase):
         }
         plan = plan_for(portfolio, brief, weights, key="untouched-missing")
         with self.assertRaises(PlanLegFailed) as caught:
-            apply_plan(plan.id, quotes={"MSFT": QUOTES["MSFT"], "JPM": QUOTES["JPM"]})
+            apply_plan(plan.id, quotes=timed({"MSFT": QUOTES["MSFT"], "JPM": QUOTES["JPM"]}))
         self.assertEqual(caught.exception.code, "price_unavailable")
         self.assertIn("AAPL", str(caught.exception))
         self.assertEqual(Transaction.objects.filter(portfolio=portfolio).count(), 0)
@@ -143,7 +167,7 @@ class PolicyAtApplicationTests(TestCase):
         self.portfolio.max_turnover_pct = D("1.00")
         self.portfolio.save(update_fields=["max_turnover_pct"])
         with self.assertRaises(PlanReapprovalRequired):
-            apply_plan(plan.id, quotes=QUOTES)
+            apply_plan(plan.id, quotes=timed())
         self._assert_no_ledger()
 
     def test_a_non_finite_quote_fails_before_any_ledger_row(self):
@@ -189,16 +213,16 @@ class PolicyAtApplicationTests(TestCase):
 
     def test_repeating_a_successful_plan_adds_no_duplicate_fill(self):
         plan = plan_for(self.portfolio, self.brief, self.weights, key="repeat-apply")
-        first = apply_plan(plan.id, quotes=QUOTES)
+        first = apply_plan(plan.id, quotes=timed())
         count = Transaction.objects.filter(portfolio=self.portfolio).count()
         self.assertEqual(count, len(first.legs))
-        again = apply_plan(plan.id, quotes=QUOTES)
+        again = apply_plan(plan.id, quotes=timed())
         self.assertTrue(again.already_applied)
         self.assertEqual(Transaction.objects.filter(portfolio=self.portfolio).count(), count)
 
     def test_requested_projected_and_executed_weights_are_persisted_with_reasons(self):
         plan = plan_for(self.portfolio, self.brief, self.weights, key="weights-recorded")
-        application = apply_plan(plan.id, quotes=QUOTES)
+        application = apply_plan(plan.id, quotes=timed())
         plan.refresh_from_db()
         self.assertTrue(plan.requested_target_weights)
         self.assertTrue(plan.target_weights)

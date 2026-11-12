@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
@@ -122,7 +123,13 @@ class RecommendationEndpointTests(APITestCase):
         )
 
     def test_approve_endpoint_executes(self):
-        quote = PriceQuote(ticker="AAPL", symbol="AAPL", price=Decimal("100.00"))
+        quote = PriceQuote(
+            ticker="AAPL",
+            symbol="AAPL",
+            price=Decimal("100.00"),
+            source="test_market_data",
+            as_of=timezone.now(),
+        )
         with patch("services.recommendations.get_latest_quote", return_value=quote):
             response = self.client.post(reverse("core:recommendation-approve", args=[self.reco.id]))
 

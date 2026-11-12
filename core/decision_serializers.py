@@ -295,6 +295,13 @@ def guard_payload(guard: GuardRecord) -> dict:
         "policy_version": guard.policy_version,
         "evaluated_portfolio_version": guard.evaluated_portfolio_version,
         "quote_time": utc_iso(guard.quote_time),
+        "quote_source": guard.quote_source or None,
+        "quote_retrieved_at": utc_iso(guard.quote_retrieved_at),
+        "reference_terms": (
+            (guard.numerical_checks or {}).get("reference_terms")
+            if isinstance(guard.numerical_checks, dict)
+            else None
+        ),
         "requested_quantity": str(guard.requested_quantity),
         "allowed_quantity": str(guard.allowed_quantity),
         "difference_quantity": str(guard.difference_quantity),
@@ -478,7 +485,10 @@ def build_run_metadata(run: DecisionRun, *, events=None) -> dict:
             "state": run.execution_state or None,
             "executed": run.execution_state == "executed",
             "awaiting_approval": run.execution_state == "awaiting_approval",
-            "no_trade": run.execution_state in {"held", "rejected", "expired", "blocked"},
+            "no_trade": run.execution_state
+            in {"held", "rejected", "expired", "blocked", "suppressed", "cancelled", "failed"},
+            "suppressed_duplicate_recommendation_id": run.duplicate_recommendation_id,
+            "attempt": _execution_attempt_payload(run),
         },
         "provenance": {
             "mode": run.mode,
@@ -512,6 +522,26 @@ def build_run_metadata(run: DecisionRun, *, events=None) -> dict:
         "fixture_id": run.fixture_id or None,
         "created_at": utc_iso(run.created_at),
         "stage_states": stage_states(run, events),
+    }
+
+
+def _execution_attempt_payload(run: DecisionRun) -> dict | None:
+    attempt = run.execution_attempts.order_by("-created_at").first()
+    if attempt is None:
+        return None
+    return {
+        "id": str(attempt.id),
+        "execution_key": attempt.execution_key,
+        "state": attempt.state,
+        "transaction_id": attempt.transaction_id,
+        "guard_record_id": str(attempt.guard_record_id) if attempt.guard_record_id else None,
+        "terminal_event_id": attempt.terminal_event_id,
+        "quote_observed_at": utc_iso(attempt.quote_observed_at),
+        "quote_retrieved_at": utc_iso(attempt.quote_retrieved_at),
+        "quote_source": attempt.quote_source or None,
+        "approved_terms": attempt.approved_terms,
+        "recovered": attempt.recovered,
+        "completed_at": utc_iso(attempt.completed_at),
     }
 
 

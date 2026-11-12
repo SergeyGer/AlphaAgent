@@ -264,6 +264,10 @@ class TransactionSerializer(serializers.ModelSerializer):
             "gross_value_usd",
             "executed_by",
             "timestamp",
+            "price_observed_at",
+            "price_retrieved_at",
+            "price_source",
+            "price_currency",
         ]
         read_only_fields = fields
 
@@ -398,6 +402,12 @@ class TradeRecommendationSerializer(serializers.ModelSerializer):
             "created_at",
             "is_actionable",
             "transaction_id",
+            "terms_version",
+            "quote_observed_at",
+            "quote_retrieved_at",
+            "price_source",
+            "price_currency",
+            "price_tolerance_pct",
         ]
         read_only_fields = fields
 

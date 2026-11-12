@@ -52,7 +52,13 @@ D = Decimal
 
 
 def quote(price: str = "100.00") -> PriceQuote:
-    return PriceQuote(ticker="AAPL", symbol="AAPL", price=D(price), source="test")
+    return PriceQuote(
+        ticker="AAPL",
+        symbol="AAPL",
+        price=D(price),
+        source="test_market_data",
+        as_of=timezone.now(),
+    )
 
 
 def adjudication_handler(action: str, amount: int):

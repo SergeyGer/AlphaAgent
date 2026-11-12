@@ -50,6 +50,7 @@ __all__ = [
     "EvidenceItem",
     "EvidenceSourceType",
     "ExecutedBy",
+    "ExecutionAttempt",
     "Experiment",
     "ExperimentEvaluationMode",
     "ExperimentRun",
@@ -67,6 +68,7 @@ __all__ = [
     "OutcomeRecord",
     "PlanApproval",
     "PlanApprovalDecision",
+    "PlanExecutionAttempt",
     "PlanLegPriority",
     "PlanLegStatus",
     "PlanSide",
@@ -79,6 +81,7 @@ __all__ = [
     "PrimaryMetricFamily",
     "Rebuttal",
     "RebuttalResponseType",
+    "RecommendationApproval",
     "RecommendationStatus",
     "RiskProfile",
     "RunEvent",
@@ -360,6 +363,13 @@ class Transaction(models.Model):
     #: row instead of adding another fill; the service checks it first so the
     #: common case is a read rather than an IntegrityError.
     execution_key = models.CharField(max_length=200, null=True, blank=True, unique=True)
+    #: The market observation behind ``price``. Null means the producer did not
+    #: record it (legacy or an explicit paper estimate); it is never filled with
+    #: the execution timestamp to make an untimed fill look observed.
+    price_observed_at = models.DateTimeField(null=True, blank=True)
+    price_retrieved_at = models.DateTimeField(null=True, blank=True)
+    price_source = models.CharField(max_length=64, blank=True, default="")
+    price_currency = models.CharField(max_length=8, blank=True, default="USD")
     #: Canonical hash of the execution request that produced this row. A key
     #: reused with a different request is a conflict, not a duplicate.
     execution_request_hash = models.CharField(max_length=64, blank=True, default="")
@@ -791,6 +801,20 @@ class TradeRecommendation(models.Model):
         blank=True,
         related_name="recommendation",
     )
+    #: The version of the terms shown to the reviewer. A price move beyond the
+    #: approved tolerance increments this and requires a new approval; the old
+    #: ``RecommendationApproval`` row stays readable as the superseded terms.
+    terms_version = models.PositiveIntegerField(default=1)
+    #: Observation provenance of the price displayed on the recommendation.
+    #: Null means the producer did not record it; it is never filled with "now"
+    #: to make an untimed proposal look current.
+    quote_observed_at = models.DateTimeField(null=True, blank=True)
+    quote_retrieved_at = models.DateTimeField(null=True, blank=True)
+    price_source = models.CharField(max_length=64, blank=True, default="")
+    price_currency = models.CharField(max_length=8, blank=True, default="USD")
+    #: The drift tolerance that applies to an approval of these terms. Null
+    #: means the execution policy default in force at approval.
+    price_tolerance_pct = models.DecimalField(max_digits=6, decimal_places=4, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:
@@ -890,6 +914,7 @@ from core.allocation_models import (  # noqa: E402
     InstrumentClassificationSource,
     PlanApproval,
     PlanApprovalDecision,
+    PlanExecutionAttempt,
     PlanLegPriority,
     PlanLegStatus,
     PlanSide,
@@ -916,6 +941,7 @@ from core.decision_models import (  # noqa: E402
     DecisionStatus,
     EvidenceItem,
     EvidenceSourceType,
+    ExecutionAttempt,
     GuardRecord,
     GuardStatus,
     InputSnapshot,
@@ -948,3 +974,78 @@ from core.measurement_models import (  # noqa: E402
     ExperimentVariant,
     PrimaryMetricFamily,
 )
+
+
+class RecommendationApproval(models.Model):
+    """The exact recommendation terms a human approved, frozen at that moment.
+
+    The recommendation row is mutable: a later price move changes what the next
+    reviewer sees. This row is not. It names the recommendation version, the
+    side, quantity, reference price, tolerance, expiry and the observation
+    provenance the reviewer was looking at, plus the policy and portfolio
+    versions that decided permission. ``accepted=False`` records an approval
+    attempt that was superseded because the market had moved beyond the terms;
+    the transaction link is set only for the attempt that actually executed.
+    """
+
+    id = models.BigAutoField(primary_key=True)
+    recommendation = models.ForeignKey(
+        TradeRecommendation,
+        on_delete=models.CASCADE,
+        related_name="approvals",
+    )
+    recommendation_version = models.PositiveIntegerField(default=1)
+    side = models.CharField(max_length=4, choices=TxType.choices)
+    quantity = models.DecimalField(max_digits=20, decimal_places=8)
+    reference_price = models.DecimalField(max_digits=18, decimal_places=8)
+    tolerance_pct = models.DecimalField(max_digits=6, decimal_places=4)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    quote_observed_at = models.DateTimeField(null=True, blank=True)
+    quote_retrieved_at = models.DateTimeField(null=True, blank=True)
+    quote_source = models.CharField(max_length=64, blank=True, default="")
+    policy_version = models.CharField(max_length=64, blank=True, default="")
+    portfolio_version = models.CharField(max_length=64, blank=True, default="")
+    terms_hash = models.CharField(max_length=64, blank=True, default="")
+    decided_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="recommendation_approvals",
+    )
+    decided_at = models.DateTimeField(default=timezone.now, db_index=True)
+    accepted = models.BooleanField(default=False)
+    reason_code = models.CharField(max_length=64, blank=True, default="")
+    reason = models.TextField(blank=True, default="")
+    transaction = models.OneToOneField(
+        Transaction,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="recommendation_approval",
+    )
+    legacy_unknown_provenance = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = "Recommendation approval"
+        verbose_name_plural = "Recommendation approvals"
+        ordering = ["-decided_at", "-id"]
+        indexes = [
+            models.Index(fields=["recommendation", "-decided_at"], name="reco_approval_recent_idx"),
+        ]
+        constraints = [
+            models.CheckConstraint(condition=Q(quantity__gt=0), name="reco_approval_qty_positive"),
+            models.CheckConstraint(
+                condition=Q(reference_price__gt=0), name="reco_approval_price_positive"
+            ),
+            models.CheckConstraint(
+                condition=Q(tolerance_pct__gte=0), name="reco_approval_tolerance_non_negative"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"{self.recommendation_id} v{self.recommendation_version} "
+            f"{self.side} {self.quantity} @ {self.reference_price} "
+            f"[{'accepted' if self.accepted else self.reason_code or 'pending'}]"
+        )

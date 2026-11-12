@@ -439,6 +439,24 @@ def build_plan_review(plan: PortfolioPlan, *, now: datetime | None = None) -> di
             "applied_at": utc_iso(plan.applied_at),
             "applied_by": plan.applied_by.username if plan.applied_by_id else None,
             "applied_approval_version": plan.applied_approval_version or None,
+            "execution_attempt_id": (
+                str(plan.execution_attempt_id) if plan.execution_attempt_id else None
+            ),
+            "execution_attempt_number": plan.execution_attempt_number or None,
+            "attempts": [
+                {
+                    "attempt_id": str(attempt.attempt_id),
+                    "attempt_number": attempt.attempt_number,
+                    "status": attempt.status,
+                    "mode": attempt.mode or None,
+                    "started_at": utc_iso(attempt.started_at),
+                    "finished_at": utc_iso(attempt.finished_at),
+                    "failure_code": attempt.failure_code or None,
+                    "failure_detail": attempt.failure_detail or None,
+                    "transaction_ids": attempt.transaction_ids,
+                }
+                for attempt in plan.execution_attempts.order_by("-started_at")[:5]
+            ],
             "executed_target_weights": plan.executed_target_weights,
             "reasons": plan.execution_reasons,
             "transaction_ids": [leg["transaction_id"] for leg in legs if leg["transaction_id"]],

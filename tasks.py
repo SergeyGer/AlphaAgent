@@ -34,7 +34,7 @@ from typing import Any
 
 from celery import group, shared_task
 from django.conf import settings
-from django.db import DatabaseError, OperationalError
+from django.db import DatabaseError, OperationalError, transaction
 from django.db.models import Prefetch, Q
 from django.utils import timezone
 
@@ -77,6 +77,7 @@ from services.execution import (
     evaluate_proposal,
     portfolio_policy_version,
 )
+from services.execution_audit import ExecutionAudit, record_fill_outcome, record_terminal_outcome
 from services.fundamentals import get_financial_health, get_price_history
 from services.ledger import PositionState, realised_pnl_today, replay_positions
 from services.market_data import get_latest_quote
@@ -85,6 +86,7 @@ from services.portfolio_metrics import build_exposure
 from services.recommendations import (
     create_recommendation,
     expire_stale_recommendations,
+    find_pending_recommendation,
 )
 from services.snapshots import capture_all_snapshots, capture_snapshot
 from services.thesis import current_thesis, sync_after_trade
@@ -338,22 +340,80 @@ def run_alpha_agent_task(
 
     transaction_row: Transaction | None = None
     recommendation = None
+    duplicate_recommendation = None
     final_decision = decision
     execution_state = None
     execution_error = ""
+    audit_recorded = False
 
     if require_approval and decision.approved:
-        # Advisory mode: the trade is valid, but a human must approve it.
-        recommendation = create_recommendation(
-            portfolio,
-            proposal,
-            decision.price,
-            ticker=ticker,
-            approved_amount=decision.amount,
-            decision_run=run,
-        )
-        execution_state = DecisionExecutionState.AWAITING_APPROVAL
+        # Advisory mode: the trade is valid, but a human must approve it. The
+        # recommendation and the run's awaiting-approval state are one
+        # transaction; entering that state without an actionable recommendation
+        # would wait forever for a decision nobody can make.
+        with transaction.atomic():
+            recommendation = create_recommendation(
+                portfolio,
+                proposal,
+                decision.price,
+                ticker=ticker,
+                approved_amount=decision.amount,
+                decision_run=run,
+                quote_observed_at=quote.as_of if quote is not None else None,
+                quote_retrieved_at=getattr(quote, "retrieved_at", None),
+                price_source=(getattr(quote, "source", "") if quote is not None else ""),
+                price_currency=(getattr(quote, "currency", "") if quote is not None else "USD"),
+            )
+            if recommendation is None:
+                duplicate_recommendation = find_pending_recommendation(portfolio, ticker)
+                if duplicate_recommendation is not None and run is not None:
+                    execution_state = DecisionExecutionState.SUPPRESSED
+                    record_terminal_outcome(
+                        run=run,
+                        outcome=execution_state,
+                        reason=(
+                            "A duplicate advisory proposal was suppressed; the existing "
+                            "pending recommendation keeps its original lifecycle."
+                        ),
+                        duplicate_recommendation=duplicate_recommendation,
+                        user_id=user_id,
+                    )
+                    audit_recorded = True
+                else:
+                    execution_state = DecisionExecutionState.BLOCKED
+                    decision.approved = False
+                    decision.reason = (
+                        "The proposal could not become an actionable recommendation; "
+                        "no approval state was entered."
+                    )
+                    if run is not None:
+                        record_terminal_outcome(
+                            run=run,
+                            outcome=execution_state,
+                            reason=decision.reason,
+                            user_id=user_id,
+                        )
+                        audit_recorded = True
+            else:
+                execution_state = DecisionExecutionState.AWAITING_APPROVAL
+                if run is not None:
+                    complete_run(
+                        run,
+                        outcome=execution_state,
+                        recommendation=recommendation,
+                        reason="A human decision is required.",
+                        requires_approval=True,
+                    )
+                    audit_recorded = True
     elif decision.approved:
+        audit = ExecutionAudit(
+            run=run,
+            outcome=DecisionExecutionState.EXECUTED,
+            reason=decision.reason,
+            via="autonomous",
+            user_id=user_id,
+            execution_key=execution_key,
+        )
         request = ExecutionRequest(
             portfolio_id=portfolio.id,
             ticker=ticker,
@@ -367,9 +427,31 @@ def run_alpha_agent_task(
             approved_policy_version=policy_version,
             approved_portfolio_version=portfolio_version,
             approved_price=decision.price,
+            approved_quantity=decision.amount,
+            quote_time=quote.as_of if quote is not None else None,
+            quote_source=(getattr(quote, "source", "") if quote is not None else ""),
+            quote_retrieved_at=getattr(quote, "retrieved_at", None),
         )
         try:
-            execution = apply_trade(portfolio.id, ticker, decision, request=request)
+            with transaction.atomic():
+                execution = apply_trade(
+                    portfolio.id, ticker, decision, request=request, audit=audit
+                )
+                if (
+                    execution.transaction is not None
+                    and run is not None
+                    and run.execution_state != DecisionExecutionState.EXECUTED
+                ):
+                    record_fill_outcome(
+                        run=run,
+                        transaction_row=execution.transaction,
+                        decision=execution.decision,
+                        request=request,
+                        reason=execution.reason,
+                        via="autonomous",
+                        user_id=user_id,
+                    )
+                audit_recorded = execution.transaction is not None
         except (ExecutionRejected, DatabaseError, OperationalError) as exc:
             decision.approved = False
             decision.reason = f"Execution failed and was rolled back: {exc}"
@@ -381,6 +463,16 @@ def run_alpha_agent_task(
                 else DecisionExecutionState.FAILED
             )
             logger.exception("Trade execution failed for %s/%s: %s", portfolio_id, ticker, exc)
+            if run is not None:
+                with transaction.atomic():
+                    record_terminal_outcome(
+                        run=run,
+                        outcome=execution_state,
+                        guard_decision=final_decision,
+                        reason=decision.reason,
+                        user_id=user_id,
+                    )
+                audit_recorded = True
         else:
             final_decision = execution.decision
             if not execution.approved or execution.transaction is None:
@@ -389,16 +481,55 @@ def run_alpha_agent_task(
                 decision.approved = False
                 decision.reason = execution.reason
                 execution_state = DecisionExecutionState.BLOCKED
+                if run is not None:
+                    with transaction.atomic():
+                        record_terminal_outcome(
+                            run=run,
+                            outcome=execution_state,
+                            guard_decision=final_decision,
+                            reason=execution.reason,
+                            user_id=user_id,
+                        )
+                    audit_recorded = True
             else:
                 transaction_row = execution.transaction
                 execution_state = DecisionExecutionState.EXECUTED
                 emit_trade(user_id, transaction_row)
-                notify_trade.delay(transaction_row.id)
                 _capture_after_trade(portfolio)
     elif decision.action == "HOLD":
         execution_state = DecisionExecutionState.HELD
+        if run is not None:
+            with transaction.atomic():
+                record_terminal_outcome(
+                    run=run,
+                    outcome=execution_state,
+                    reason=decision.reason,
+                    user_id=user_id,
+                )
+            audit_recorded = True
     else:
         execution_state = DecisionExecutionState.BLOCKED
+        if run is not None:
+            with transaction.atomic():
+                record_terminal_outcome(
+                    run=run,
+                    outcome=execution_state,
+                    guard_decision=decision,
+                    reason=decision.reason,
+                    user_id=user_id,
+                )
+            audit_recorded = True
+
+    # Notifications are dispatched only after the ledger transaction committed.
+    if transaction_row is not None:
+        try:
+            from config.celery import app as celery_app
+
+            celery_app.send_task("tasks.notify_trade_task", args=[transaction_row.id])
+        except Exception as exc:  # pragma: no cover - notification is best effort
+            logger.warning(
+                "Could not enqueue trade notification for %s: %s", transaction_row.id, exc
+            )
 
     # ---- 4. Explainability log (always written) -------------------------
     audit_reasoning = run_result.reasoning
@@ -469,7 +600,7 @@ def run_alpha_agent_task(
     # The run stayed in ``validating`` until this point. Only now, with an actual
     # guard result and (where applicable) a ledger row, does it become a
     # completed decision - and the execution state says exactly what happened.
-    if run is not None and execution_state is not None:
+    if run is not None and execution_state is not None and not audit_recorded:
         try:
             complete_run(
                 run,
@@ -519,6 +650,8 @@ def run_alpha_agent_task(
         status = "executed"
     elif recommendation is not None:
         status = "awaiting_approval"
+    elif execution_state == DecisionExecutionState.SUPPRESSED:
+        status = "suppressed"
     elif decision.action == "HOLD":
         status = "hold"
     elif execution_state == DecisionExecutionState.FAILED:
@@ -542,6 +675,9 @@ def run_alpha_agent_task(
         "latency_ms": run_result.latency_ms,
         "transaction_id": transaction_row.id if transaction_row else None,
         "recommendation_id": recommendation.id if recommendation else None,
+        "duplicate_recommendation_id": (
+            duplicate_recommendation.id if duplicate_recommendation is not None else None
+        ),
         "decision_run_id": str(run.id) if run is not None else None,
         "execution_state": execution_state,
         "bull_case_chars": len(run_result.bull_case),

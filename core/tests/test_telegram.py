@@ -251,7 +251,13 @@ class ApprovalCallbackTests(TelegramTestCase):
     def test_approve_button_executes_the_trade(self):
         from services.market_data import PriceQuote
 
-        quote = PriceQuote(ticker="AAPL", symbol="AAPL", price=Decimal("100.00"))
+        quote = PriceQuote(
+            ticker="AAPL",
+            symbol="AAPL",
+            price=Decimal("100.00"),
+            source="test_market_data",
+            as_of=timezone.now(),
+        )
         with patch("services.recommendations.get_latest_quote", return_value=quote):
             handle_update(callback_update(self.chat_id, f"ap:{self.reco.id}"))
 

@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from django.test import override_settings
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -17,7 +18,13 @@ from services.market_data import PriceQuote
 
 def fake_quote(price: str):
     def _fetch(symbol: str):
-        return PriceQuote(ticker=symbol, symbol=symbol, price=Decimal(price))
+        return PriceQuote(
+            ticker=symbol,
+            symbol=symbol,
+            price=Decimal(price),
+            source="test_market_data",
+            as_of=timezone.now(),
+        )
 
     return _fetch
 

@@ -6,6 +6,7 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from django.test import TestCase, override_settings
+from django.utils import timezone
 
 from ai_agent import AgentRunResult, TradeProposal
 from core.models import AgentDecisionLog, Asset, MarketSentiment, Transaction, TxType
@@ -20,6 +21,8 @@ def quote(price: str, change: str | None = None) -> PriceQuote:
         symbol="AAPL",
         price=Decimal(price),
         previous_close=Decimal(change) if change else None,
+        source="test_market_data",
+        as_of=timezone.now(),
     )
 
 

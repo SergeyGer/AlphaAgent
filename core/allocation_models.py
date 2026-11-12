@@ -49,6 +49,7 @@ __all__ = [
     "InstrumentClassificationSource",
     "PlanApproval",
     "PlanApprovalDecision",
+    "PlanExecutionAttempt",
     "PlanLegPriority",
     "PlanLegStatus",
     "PlanSide",
@@ -262,6 +263,11 @@ class PortfolioPlan(models.Model):
     brief_hash = models.CharField(max_length=64, blank=True, default="")
     cost_model = models.JSONField(default=dict)
     model_metadata = models.JSONField(default=dict)
+    #: The observation provenance of every mark the plan was sized from:
+    #: ``{ticker: {price, source, as_of, retrieved_at, currency}}``. A missing
+    #: entry means the producer did not record it; the approval then records
+    #: that absence rather than inventing a time.
+    quote_observations = models.JSONField(default=dict, blank=True)
 
     #: What the plan was approved against: the limits, classifications, cost
     #: assumptions and allocation that decide whether it is still permitted.
@@ -320,6 +326,12 @@ class PortfolioPlan(models.Model):
 
     failure_code = models.CharField(max_length=64, blank=True, default="")
     failure_detail = models.TextField(blank=True, default="")
+
+    #: Identity of the most recent application attempt. Failure recording uses a
+    #: conditional update on this token, so a delayed handler from an older
+    #: attempt cannot overwrite a plan another attempt has already applied.
+    execution_attempt_id = models.UUIDField(null=True, blank=True, db_index=True)
+    execution_attempt_number = models.PositiveIntegerField(default=0)
 
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -628,6 +640,19 @@ class PlanApproval(models.Model):
     #: The evaluator's portfolio version at decision time. A reviewer should be
     #: able to tell whether the plan already looked stale when it was approved.
     evaluated_portfolio_version = models.CharField(max_length=64, blank=True, default="")
+    #: The exact terms the reviewer approved. ``approved_legs`` is a list of
+    #: ``{sequence, ticker, side, quantity, reference_price, quote_observed_at,
+    #: quote_retrieved_at, quote_source}``. ``terms_hash`` is the canonical hash
+    #: of that list plus the tolerances and risk versions below, so a plan that
+    #: changed without a new version is detectable.
+    approved_legs = models.JSONField(default=list, blank=True)
+    terms_hash = models.CharField(max_length=64, blank=True, default="")
+    price_tolerance_pct = models.DecimalField(max_digits=6, decimal_places=4, null=True, blank=True)
+    quantity_tolerance = models.DecimalField(max_digits=20, decimal_places=8, null=True, blank=True)
+    max_quote_age_seconds = models.PositiveIntegerField(null=True, blank=True)
+    policy_version = models.CharField(max_length=64, blank=True, default="")
+    classification_version = models.CharField(max_length=64, blank=True, default="")
+    allocation_policy_version = models.CharField(max_length=64, blank=True, default="")
 
     class Meta:
         verbose_name = "Plan approval"
@@ -648,3 +673,45 @@ class PlanApproval(models.Model):
 
     def __str__(self) -> str:
         return f"approval {self.plan_id} v{self.plan_version} [{self.decision}]"
+
+
+class PlanExecutionAttempt(models.Model):
+    """One attempt to apply a plan, successful or not.
+
+    The plan row records the outcome of the newest attempt. This row keeps every
+    attempt, so a failed attempt that was overtaken by a successful one remains
+    visible without either row pretending to be the other. ``attempt_id`` is the
+    identity the delayed failure handler conditions on; ``attempt_number`` is
+    for humans and may repeat after a rollback.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    plan = models.ForeignKey(
+        PortfolioPlan,
+        on_delete=models.CASCADE,
+        related_name="execution_attempts",
+    )
+    attempt_id = models.UUIDField(unique=True)
+    attempt_number = models.PositiveIntegerField(default=1)
+    status = models.CharField(max_length=16, default="running")
+    mode = models.CharField(max_length=8, blank=True, default="")
+    expected_plan_version = models.PositiveIntegerField(default=1)
+    expected_portfolio_version = models.CharField(max_length=64, blank=True, default="")
+    price_tolerance_pct = models.DecimalField(max_digits=6, decimal_places=4, null=True, blank=True)
+    transaction_ids = models.JSONField(default=list, blank=True)
+    failure_code = models.CharField(max_length=64, blank=True, default="")
+    failure_detail = models.TextField(blank=True, default="")
+    detail = models.JSONField(default=dict, blank=True)
+    started_at = models.DateTimeField(default=timezone.now, db_index=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Plan execution attempt"
+        verbose_name_plural = "Plan execution attempts"
+        ordering = ["-started_at", "-id"]
+        indexes = [
+            models.Index(fields=["plan", "-started_at"], name="plan_attempt_recent_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"plan {self.plan_id} attempt {self.attempt_number} [{self.status}]"

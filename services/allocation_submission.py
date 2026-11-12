@@ -52,6 +52,7 @@ from core.allocation_models import (
 from core.decision_json import content_hash, json_safe, utc_iso
 from core.models import Asset, Portfolio
 from services.allocation_provider import allocation_budget, build_allocation_client
+from services.execution import Mark
 from services.market_data import get_latest_quote
 from services.portfolio_allocation import (
     PROTOCOL_VERSION,
@@ -260,21 +261,60 @@ class QuoteCollection:
 
     quotes: dict[str, Decimal] = field(default_factory=dict)
     sources: dict[str, str] = field(default_factory=dict)
+    #: The full observation for each price, including the instant it was made.
+    #: A price in ``quotes`` without an entry here has unknown provenance.
+    observations: dict[str, Mark] = field(default_factory=dict)
     missing: list[str] = field(default_factory=list)
     fallbacks: list[dict] = field(default_factory=list)
     errors: list[dict] = field(default_factory=list)
 
-    def add(self, ticker: str, price: Decimal, source: str) -> None:
+    def add(
+        self,
+        ticker: str,
+        price: Decimal,
+        source: str,
+        *,
+        as_of=None,
+        retrieved_at=None,
+        currency: str = "USD",
+    ) -> None:
         if price is None or price <= ZERO:
             return
-        self.quotes[ticker] = price
-        self.sources[ticker] = source
+        symbol = str(ticker).upper()
+        self.quotes[symbol] = price
+        self.sources[symbol] = source
+        self.observations[symbol] = Mark(
+            price=price,
+            as_of=as_of,
+            source=source,
+            ticker=symbol,
+            currency=currency or "USD",
+            retrieved_at=retrieved_at,
+        )
 
     def as_dict(self) -> dict:
         return {
             "quote_source": "market_data_with_declared_cost_fallback",
             "quotes": {
-                ticker: {"price": str(price), "source": self.sources.get(ticker, "unknown")}
+                ticker: {
+                    "price": str(price),
+                    "source": self.sources.get(ticker, "unknown"),
+                    "as_of": (
+                        self.observations[ticker].as_of.isoformat()
+                        if ticker in self.observations
+                        and self.observations[ticker].as_of is not None
+                        else None
+                    ),
+                    "retrieved_at": (
+                        self.observations[ticker].retrieved_at.isoformat()
+                        if ticker in self.observations
+                        and self.observations[ticker].retrieved_at is not None
+                        else None
+                    ),
+                    "currency": (
+                        self.observations[ticker].currency if ticker in self.observations else "USD"
+                    ),
+                }
                 for ticker, price in sorted(self.quotes.items())
             },
             "missing_tickers": sorted(self.missing),
@@ -332,7 +372,14 @@ def collect_quotes(
             except Exception:
                 price = None
             if price is not None and price > ZERO:
-                collection.add(ticker, price, str(getattr(quote, "source", "") or "market_data"))
+                collection.add(
+                    ticker,
+                    price,
+                    str(getattr(quote, "source", "") or "market_data"),
+                    as_of=getattr(quote, "as_of", None),
+                    retrieved_at=getattr(quote, "retrieved_at", None),
+                    currency=str(getattr(quote, "currency", "") or "USD"),
+                )
                 continue
         asset = assets.get(ticker)
         if (
@@ -341,7 +388,13 @@ def collect_quotes(
             and asset.avg_purchase_price
             and asset.avg_purchase_price > ZERO
         ):
-            collection.add(ticker, asset.avg_purchase_price, "average_cost_fallback")
+            collection.add(
+                ticker,
+                asset.avg_purchase_price,
+                "average_cost_fallback",
+                as_of=None,
+                retrieved_at=timezone.now(),
+            )
             collection.fallbacks.append(
                 {
                     "ticker": ticker,
@@ -663,6 +716,18 @@ def process_submission(submission: AllocationSubmission) -> AllocationSubmission
             policy=policy,
             cost_model=cost_model,
             execution_mode=EXECUTION_MODE_LIVE,
+            quote_observations={
+                ticker: mark.as_dict()
+                if hasattr(mark, "as_dict")
+                else {
+                    "price": str(mark.price),
+                    "source": mark.source,
+                    "as_of": mark.as_of.isoformat() if mark.as_of else None,
+                    "retrieved_at": mark.retrieved_at.isoformat() if mark.retrieved_at else None,
+                    "currency": mark.currency,
+                }
+                for ticker, mark in quotes.observations.items()
+            },
         )
         metadata = dict(plan.model_metadata or {})
         metadata.update(
