@@ -397,6 +397,9 @@ export function DecisionRunsPage({ runId }: DecisionRunsPageProps): ReactElement
             <a href="#/runs" className={CONTROL_CLASS}>
               All runs
             </a>
+            <a href="#/plans" className={CONTROL_CLASS}>
+              Portfolio plans
+            </a>
             <a href="#/" className={CONTROL_CLASS}>
               Dashboard
             </a>

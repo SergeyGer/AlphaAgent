@@ -35,14 +35,20 @@ from __future__ import annotations
 import uuid
 from decimal import Decimal
 
+from django.conf import settings
 from django.db import models
 from django.db.models import Q
+from django.utils import timezone
 
 __all__ = [
     "EXECUTION_MODE_LIVE",
     "EXECUTION_MODE_PAPER",
+    "AllocationSubmission",
+    "AllocationSubmissionStatus",
     "InstrumentClassification",
     "InstrumentClassificationSource",
+    "PlanApproval",
+    "PlanApprovalDecision",
     "PlanLegPriority",
     "PlanLegStatus",
     "PlanSide",
@@ -138,6 +144,8 @@ class PlanStatus(models.TextChoices):
     ``no_change`` is a first-class outcome. The specification explicitly allows
     maintaining cash and making no change, and collapsing that into ``applied``
     would make a plan that traded nothing indistinguishable from one that did.
+    ``rejected`` is a human review decision and is distinct from ``cancelled``
+    (a plan withdrawn before a decision) and ``failed`` (an execution failure).
     """
 
     PROPOSED = "proposed", "Proposed"
@@ -146,6 +154,7 @@ class PlanStatus(models.TextChoices):
     FAILED = "failed", "Failed"
     SUPERSEDED = "superseded", "Superseded"
     CANCELLED = "cancelled", "Cancelled"
+    REJECTED = "rejected", "Rejected"
 
 
 class PlanSide(models.TextChoices):
@@ -218,6 +227,16 @@ class PortfolioPlan(models.Model):
     evaluated_portfolio_version = models.CharField(max_length=64)
     investment_horizon_days = models.PositiveSmallIntegerField(default=30)
 
+    #: Immutable review version. It changes only when the plan's material
+    #: decision changes (``revalidate_plan`` re-derives the legs and binding).
+    #: An approval names ``(plan_id, plan_version, approval_hash)`` and an
+    #: expiry, so a later material change cannot inherit the old approval.
+    plan_version = models.PositiveIntegerField(default=1)
+    #: The validated proposal's own statement of whether the evidence was
+    #: sufficient. Stored because the review surface must not infer it from the
+    #: existence of a plan.
+    data_sufficiency = models.CharField(max_length=16, blank=True, default="")
+
     objective = models.TextField(blank=True, default="")
 
     #: The model's request and the plan's constrained target. Both include CASH
@@ -250,6 +269,32 @@ class PortfolioPlan(models.Model):
     #: recomputes it under the lock and refuses a plan whose permissions moved.
     approval_binding = models.JSONField(default=dict)
     approval_hash = models.CharField(max_length=64, blank=True, default="")
+
+    #: The human approval currently in force. ``approval_version`` is the plan
+    #: version the decision named; it is cleared whenever the plan materially
+    #: changes. ``approval_expires_at`` is mandatory for an approval: an
+    #: approval without an expiry would be an unbounded permission.
+    approval_version = models.PositiveIntegerField(default=0)
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="approved_portfolio_plans",
+    )
+    approved_at = models.DateTimeField(null=True, blank=True)
+    approval_expires_at = models.DateTimeField(null=True, blank=True)
+
+    #: The approval that was in force when the plan executed. Execution is an
+    #: explicit second act; this records which permission it used.
+    applied_approval_version = models.PositiveIntegerField(default=0)
+    applied_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="applied_portfolio_plans",
+    )
 
     #: The weights actually achieved after application, with the per-leg reason.
     #: Requested and projected weights were already stored; without this the plan
@@ -314,11 +359,16 @@ class PortfolioPlan(models.Model):
             PlanStatus.NO_CHANGE,
             PlanStatus.FAILED,
             PlanStatus.CANCELLED,
+            PlanStatus.REJECTED,
         }
 
     @property
     def is_applicable(self) -> bool:
         return self.status == PlanStatus.PROPOSED and not self.revalidation_required
+
+    @property
+    def is_reviewable(self) -> bool:
+        return self.status == PlanStatus.PROPOSED
 
 
 class PortfolioPlanLeg(models.Model):
@@ -405,3 +455,196 @@ class PortfolioPlanLeg(models.Model):
     @property
     def was_applied(self) -> bool:
         return self.status == PlanLegStatus.APPLIED and self.transaction_id is not None
+
+
+# ---------------------------------------------------------------------------
+# Analysis submissions
+# ---------------------------------------------------------------------------
+class AllocationSubmissionStatus(models.TextChoices):
+    """Lifecycle of one idempotent portfolio-analysis request.
+
+    ``accepted`` is the row written before the model call. It is deliberately
+    separate from ``running``: a crash between the two leaves a submission that
+    was recorded and not executed, which is visible rather than silently
+    re-run. A failed analysis keeps the row (and its error) so a retry of the
+    same idempotency key returns the same failure rather than paying for a
+    second call.
+    """
+
+    ACCEPTED = "accepted", "Accepted"
+    RUNNING = "running", "Running"
+    COMPLETED = "completed", "Completed"
+    FAILED = "failed", "Failed"
+
+
+class AllocationSubmission(models.Model):
+    """One authenticated, idempotent request for a portfolio allocation plan.
+
+    Why this is not a ``DecisionRun``
+    ---------------------------------
+    ``DecisionRun`` is per instrument: one ticker, one debate, one guard record.
+    A portfolio allocation is one decision over the whole portfolio, sized
+    against one snapshot and producing one plan. Recording it as N decision runs
+    would either duplicate the portfolio call per ticker or invent a ticker that
+    does not exist. This table is the submission record, and the status URL the
+    ``POST`` returns points at it.
+
+    ``request_hash`` covers the *submission body*, not the model response. That
+    is what makes the retry idempotent before the model is called: the same key
+    with a different body is a conflict even though the model would produce a
+    different answer anyway.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    portfolio = models.ForeignKey(
+        "core.Portfolio",
+        on_delete=models.CASCADE,
+        related_name="allocation_submissions",
+    )
+    idempotency_key = models.CharField(max_length=128)
+    request_hash = models.CharField(max_length=64)
+    #: The canonical, validated request body. Stored verbatim so a conflict
+    #: decision can be audited rather than argued about.
+    request = models.JSONField(default=dict)
+    tickers = models.JSONField(default=list)
+    mode = models.CharField(max_length=16)
+    protocol_version = models.CharField(max_length=64)
+    status = models.CharField(
+        max_length=16,
+        choices=AllocationSubmissionStatus.choices,
+        default=AllocationSubmissionStatus.ACCEPTED,
+        db_index=True,
+    )
+
+    #: The plan this analysis produced, when it completed. SET_NULL keeps the
+    #: submission's own record if an operator removes a plan.
+    plan = models.ForeignKey(
+        "core.PortfolioPlan",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="submissions",
+    )
+
+    #: Model provenance copied from the plan's metadata. Recorded here too so a
+    #: failed submission can say which provider answered without a plan row.
+    provider = models.CharField(max_length=64, blank=True, default="")
+    model = models.CharField(max_length=128, blank=True, default="")
+    #: True when the response was produced by an explicit stub, never by a
+    #: provider. The boolean exists so no consumer has to infer it from a name.
+    synthetic_response = models.BooleanField(default=False)
+    model_metadata = models.JSONField(default=dict, blank=True)
+
+    #: Input provenance and declared data-quality limitations gathered while
+    #: building the brief. Never contains invented sectors or correlations.
+    data_quality = models.JSONField(default=dict, blank=True)
+
+    error_code = models.CharField(max_length=64, blank=True, default="")
+    error_detail = models.TextField(blank=True, default="")
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Allocation submission"
+        verbose_name_plural = "Allocation submissions"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["portfolio", "-created_at"], name="subm_portfolio_recent_idx"),
+            models.Index(fields=["portfolio", "status"], name="subm_portfolio_status_idx"),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["portfolio", "idempotency_key"],
+                name="one_submission_per_idempotency_key",
+            ),
+            models.CheckConstraint(
+                condition=~Q(idempotency_key="") & ~Q(request_hash=""),
+                name="submission_key_and_hash_not_blank",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"submission {self.id} [{self.status}] {self.portfolio_id}"
+
+    @property
+    def is_terminal(self) -> bool:
+        return self.status in {
+            AllocationSubmissionStatus.COMPLETED,
+            AllocationSubmissionStatus.FAILED,
+        }
+
+
+# ---------------------------------------------------------------------------
+# Plan approvals
+# ---------------------------------------------------------------------------
+class PlanApprovalDecision(models.TextChoices):
+    """A human review decision, kept as an immutable audit row.
+
+    ``cancelled`` is recorded here as well as on the plan because withdrawal is
+    an act with a person, a time and usually a reason; leaving it only as a
+    mutable status column would lose all three.
+    """
+
+    APPROVED = "approved", "Approved"
+    REJECTED = "rejected", "Rejected"
+    CANCELLED = "cancelled", "Cancelled"
+
+
+class PlanApproval(models.Model):
+    """One audit row for one human decision about one plan version.
+
+    The approval binds ``plan_version`` **and** ``approval_hash``: a decision is
+    about the exact requested allocation, limits, classifications and costs the
+    reviewer saw, not about the plan id. ``expires_at`` is mandatory for an
+    approval and null for a rejection/cancellation. A materially changed plan
+    gets a new ``plan_version`` and a new permission hash, so the old row can
+    never authorise the new plan.
+    """
+
+    id = models.BigAutoField(primary_key=True)
+    plan = models.ForeignKey(
+        "core.PortfolioPlan",
+        on_delete=models.CASCADE,
+        related_name="approvals",
+    )
+    plan_version = models.PositiveIntegerField()
+    #: The ``PortfolioPlan.approval_hash`` at decision time. Empty only for a
+    #: cancellation recorded before a binding existed.
+    approval_hash = models.CharField(max_length=64, blank=True, default="")
+    decision = models.CharField(max_length=16, choices=PlanApprovalDecision.choices)
+    decided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="portfolio_plan_approvals",
+    )
+    decided_at = models.DateTimeField(default=timezone.now, db_index=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    note = models.TextField(blank=True, default="")
+    #: The evaluator's portfolio version at decision time. A reviewer should be
+    #: able to tell whether the plan already looked stale when it was approved.
+    evaluated_portfolio_version = models.CharField(max_length=64, blank=True, default="")
+
+    class Meta:
+        verbose_name = "Plan approval"
+        verbose_name_plural = "Plan approvals"
+        ordering = ["-decided_at", "-id"]
+        indexes = [
+            models.Index(fields=["plan", "-decided_at"], name="approval_plan_recent_idx"),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(plan_version__gte=1), name="approval_plan_version_positive"
+            ),
+            models.CheckConstraint(
+                condition=(~Q(decision="approved") | Q(expires_at__isnull=False)),
+                name="approval_requires_expiry",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"approval {self.plan_id} v{self.plan_version} [{self.decision}]"

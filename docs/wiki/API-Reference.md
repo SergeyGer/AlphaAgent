@@ -294,6 +294,86 @@ standard error envelope. The response carries `count`, `last_sequence`,
 A versioned, checksummed JSON bundle. Account identifiers and credentials are
 excluded; evidence excerpts are included only when `is_redistributable` is true.
 
+### `POST /api/decision-runs/` — `202`, `400`, `401`, `404`, `409`
+
+The FIX-08 authenticated, idempotent portfolio-analysis submission. Body:
+
+```json
+{"portfolio_id": 7, "tickers": ["AAPL", "MSFT"], "mode": "live",
+ "protocol_version": "portfolio_allocation.v1",
+ "idempotency_key": "review-2026-11-12-1"}
+```
+
+`mode` is `live` or explicit `stub`; a live request may not carry
+`stub_response`. The response is `202` with `run_id`, `status_url`,
+`status_path`, `plan_id`, `plan_url`, `idempotent_replay` and the submission
+status. The same key with the same canonical body returns the first run; the
+same key with a different body is `409`. Another user's portfolio is `404`.
+Submission creates a proposed plan and **no ledger row**.
+
+### `GET /api/decision-runs/<run_id>/status/` — `200`, `401`, `404`
+
+The status URL returned by the submission. `status` is `accepted`, `running`,
+`completed` or `failed`; `plan_id`/`plan_url` are present on completion and
+`error` carries the typed failure. A non-terminal response sends
+`Retry-After: 1`. This id space is the submission's, not a per-ticker
+`DecisionRun` id.
+
+## Advisory portfolio plans (FIX-08)
+
+All routes are authenticated and owner-scoped; another user's plan is `404`.
+
+### `GET /api/portfolio-plans/` — `200`, `400`, `401`
+
+Newest-first list of `{plan_id, status, plan_version, approval_state, provider,
+model, synthetic_response, objective, requested_weights, constrained_weights,
+estimated_cost_usd, data_sufficiency, revalidation_required, created_at,
+applied_at}`. Optional filters: `portfolio_id`, `status`, `approval_state`.
+
+### `GET /api/portfolio-plans/<id>/` — `200`, `401`, `404`
+
+The full review payload: holdings, weights (current/requested/constrained/change),
+cash and sector effects, funding, cost estimates, rejected alternatives,
+unresolved uncertainties, deviations, data-quality limitations and declared
+policies, model provenance (including `synthetic_response`), the exact
+`plan_version`/`approval_hash`, the current approval and its expiry, audit
+history, legs and execution state.
+
+### `POST /api/portfolio-plans/<id>/approve/` — `200`, `400`, `409`, `404`
+
+Body `{plan_version, expires_at | expires_in_seconds, approval_hash?, note?}`.
+`expires_at` is required (or a TTL between 60 seconds and the configured
+maximum, default 7 days). The approval names the exact plan version and
+permission hash. Refused for a changed version/hash, an already-approved
+version, a plan flagged for revalidation, or a portfolio that moved since
+evaluation. Approval writes no trade.
+
+### `POST /api/portfolio-plans/<id>/reject/` — `200`, `400`, `409`, `404`
+
+Body `{reason, plan_version?}`; a reason is required. Sets status `rejected`,
+writes a `PlanApproval` audit row and a durable `portfolio.plan.rejected` event.
+
+### `POST /api/portfolio-plans/<id>/cancel/` — `200`, `409`, `404`
+
+Body `{reason?}`. Sets status `cancelled`, writes an audit row and a
+`portfolio.plan.cancelled` event. A repeated cancellation is idempotent and
+creates no second row.
+
+### `POST /api/portfolio-plans/<id>/revalidate/` — `200`, `409`, `422`, `404`
+
+Re-derives the requested weights against current quotes, bumps `plan_version`,
+clears the previous approval and records `approval_invalidated`. Current quotes
+are required; no fabricated mark is used.
+
+### `POST /api/portfolio-plans/<id>/apply/` — `200`, `409`, `422`, `404`
+
+Body `{mode: "live" | "paper"}` (default `live`). The only route that can write
+a ledger row. Requires a current, unexpired approval for the exact plan version;
+`apply_plan` rechecks it under the plan lock and writes every leg through the
+shared `services.execution` guard in one transaction. `paper` uses the plan's
+own marks and says so. A retried apply returns `already_applied` and writes no
+second row.
+
 ## Experiments (Phase 3)
 
 ### `GET /api/experiments/<id>/report/` — `200`, `401`, `404`, `409`

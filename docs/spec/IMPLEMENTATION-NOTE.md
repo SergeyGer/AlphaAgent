@@ -272,8 +272,9 @@ set and one shared `InputSnapshot` per opportunity. V2 now records
 omitted) and V3 records `debate.v1`; previously both were `debate.v1`, which made
 "distinct arms" a relabelling. Each arm gets its own decisions, simulated fills
 and equity trajectory through the same guard, fill rule and accounting method.
-V4 remains declared and unimplemented (FIX-08 is not done) and is excluded from
-the equal-opportunity denominator.
+V4 remains declared and unimplemented (FIX-07 predates FIX-08; FIX-08 now
+supplies the allocation provider and approval path, but no V4 arm has been run)
+and is excluded from the equal-opportunity denominator.
 
 Divergences recorded:
 
@@ -364,12 +365,14 @@ command.
    decision the model made. `revalidate_plan` must be called, and it re-projects
    the stored requested weights against current holdings, cash and limits.
 
-7. **No HTTP endpoint or frontend was added.** The output contract is the stored
-   `PortfolioPlan` JSON (`plan_as_dict`) and the paper command's JSON. This keeps
-   the change out of `frontend/` and out of the Phase 1/2/3 response shapes. The
-   only API change is additive: `PortfolioSerializer` now publishes the three new
-   limit fields, because an existing test requires every limit on the model to be
-   visible in the portfolio payload.
+7. **No HTTP endpoint or frontend was added in Phase 4.** The output contract
+   was the stored `PortfolioPlan` JSON (`plan_as_dict`) and the paper command's
+   JSON. That kept the change out of `frontend/` and out of the Phase 1/2/3
+   response shapes. The only Phase 4 API change was additive:
+   `PortfolioSerializer` published the three new limit fields, because an
+   existing test requires every limit on the model to be visible in the
+   portfolio payload. **FIX-08 below supersedes this for the advisory plan
+   workflow**; the Phase 4 statement describes the Phase 4 change only.
 
 8. **V4 in the experiment manifest remains unimplemented.** Phase 4 delivers the
    allocation service, but no V4 experiment arm was scheduled or measured.
@@ -381,6 +384,75 @@ command.
    supplied synthetic series, but the series, prices, classifications and
    candidate cases are not realised history. The command labels the provider
    `stub` and the source `fixture`.
+
+### FIX-08 — portfolio CIO adapter, submission and plan approval
+
+The acceptance review found that the documented allocation command still used
+the stub and a synthetic paper account, that `POST /api/decision-runs/` did not
+exist, and that the UI exposed decision runs but no portfolio-plan review or
+approval workflow. FIX-08 adds an authenticated idempotent submission, a
+provider-backed adapter under the protocol's budgets, advisory plan review and
+approval endpoints, a review screen, and one real recorded provider run.
+
+| Requirement | Where it is enforced | Evidence |
+| --- | --- | --- |
+| Authenticated, idempotent submission | `services.allocation_submission`, `POST /api/decision-runs/`; request-hash conflict is 409, replay returns the first submission; 202 with `run_id` + status URL | `SubmissionApiTests.*` |
+| Provider-backed CIO adapter | `services.allocation_provider.BudgetedAllocationClient` wraps the `StageClient` seam with `ProtocolBudget`; live and stub are explicit, and the stub can never be selected implicitly | `ProviderAdapterTests.*`, `LiveSubmissionIntegrationTests.test_a_live_submission_flows_through_the_provider_adapter_and_records_usage` |
+| Advisory review surface | `services.portfolio_review.build_plan_review`, `/api/portfolio-plans/` list/detail; frontend `#/plans` | `ReviewAndApprovalTests.test_review_shows_holdings_weights_requested_vs_constrained_cash_sector_costs`, `PortfolioPlansPage.test.tsx` |
+| Approval bound to an immutable version and expiry | `services.portfolio_approval`: approval names `plan_version` + `approval_hash` + `expires_at`; revalidation bumps the version and clears the approval; `apply_plan` rechecks under the lock | `test_approval_binds_the_exact_version_hash_and_expiry`, `test_a_material_change_bumps_the_version_and_requires_new_approval`, `test_an_expired_approval_cannot_execute` |
+| Rejection/cancellation audit | `PlanApproval` rows plus `portfolio.plan.rejected` / `.cancelled` durable events | `test_rejection_and_cancellation_write_audit_rows_and_events` |
+| No trade on submission or approval | Submission and approve paths never call `execute_trade`; only `POST /api/portfolio-plans/<id>/apply/` does, and it requires a current approval | `test_submission_returns_202_a_run_id_and_a_status_url_without_a_trade`, `test_apply_without_approval_is_refused_and_writes_no_ledger_row` |
+| Declared data policies | Missing prices/classifications/history produce typed flags, `data_quality.limitations` and policy actions; no sector or correlation is inferred | `ReviewAndApprovalTests.*`, `SubmissionServiceUnitTests.test_collect_quotes_uses_cost_fallback_only_when_allowed_and_labels_it`, recording artifact `data_quality` |
+| Recorded live example | `docs/spec/fixtures/fix08-live-allocation.v1.json`: `mode: live`, `source: anthropic`, model `claude-haiku-5-5`, 5005/3020 tokens, estimated `$0.002010`, billed `null`, plan `proposed`, `traded: false` | `RecordedLiveArtifactTests.*` |
+
+Divergences recorded rather than absorbed:
+
+1. **The submission record is `AllocationSubmission`, not a `DecisionRun`.** The
+   existing `DecisionRun` is per instrument. A portfolio allocation is one
+   decision over the whole portfolio and one plan; N decision runs would either
+   duplicate the portfolio call or invent a ticker. `POST /api/decision-runs/`
+   is the route the review proposed, and its status URL points at the
+   submission.
+2. **Submission executes inline.** A single portfolio call cannot rely on a
+   Celery worker being present, and a queued task with no worker would leave the
+   run `accepted` forever. The response is still 202 with the status URL; the
+   submission row is committed before the model call so a crash is visible as
+   `running`. This is not an asynchronous job, and the status URL is the
+   authority.
+3. **The live recording is one real model call with no retry and no repair.**
+   `max_repairs=0` and `provider_retries=0` mean a malformed answer is recorded
+   as a failure rather than re-prompted. That keeps spend bounded and avoids
+   presenting a repaired second sample as the first. The artifact's input data
+   is operator-supplied demonstration data, labelled `operator_supplied` and
+   `input_data_is_synthetic: true`; the model response is real
+   (`synthetic_response: false`, `run_kind: real_recorded_model_run`).
+4. **Billed cost remains unknown in the recording.** The adapter's provider seam
+   reports tokens, not a provider-billed dollar amount. The artifact records
+   `billed_cost_usd: null` with the reason and the price-table estimate
+   separately, following FIX-07A. It does not present the estimate as a bill.
+5. **The submission endpoint does not fetch price history.** It declares
+   `risk_statistics: not_available` and the `label_only` policy rather than
+   inventing a correlation. A caller that needs correlations must supply history
+   to the brief builder explicitly (the Phase 4 service still supports it).
+6. **Approval expiry is capped at 7 days by default.** The approval is a bounded
+   permission over a plan that the portfolio can outgrow. It is not renewable by
+   a retry: an expired approval must be re-approved for the current version.
+7. **The apply endpoint is an addition beyond the review's list.** The review
+   asked for list/view/approve/reject; without an explicit apply, approval would
+   have no route to the shared execution service that the acceptance criterion
+   requires. Applying is a separate, confirmed act and remains the only route to
+   `execute_trade`.
+8. **V4 remains unimplemented as an experiment arm.** FIX-08 supplies the
+   allocation provider and approval workflow, but no V4 arm has been scheduled
+   or measured. The committed experiment manifest/report still records the older
+   reason that its dependency is not done; that reason is now stale as a
+   description of the code and remains accurate only as "V4 has not been run".
+   Marking it implemented without a run would repeat the unmeasured claim Phase
+   3 refused.
+9. **The UI is a sibling hash route, not a dashboard restructure.** `#/plans`
+   uses the existing panels, badges and dark palette. It presents a stub as
+   "Stub — no model call"; it never lets a synthetic response read as a live
+   model decision.
 
 ## Phase 5 — publish evidence
 

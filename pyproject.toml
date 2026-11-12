@@ -46,7 +46,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 # Tests legitimately use asserts, hard-coded passwords and dummy secrets.
-"core/tests/*" = ["S105", "S106", "S107", "S311", "C408"]
+"core/tests/*" = ["S105", "S106", "S107", "S311", "C408", "RUF012"]
 "core/management/commands/*" = ["S106"]
 "config/settings.py" = ["S105"]
 "manage.py" = ["S105"]
@@ -57,6 +57,7 @@ ignore = [
 "core/event_models.py" = ["RUF012"]
 "core/decision_serializers.py" = ["RUF012"]
 "core/decision_views.py" = ["RUF012"]
+"core/allocation_views.py" = ["RUF012"]
 "core/experiment_views.py" = ["RUF012"]
 "core/measurement_models.py" = ["RUF012", "DJ001"]
 "core/allocation_models.py" = ["RUF012", "DJ001"]

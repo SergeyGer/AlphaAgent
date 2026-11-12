@@ -475,6 +475,26 @@ ALLOCATION_CONFIG = {
     ).strip(),
     "MAX_CANDIDATE_CASES": env_int("AI_ALLOCATION_MAX_CANDIDATE_CASES", 20),
     "MAX_CLAIMS_PER_CASE": env_int("AI_ALLOCATION_MAX_CLAIMS_PER_CASE", 10),
+    # -- FIX-08: authenticated submission, provider budgets and plan approval --
+    # The submission's model call runs under the protocol's budget vocabulary.
+    # These override DEBATE_CONFIG for the allocation path only; every value is
+    # a ceiling the adapter stops at, not a target. A portfolio CIO call is one
+    # model call on a small candidate set, so the deadline is deliberately
+    # shorter than a full debate run.
+    "SUBMISSION_STAGE_TIMEOUT_SECONDS": env_int("AI_ALLOCATION_STAGE_TIMEOUT_SECONDS", 90),
+    "SUBMISSION_RUN_DEADLINE_SECONDS": env_int("AI_ALLOCATION_RUN_DEADLINE_SECONDS", 180),
+    "SUBMISSION_MAX_INPUT_TOKENS": env_int("AI_ALLOCATION_MAX_INPUT_TOKENS", 60_000),
+    "SUBMISSION_MAX_OUTPUT_TOKENS": env_int("AI_ALLOCATION_MAX_OUTPUT_TOKENS", 8_000),
+    "SUBMISSION_PROVIDER_RETRIES": env_int("AI_ALLOCATION_PROVIDER_RETRIES", 1),
+    "SUBMISSION_MONETARY_BUDGET_USD": str(env_decimal("AI_ALLOCATION_MONETARY_BUDGET_USD", "0.25")),
+    #: How many tickers one analysis may name. A bound keeps one request from
+    #: turning into an unbounded prompt and cost; it is not a security control.
+    "MAX_TICKERS_PER_ANALYSIS": env_int("AI_ALLOCATION_MAX_TICKERS_PER_ANALYSIS", 25),
+    #: Default approval lifetime and the hard ceiling. An approval without an
+    #: expiry is not executable, and one lasting forever would be an unbounded
+    #: permission over a plan the portfolio has since outgrown.
+    "APPROVAL_TTL_SECONDS": env_int("AI_ALLOCATION_APPROVAL_TTL_SECONDS", 86_400),
+    "MAX_APPROVAL_TTL_SECONDS": env_int("AI_ALLOCATION_MAX_APPROVAL_TTL_SECONDS", 604_800),
 }
 
 # USD per 1M tokens, used to populate AgentDecisionLog.api_cost_usd.

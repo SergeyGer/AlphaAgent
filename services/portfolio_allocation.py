@@ -116,6 +116,7 @@ __all__ = [
     "AllocationClient",
     "AllocationError",
     "AllocationRun",
+    "ApprovalReference",
     "BriefIncompleteError",
     "ModelCall",
     "PlanApplication",
@@ -431,6 +432,11 @@ class PortfolioCIO:
                         error=str(exc),
                     )
                 )
+                # Budget/deadline/provider failures carry a typed ``code``. Keep
+                # them rather than flattening every provider failure into one
+                # string, so the submission record names the budget that stopped.
+                if getattr(exc, "code", ""):
+                    raise
                 raise AllocationError(f"Allocation provider call failed: {exc}") from exc
             elapsed = int((time.monotonic() - started) * 1000)
             try:
@@ -486,8 +492,19 @@ class PortfolioCIO:
             output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
             reported_cost = getattr(usage, "cost_usd", None)
             cost = str(reported_cost) if reported_cost is not None else None
-            cost_reported = bool(getattr(usage, "reported", False))
-            method = "provider_reported" if cost_reported else "estimated_chars_per_4_tokens"
+            # ``cost_reported`` describes the *cost*, not whether the provider
+            # reported a token count. A provider that reports tokens but no
+            # dollars has an unknown cost (FIX-07A); the token basis travels
+            # separately in ``token_accounting``.
+            cost_reported = reported_cost is not None
+            tokens_measured = bool(getattr(usage, "measured_tokens", False))
+            method = "provider_reported" if tokens_measured else "estimated_chars_per_4_tokens"
+        # A budgeted provider adapter publishes its limits and the separated
+        # usage quantities. A static stub publishes nothing, which is itself a
+        # signal that no provider was involved.
+        reporter = getattr(self.client, "report", None)
+        adapter_report = reporter() if callable(reporter) else None
+        provider_name = self.provider.strip().lower()
         return {
             "provider": self.provider,
             "model": self.model,
@@ -502,9 +519,12 @@ class PortfolioCIO:
             "token_accounting": method,
             "repair_attempts": repairs,
             "calls": [call.as_dict() for call in calls],
+            "adapter": json_safe(adapter_report),
+            "synthetic_response": provider_name in {"stub", "fixture", "static_stub"},
             "note": (
-                "The brief and this response are recorded verbatim in the plan. Replaying "
-                "the arithmetic is deterministic; regenerating model output is not."
+                "The brief is recorded verbatim in the plan and the validated response is "
+                "stored as weights, actions and rationales. Replaying the arithmetic is "
+                "deterministic; regenerating model output is not."
             ),
         }
 
@@ -846,6 +866,7 @@ def create_plan(
                 proposal_portfolio_version=proposal.portfolio_version,
                 evaluated_portfolio_version=evaluated_version,
                 investment_horizon_days=brief.investment_horizon_days,
+                data_sufficiency=proposal.data_sufficiency or "",
                 objective=proposal.objective or payload.get("objective", ""),
                 requested_target_weights=proposal.target_weights_json(),
                 target_weights=target_weights,
@@ -917,6 +938,8 @@ def plan_as_dict(plan: PortfolioPlan, *, include_brief: bool = False) -> dict:
         "proposal_portfolio_version": plan.proposal_portfolio_version,
         "evaluated_portfolio_version": plan.evaluated_portfolio_version,
         "investment_horizon_days": plan.investment_horizon_days,
+        "plan_version": plan.plan_version,
+        "data_sufficiency": plan.data_sufficiency or None,
         "objective": plan.objective,
         "requested_target_weights": plan.requested_target_weights,
         "target_weights": weights,
@@ -942,6 +965,12 @@ def plan_as_dict(plan: PortfolioPlan, *, include_brief: bool = False) -> dict:
         ),
         "approval_hash": plan.approval_hash or None,
         "approval_binding": plan.approval_binding,
+        "approval_version": plan.approval_version,
+        "approved_by": plan.approved_by_id,
+        "approved_at": utc_iso(plan.approved_at),
+        "approval_expires_at": utc_iso(plan.approval_expires_at),
+        "applied_approval_version": plan.applied_approval_version,
+        "applied_by": plan.applied_by_id,
         "revalidation_required": plan.revalidation_required,
         "revalidation_count": plan.revalidation_count,
         "executed_target_weights": plan.executed_target_weights,
@@ -978,6 +1007,20 @@ def plan_as_dict(plan: PortfolioPlan, *, include_brief: bool = False) -> dict:
 # ---------------------------------------------------------------------------
 # Plan application
 # ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class ApprovalReference:
+    """The exact plan version and permission hash an execution is approved under.
+
+    Passed into :func:`apply_plan` so the check happens *under the plan's lock*,
+    not in a caller-side window where a revalidation could slip in between.
+    """
+
+    plan_version: int
+    approval_hash: str
+    approval_version: int
+    expires_at: datetime
+
+
 @dataclass
 class PlanApplication:
     plan: PortfolioPlan
@@ -1021,6 +1064,9 @@ def _mark_plan_for_reapproval(plan_id, reason: str) -> None:
             status=PlanStatus.PROPOSED,
             failure_code="reapproval_required",
             failure_detail=reason[:4000],
+            approval_version=0,
+            approved_at=None,
+            approval_expires_at=None,
         )
     except Exception:  # pragma: no cover - the raised error is the contract
         logger.exception("Could not flag allocation plan %s for reapproval", plan_id)
@@ -1298,6 +1344,63 @@ def _mark_prices(marks: Mapping[str, Any]) -> dict[str, Decimal]:
     return {ticker: mark.price for ticker, mark in marks.items()}
 
 
+def _require_approval_reference(
+    plan: PortfolioPlan,
+    approval: ApprovalReference,
+    *,
+    now: datetime,
+) -> None:
+    """Refuse execution when the named approval does not cover this plan version."""
+    if int(plan.plan_version) != int(approval.plan_version):
+        raise PlanReapprovalRequired(
+            (
+                f"The approval names plan version {approval.plan_version}, but the plan is "
+                f"now version {plan.plan_version}. A materially changed plan requires a new "
+                "approval."
+            ),
+            code="approval_version_changed",
+        )
+    if plan.approval_hash != approval.approval_hash:
+        raise PlanReapprovalRequired(
+            (
+                "The approval names a different permission hash than the current plan. "
+                "Revalidate and approve the current plan before applying it."
+            ),
+            code="approval_binding_changed",
+        )
+    if int(plan.approval_version) != int(approval.approval_version):
+        raise PlanReapprovalRequired(
+            (
+                f"The approval was recorded for version {approval.approval_version}, but the "
+                f"plan's current approval is version {plan.approval_version}."
+            ),
+            code="approval_stale",
+        )
+    if plan.approval_expires_at is None:
+        raise PlanReapprovalRequired(
+            "The plan has no approval expiry; an unbounded approval is not executable.",
+            code="approval_missing_expiry",
+        )
+    if plan.approval_expires_at <= now:
+        raise PlanReapprovalRequired(
+            (
+                f"The approval expired at {utc_iso(plan.approval_expires_at)}. Approve the "
+                "current plan version again before applying it."
+            ),
+            code="approval_expired",
+        )
+    if approval.expires_at != plan.approval_expires_at:
+        raise PlanReapprovalRequired(
+            "The supplied approval expiry does not match the recorded approval.",
+            code="approval_expiry_changed",
+        )
+    if plan.revalidation_required:
+        raise PlanReapprovalRequired(
+            "The plan is marked for revalidation; it cannot execute under the old approval.",
+            code="revalidation_required",
+        )
+
+
 def apply_plan(
     plan_id,
     *,
@@ -1306,6 +1409,7 @@ def apply_plan(
     max_quote_age_seconds: int | None = None,
     policy: AllocationPolicy | None = None,
     cost_model: CostModel | None = None,
+    approval: ApprovalReference | None = None,
 ) -> PlanApplication:
     """Apply a validated plan, atomically, with sells before buys.
 
@@ -1349,6 +1453,12 @@ def apply_plan(
                 raise PlanNotApplicableError(
                     f"Plan {plan.id} is {plan.status!r} and cannot be applied."
                 )
+
+            if approval is not None:
+                # Checked inside the same transaction and after the plan row is
+                # locked, so a revalidation cannot change the version between the
+                # caller's check and the first ledger write.
+                _require_approval_reference(plan, approval, now=timezone.now())
 
             portfolio = Portfolio.objects.select_for_update().get(pk=plan.portfolio_id)
             current_version = portfolio_state_version(portfolio)
@@ -1434,6 +1544,8 @@ def apply_plan(
                 plan.execution_reasons = json_safe(
                     [{"reason": "No leg was required; no ledger row was written."}]
                 )
+                if approval is not None:
+                    plan.applied_approval_version = int(approval.approval_version)
                 plan.save(
                     update_fields=[
                         "status",
@@ -1441,6 +1553,7 @@ def apply_plan(
                         "execution_mode",
                         "executed_target_weights",
                         "execution_reasons",
+                        "applied_approval_version",
                         "updated_at",
                     ]
                 )
@@ -1567,6 +1680,8 @@ def apply_plan(
             plan.failure_detail = ""
             plan.executed_target_weights = _weights_json(state_after)
             plan.execution_reasons = json_safe(reasons)
+            if approval is not None:
+                plan.applied_approval_version = int(approval.approval_version)
             plan.save(
                 update_fields=[
                     "status",
@@ -1576,6 +1691,7 @@ def apply_plan(
                     "failure_detail",
                     "executed_target_weights",
                     "execution_reasons",
+                    "applied_approval_version",
                     "updated_at",
                 ]
             )
@@ -1758,6 +1874,18 @@ def revalidate_plan(
                 ),
             }
         )
+        had_approval = plan.approval_version > 0
+        if had_approval:
+            deviations.append(
+                {
+                    "code": "approval_invalidated",
+                    "detail": (
+                        f"The previous approval covered plan version {plan.plan_version}; "
+                        "this revalidation changes the material decision and requires a new "
+                        "approval."
+                    ),
+                }
+            )
         plan.legs.all().delete()
         target_weights = constrained.weights_json
         for leg in sized.legs:
@@ -1788,6 +1916,13 @@ def revalidate_plan(
         plan.revalidation_required = False
         plan.revalidation_count += 1
         plan.revalidated_at = now
+        plan.plan_version = int(plan.plan_version or 1) + 1
+        # A materially changed plan cannot inherit the previous permission.
+        plan.approval_version = 0
+        plan.approved_by = None
+        plan.approved_at = None
+        plan.approval_expires_at = None
+        plan.applied_approval_version = 0
         plan.execution_mode = execution_mode
         plan.deviations = json_safe(deviations)
         plan.constraints = json_safe(constrained.constraints)

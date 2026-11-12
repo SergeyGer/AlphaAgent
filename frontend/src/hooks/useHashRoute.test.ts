@@ -17,6 +17,14 @@ describe('parseHashRoute', () => {
     });
   });
 
+  it('routes the advisory plan list and one plan review (FIX-08)', () => {
+    expect(parseHashRoute('#/plans')).toEqual({ view: 'plans', planId: null });
+    expect(parseHashRoute('#/plans/3031c29d-5ff4-4eef-aba5-9683c595692e')).toEqual({
+      view: 'plans',
+      planId: '3031c29d-5ff4-4eef-aba5-9683c595692e',
+    });
+  });
+
   it('falls back to the dashboard for anything else', () => {
     expect(parseHashRoute('')).toEqual({ view: 'dashboard' });
     expect(parseHashRoute('#/')).toEqual({ view: 'dashboard' });

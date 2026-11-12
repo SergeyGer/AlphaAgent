@@ -27,6 +27,7 @@ __all__ = [
     "emit_budget_exhausted",
     "emit_budget_updated",
     "emit_decision",
+    "emit_portfolio_plan",
     "emit_portfolio_snapshot",
     "emit_recommendation",
     "emit_trade",
@@ -51,6 +52,15 @@ class EventType:
     #: moves as runs happen rather than only on a page reload.
     BUDGET_UPDATED = "budget.updated"
     BUDGET_EXHAUSTED = "budget.exhausted"
+    #: FIX-08 advisory plan lifecycle. These are notifications about the
+    #: durable ``PortfolioPlan``/``PlanApproval`` records, not the records
+    #: themselves.
+    PORTFOLIO_PLAN_PROPOSED = "portfolio.plan.proposed"
+    PORTFOLIO_PLAN_APPROVED = "portfolio.plan.approved"
+    PORTFOLIO_PLAN_REJECTED = "portfolio.plan.rejected"
+    PORTFOLIO_PLAN_CANCELLED = "portfolio.plan.cancelled"
+    PORTFOLIO_PLAN_APPLIED = "portfolio.plan.applied"
+    PORTFOLIO_PLAN_FAILED = "portfolio.plan.failed"
 
 
 def serialize(value: Any) -> Any:
@@ -222,3 +232,34 @@ def emit_budget_exhausted(user_id: int | None, payload: dict) -> None:
     must not ignore: it explains why no further decisions are arriving.
     """
     publish(user_id, EventType.BUDGET_EXHAUSTED, payload)
+
+
+def emit_portfolio_plan(
+    user_id: int | None,
+    plan,
+    event_type: str,
+    *,
+    extra: dict | None = None,
+    dedupe_key: str = "",
+) -> None:
+    """Publish one advisory-plan lifecycle event.
+
+    ``plan`` is a ``PortfolioPlan``. The payload names the exact plan version and
+    approval version so a consumer cannot apply a notification about an old
+    version to the current one. Delivery is best-effort and durable (FIX-06);
+    the plan and approval rows remain the authority.
+    """
+    expire = getattr(plan, "approval_expires_at", None)
+    payload = {
+        "plan_id": str(plan.id),
+        "portfolio_id": plan.portfolio_id,
+        "status": plan.status,
+        "plan_version": plan.plan_version,
+        "approval_version": plan.approval_version,
+        "approval_hash": plan.approval_hash or None,
+        "approval_expires_at": expire,
+        "at": timezone.now(),
+    }
+    if extra:
+        payload.update(extra)
+    publish(user_id, event_type, payload, dedupe_key=dedupe_key)

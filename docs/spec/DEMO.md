@@ -234,6 +234,41 @@ return forecast. The model is a stub. The transaction costs are planning
 estimates, not recorded fees. See [`ALLOCATION.md`](ALLOCATION.md) §7 and
 [`CASES.md`](CASES.md) Case 5.
 
+## 3a. Advisory plan review and recorded provider run (FIX-08)
+
+The paper command above is still the **stub** demonstration. FIX-08 adds the
+authenticated workflow the review asked for, and one real recorded provider run.
+
+**Review surface.** Start the app and open `#/plans`, or use the API:
+
+```text
+POST /api/decision-runs/          202 + run_id + status_url (idempotent; no trade)
+GET  /api/decision-runs/<run>/status/
+GET  /api/portfolio-plans/
+GET  /api/portfolio-plans/<plan>/
+POST /api/portfolio-plans/<plan>/approve/    exact plan_version + expiry; no trade
+POST /api/portfolio-plans/<plan>/reject/     reason required; audit event
+POST /api/portfolio-plans/<plan>/cancel/     audit event
+POST /api/portfolio-plans/<plan>/apply/      explicit execution through the guard
+```
+
+The review screen shows current holdings/weights, requested vs constrained
+targets, cash and sector effects, funding, cost estimates, rejected
+alternatives, limitations, provenance (live provider vs **stub — no model
+call**), and the exact version/expiry an approval covers.
+
+**The recorded run, without making another call.** Read
+[`fixtures/fix08-live-allocation.v1.json`](fixtures/fix08-live-allocation.v1.json).
+It is a real Anthropic `claude-haiku-5-5` response (`mode: "live"`,
+`source: "anthropic"`, 5005 input / 3020 output tokens, estimated `$0.002010`,
+billed `null`, plan `proposed`, `traded: false`). Its **input brief** is
+operator-supplied demonstration data; the artifact states that separately.
+
+**Do not run the recorder casually.** `python manage.py record_live_allocation`
+makes one real, billed provider call, has no stub mode, and refuses to overwrite
+the committed artifact without `--overwrite`. Reproduce only its *shape*: the
+prompt and template version are recorded; the model answer is not reproducible.
+
 ## 4. Report build (Phase 3)
 
 **Commands:**

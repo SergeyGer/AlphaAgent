@@ -6,6 +6,10 @@ import type {
   ListResponse,
   LoginResponse,
   MarketNewsReport,
+  PlanApplyResponse,
+  PlanDecisionResponse,
+  PlanListResponse,
+  PlanReview,
   Portfolio,
   PortfolioSnapshot,
   Recommendation,
@@ -402,6 +406,82 @@ export const api = {
     return apiRequest<RunEventsResponse>(
       `/api/decision-runs/${encodeURIComponent(id)}/events/`,
       { query: { after_seq: Math.max(0, Math.floor(afterSeq)) }, signal },
+    );
+  },
+
+  /* ---------------------------------------------------------------- */
+  /* Advisory portfolio plans (FIX-08)                                */
+  /* ---------------------------------------------------------------- */
+
+  /** `GET /api/portfolio-plans/` — the caller's plans, newest first. */
+  portfolioPlans(signal?: AbortSignal): Promise<PlanListResponse> {
+    return apiRequest<PlanListResponse>('/api/portfolio-plans/', { signal });
+  },
+
+  /** `GET /api/portfolio-plans/{id}/` — the full review payload. */
+  portfolioPlan(id: string, signal?: AbortSignal): Promise<PlanReview> {
+    return apiRequest<PlanReview>(`/api/portfolio-plans/${encodeURIComponent(id)}/`, { signal });
+  },
+
+  /**
+   * `POST /api/portfolio-plans/{id}/approve/`
+   *
+   * The body must name the exact plan version and an expiry. Approving writes
+   * no trade; execution is a separate, explicit `applyPlan`.
+   */
+  approvePlan(
+    id: string,
+    body: {
+      plan_version: number;
+      expires_at?: string;
+      expires_in_seconds?: number;
+      approval_hash?: string | null;
+      note?: string;
+    },
+  ): Promise<PlanDecisionResponse> {
+    return apiRequest<PlanDecisionResponse>(
+      `/api/portfolio-plans/${encodeURIComponent(id)}/approve/`,
+      { method: 'POST', body },
+    );
+  },
+
+  /** `POST /api/portfolio-plans/{id}/reject/` — reason is required. */
+  rejectPlan(
+    id: string,
+    body: { reason: string; plan_version?: number },
+  ): Promise<PlanDecisionResponse> {
+    return apiRequest<PlanDecisionResponse>(
+      `/api/portfolio-plans/${encodeURIComponent(id)}/reject/`,
+      { method: 'POST', body },
+    );
+  },
+
+  /** `POST /api/portfolio-plans/{id}/cancel/` — withdraw with an audit event. */
+  cancelPlan(id: string, body: { reason?: string } = {}): Promise<PlanDecisionResponse> {
+    return apiRequest<PlanDecisionResponse>(
+      `/api/portfolio-plans/${encodeURIComponent(id)}/cancel/`,
+      { method: 'POST', body },
+    );
+  },
+
+  /** `POST /api/portfolio-plans/{id}/revalidate/` — re-derive after a change. */
+  revalidatePlan(id: string): Promise<{ review: PlanReview; note: string }> {
+    return apiRequest<{ review: PlanReview; note: string }>(
+      `/api/portfolio-plans/${encodeURIComponent(id)}/revalidate/`,
+      { method: 'POST' },
+    );
+  },
+
+  /**
+   * `POST /api/portfolio-plans/{id}/apply/` — the explicit execution act.
+   *
+   * `paper` uses the plan's own marks and is recorded as such; `live` requires
+   * current quotes. The backend refuses without a current approval.
+   */
+  applyPlan(id: string, mode: 'live' | 'paper' = 'live'): Promise<PlanApplyResponse> {
+    return apiRequest<PlanApplyResponse>(
+      `/api/portfolio-plans/${encodeURIComponent(id)}/apply/`,
+      { method: 'POST', body: { mode } },
     );
   },
 };

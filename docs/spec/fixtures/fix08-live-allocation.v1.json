@@ -1,0 +1,2087 @@
+{
+  "fixture_version": 1,
+  "schema_version": "fix08.live_allocation.record.v1",
+  "label": "Real recorded provider run: one Anthropic CIO call on an operator-supplied demonstration brief. The model response is real; the input data is not market history.",
+  "run_kind": "real_recorded_model_run",
+  "model_response_kind": "provider_generated",
+  "synthetic_response": false,
+  "input_data_is_synthetic": true,
+  "status": "completed",
+  "mode": "live",
+  "source": "anthropic",
+  "provider": "anthropic",
+  "model": "claude-haiku-5-5",
+  "protocol_version": "portfolio_allocation.v1",
+  "prompt_template_version": "portfolio_targets.v1",
+  "recorded_at": "2026-11-12T07:21:17.242522+00:00",
+  "parameters": {
+    "temperature": 0.2,
+    "max_output_tokens": 8192,
+    "request_timeout_seconds": 90
+  },
+  "budget": {
+    "stage_timeout_seconds": 90,
+    "run_deadline_seconds": 180,
+    "max_input_tokens": 60000,
+    "max_output_tokens": 4000,
+    "schema_repair_attempts": 0,
+    "provider_retries": 0,
+    "provider_retry_backoff_seconds": 0,
+    "monetary_budget_usd": "0.25"
+  },
+  "input": {
+    "fixture_path": "docs/spec/fixtures/fix08-live-input.v1.json",
+    "input_data_classification": "operator_supplied_demonstration",
+    "synthetic_input_data": true,
+    "realised_history": false,
+    "note": "These holdings, prices and classifications are authored inputs for a single recorded provider call. They are not realised market history and are not presented as one. The model response produced from them is real and is recorded separately in fix08-live-allocation.v1.json.",
+    "portfolio": {
+      "balance_usd": "5000.00",
+      "risk_profile": "medium",
+      "max_trade_allocation_pct": "99.99",
+      "max_portfolio_exposure_pct": "90.00",
+      "max_ticker_concentration_pct": "30.00",
+      "max_sector_concentration_pct": "40.00",
+      "max_turnover_pct": "40.00",
+      "min_cash_buffer_pct": "10.00",
+      "daily_loss_limit_usd": "500.00"
+    },
+    "holdings": [
+      {
+        "ticker": "AAPL",
+        "amount": "40",
+        "avg_cost": "180.00"
+      },
+      {
+        "ticker": "MSFT",
+        "amount": "10",
+        "avg_cost": "400.00"
+      },
+      {
+        "ticker": "JPM",
+        "amount": "15",
+        "avg_cost": "150.00"
+      }
+    ],
+    "quotes": {
+      "AAPL": "190.00",
+      "MSFT": "420.00",
+      "JPM": "160.00",
+      "NVDA": "120.00"
+    },
+    "classifications": [
+      {
+        "ticker": "AAPL",
+        "sector": "technology",
+        "asset_class": "equity"
+      },
+      {
+        "ticker": "MSFT",
+        "sector": "technology",
+        "asset_class": "equity"
+      },
+      {
+        "ticker": "JPM",
+        "sector": "financials",
+        "asset_class": "equity"
+      },
+      {
+        "ticker": "NVDA",
+        "sector": "technology",
+        "asset_class": "equity"
+      }
+    ],
+    "candidates": [
+      {
+        "ticker": "NVDA",
+        "action": "BUY",
+        "rationale": "Operator-supplied candidate for the recording. No completed decision run or claim catalog exists for it in this demo account, so the brief must mark its evidence as insufficient rather than invent a claim.",
+        "strongest_objection": "There is no validated evidence record for this candidate.",
+        "thesis": "",
+        "invalidation_condition": "",
+        "claims": []
+      }
+    ],
+    "price_history": null,
+    "price_history_note": "No history is fetched or authored. Correlation and covariance are not computed and are reported as not_available with the declared label_only policy."
+  },
+  "request": {
+    "brief": {
+      "brief_schema_version": "portfolio_brief.v1",
+      "decision_boundary": "portfolio",
+      "responsibility": "chief_investment_officer",
+      "objective": "Allocate the portfolio's capital across the permitted instruments under the stated constraints. This is a constrained capital-allocation decision, not a forecast and not a guarantee of profitability.",
+      "portfolio_version": "pv-c0785b6dce8e81826b2b3898",
+      "snapshot_id": "2b04f2d0-ff13-463a-8c4d-b7106b6d514e",
+      "captured_at": "2026-11-12T07:21:03.225753Z",
+      "analysis_cutoff": "2026-11-12T07:21:03.225753Z",
+      "investment_horizon_days": 30,
+      "equity_usd": "19200.00",
+      "cash": {
+        "balance_usd": "5000.00",
+        "weight": "0.26041667",
+        "currency": "USD",
+        "buffer_required_usd": "1920.00"
+      },
+      "weights": {
+        "AAPL": "0.39583333",
+        "CASH": "0.26041667",
+        "JPM": "0.12500000",
+        "MSFT": "0.21875000",
+        "NVDA": "0"
+      },
+      "holdings": [
+        {
+          "ticker": "AAPL",
+          "quantity": "40.00000000",
+          "avg_cost": "180.00",
+          "price": "190.00",
+          "price_source": "provided_quote",
+          "market_value_usd": "7600.00",
+          "weight": "0.39583333",
+          "sector": "technology",
+          "asset_class": "equity",
+          "classification_source": "fixture"
+        },
+        {
+          "ticker": "JPM",
+          "quantity": "15.00000000",
+          "avg_cost": "150.00",
+          "price": "160.00",
+          "price_source": "provided_quote",
+          "market_value_usd": "2400.00",
+          "weight": "0.12500000",
+          "sector": "financials",
+          "asset_class": "equity",
+          "classification_source": "fixture"
+        },
+        {
+          "ticker": "MSFT",
+          "quantity": "10.00000000",
+          "avg_cost": "400.00",
+          "price": "420.00",
+          "price_source": "provided_quote",
+          "market_value_usd": "4200.00",
+          "weight": "0.21875000",
+          "sector": "technology",
+          "asset_class": "equity",
+          "classification_source": "fixture"
+        }
+      ],
+      "permitted_tickers": [
+        "AAPL",
+        "JPM",
+        "MSFT",
+        "NVDA"
+      ],
+      "exposure": {
+        "sector_exposure": [
+          {
+            "value_usd": "11800.00",
+            "tickers": [
+              "AAPL",
+              "MSFT"
+            ],
+            "sector": "technology",
+            "weight": "0.61458333"
+          },
+          {
+            "value_usd": "2400.00",
+            "tickers": [
+              "JPM"
+            ],
+            "sector": "financials",
+            "weight": "0.12500000"
+          }
+        ],
+        "asset_class_exposure": [
+          {
+            "value_usd": "14200.00",
+            "tickers": [
+              "AAPL",
+              "JPM",
+              "MSFT"
+            ],
+            "asset_class": "equity",
+            "weight": "0.73958333"
+          }
+        ],
+        "unclassified": {
+          "value_usd": "0.00",
+          "weight": "0",
+          "tickers": []
+        },
+        "coverage": {
+          "status": "complete",
+          "known_value_usd": "14200.00",
+          "unclassified_value_usd": "0.00",
+          "coverage_pct": "100.00",
+          "positions_value_usd": "14200.00"
+        },
+        "note": "Every valued position has an explicit classification."
+      },
+      "limits": {
+        "policy_version": "portfolio_allocation.v1",
+        "limits": {
+          "max_name_weight": "0.30",
+          "max_sector_weight": "0.40",
+          "max_total_exposure": "0.90",
+          "min_cash_weight": "0.10",
+          "max_turnover": "0.40",
+          "max_trade_fraction_of_cash": "0.9999"
+        },
+        "execution": {
+          "min_trade_notional_usd": "1",
+          "default_lot_size": "1",
+          "lot_sizes": {},
+          "price_quantum": "0.01"
+        },
+        "risk_statistics": {
+          "covariance_min_observations": 20,
+          "covariance_max_history_age_days": 7
+        },
+        "evidence_policy": {
+          "stale_snapshot": "block_new_risk",
+          "missing_correlation_history": "label_only",
+          "insufficient_evidence": "retain_cash",
+          "unknown_sector": "label_only"
+        },
+        "max_snapshot_age_seconds": 900,
+        "investment_horizon_days": 30
+      },
+      "transaction_costs": {
+        "model_version": "linear_bps.v1",
+        "bps": "10",
+        "fixed_per_trade_usd": "0",
+        "minimum_fee_usd": "0",
+        "source": "declared_assumption_not_broker_quote",
+        "note": "Costs are a planning estimate. Transaction.fee is left NULL because no broker fee was recorded; NULL is not zero."
+      },
+      "theses": [],
+      "candidate_cases": [
+        {
+          "ticker": "NVDA",
+          "action": "BUY",
+          "run_id": null,
+          "mode": "operator_supplied",
+          "decided_at": "2026-11-12T07:21:03.225189Z",
+          "rationale": "Operator-supplied candidate for the recording. No completed decision run or claim catalog exists for it in this demo account, so the brief must mark its evidence as insufficient rather than invent a claim.",
+          "strongest_objection": "There is no validated evidence record for this candidate.",
+          "thesis": "",
+          "invalidation_condition": "",
+          "claims": [],
+          "claim_ids": [],
+          "evidence_sufficient": false,
+          "price": "120.00"
+        }
+      ],
+      "claim_catalog": [],
+      "classifications": {
+        "AAPL": {
+          "sector": "technology",
+          "asset_class": "equity",
+          "source": "fixture"
+        },
+        "JPM": {
+          "sector": "financials",
+          "asset_class": "equity",
+          "source": "fixture"
+        },
+        "MSFT": {
+          "sector": "technology",
+          "asset_class": "equity",
+          "source": "fixture"
+        },
+        "NVDA": {
+          "sector": "technology",
+          "asset_class": "equity",
+          "source": "fixture"
+        }
+      },
+      "risk_statistics": {
+        "method_version": "covariance.sample_daily_returns.v1",
+        "status": "not_available",
+        "frequency": "daily",
+        "return_definition": "simple_close_to_close",
+        "alignment": "pairwise_common_observations",
+        "history_source": "none",
+        "tickers": [
+          "AAPL",
+          "JPM",
+          "MSFT",
+          "NVDA"
+        ],
+        "observation_window": null,
+        "history_end_age_days": null,
+        "annualisation": null,
+        "annualisation_note": "Not annualised: the observations are date-aligned, not a guaranteed regular series, and annualising would invent a frequency.",
+        "pairs": [],
+        "covariance": [],
+        "correlation": [],
+        "variance": [],
+        "missing_pairs": [
+          {
+            "ticker_a": "AAPL",
+            "ticker_b": "JPM",
+            "observations": 0,
+            "reason": "no_history"
+          },
+          {
+            "ticker_a": "AAPL",
+            "ticker_b": "MSFT",
+            "observations": 0,
+            "reason": "no_history"
+          },
+          {
+            "ticker_a": "AAPL",
+            "ticker_b": "NVDA",
+            "observations": 0,
+            "reason": "no_history"
+          },
+          {
+            "ticker_a": "JPM",
+            "ticker_b": "MSFT",
+            "observations": 0,
+            "reason": "no_history"
+          },
+          {
+            "ticker_a": "JPM",
+            "ticker_b": "NVDA",
+            "observations": 0,
+            "reason": "no_history"
+          },
+          {
+            "ticker_a": "MSFT",
+            "ticker_b": "NVDA",
+            "observations": 0,
+            "reason": "no_history"
+          }
+        ],
+        "quality_flags": [
+          "no_history"
+        ],
+        "note": "No price history was supplied. Correlation and covariance are null; zero was not assumed."
+      },
+      "data_quality": {
+        "flags": [
+          {
+            "code": "missing_correlation_history",
+            "severity": "warning",
+            "detail": "Not every permitted pair has the minimum 20 daily observations. Missing pairs are null with reasons in risk_statistics."
+          },
+          {
+            "code": "insufficient_evidence",
+            "severity": "warning",
+            "detail": "No candidate case has a claim backed by recorded evidence."
+          }
+        ],
+        "flag_codes": [
+          "missing_correlation_history",
+          "insufficient_evidence"
+        ],
+        "snapshot_age_seconds": 0,
+        "snapshot_stale": false,
+        "sector_coverage": {
+          "status": "complete",
+          "known_value_usd": "14200.00",
+          "unclassified_value_usd": "0.00",
+          "coverage_pct": "100.00",
+          "positions_value_usd": "14200.00"
+        },
+        "missing_correlation_history": true,
+        "insufficient_evidence": true,
+        "unpriced_tickers": [],
+        "prices_marked_at_cost": [],
+        "policy_actions": [
+          {
+            "flag": "insufficient_evidence",
+            "action": "retain_cash"
+          }
+        ],
+        "source": {
+          "holdings": "input_snapshot",
+          "prices": "input_snapshot",
+          "sector": "explicit_portfolio_classification_lookup",
+          "candidate_cases": "operator_supplied_demonstration",
+          "risk_statistics": "none",
+          "theses": "open_position_thesis_rows"
+        }
+      },
+      "policy": {
+        "policy_version": "portfolio_allocation.v1",
+        "limits": {
+          "max_name_weight": "0.30",
+          "max_sector_weight": "0.40",
+          "max_total_exposure": "0.90",
+          "min_cash_weight": "0.10",
+          "max_turnover": "0.40",
+          "max_trade_fraction_of_cash": "0.9999"
+        },
+        "execution": {
+          "min_trade_notional_usd": "1",
+          "default_lot_size": "1",
+          "lot_sizes": {},
+          "price_quantum": "0.01"
+        },
+        "risk_statistics": {
+          "covariance_min_observations": 20,
+          "covariance_max_history_age_days": 7
+        },
+        "evidence_policy": {
+          "stale_snapshot": "block_new_risk",
+          "missing_correlation_history": "label_only",
+          "insufficient_evidence": "retain_cash",
+          "unknown_sector": "label_only"
+        },
+        "max_snapshot_age_seconds": 900,
+        "investment_horizon_days": 30
+      },
+      "statistics_note": "Every risk statistic above is computed deterministically from the supplied inputs. Expected returns are not provided; a response that invents one is outside the contract."
+    },
+    "prompt_sha256": "1686a062dfcac397f581033bffd05332969bbfdb1020d7ff963398cb450d35d0",
+    "prompt_template_version": "portfolio_targets.v1",
+    "prompt": "You are the chief investment officer (CIO) of this portfolio.\n\nDecision boundary: ONE portfolio, ALL candidates together, one coherent capital\nallocation. You are not analysing a single ticker and you are not writing\nindependent per-ticker orders: the weights you return are the whole portfolio\nafter this decision, and they must fit the constraints as a single plan.\n\nObjective: allocate capital under the stated constraints. This is not a forecast\nand not a guarantee of profitability. A decision to hold cash or make no change\nis a valid and complete answer.\n\nHard contract (a response that violates it is rejected):\n- target_weights MUST include a \"CASH\" key and cover every instrument you change.\n- Every weight is a decimal STRING, not a JSON number, and is >= 0 (long-only,\n  unlevered, no negative weights, no borrowing).\n- The weights MUST sum to 1.0 within 0.000001. CASH is the uninvested residual.\n- Every instrument with a target weight or a current holding needs one entry in\n  \"actions\" with an action, a rationale, and claim_ids when the action increases\n  risk.\n- \"increase\" actions MUST cite at least one claim_id from the brief's\n  claim_catalog. Do not invent a claim id.\n- Include \"rejected_alternatives\" (with a reason each) and\n  \"unresolved_uncertainties\".\n- \"funding_source\" is one of: cash, sales, cash_and_sales, none.\n- Echo the brief's \"portfolio_version\" exactly.\n- Return ONE JSON object only. No markdown, no commentary, no code fences.\n\nUse ONLY the statistics in the brief. Do NOT invent expected returns, forecasts,\ncorrelations, covariances, volatilities, prices, sector labels or transaction\ncosts. A value that is null is unknown; say so rather than filling it in. Sector\nexposure marked incomplete is incomplete, not zero.\n\nConstraints you must respect (the deterministic layer re-checks them and records\nevery difference as a deviation): per-name weight, per-sector weight, total\nexposure, turnover, cash buffer, and the per-trade execution ceiling. If a target\nis infeasible, propose the feasible weight and explain the difference; never\nscale a position up to fill a gap.\n\nResponse schema (exact keys):\n{\n  \"schema_version\": \"portfolio_targets.v1\",\n  \"portfolio_version\": \"<echo the brief value>\",\n  \"objective\": \"<one sentence>\",\n  \"target_weights\": {\"<TICKER>\": \"<decimal string>\", \"CASH\": \"<decimal string>\"},\n  \"actions\": [\n    {\"ticker\": \"<TICKER>\", \"action\": \"increase|reduce|maintain|exit|no_change\",\n     \"rationale\": \"<why>\", \"claim_ids\": [\"<claim id>\"]}\n  ],\n  \"funding_source\": \"cash|sales|cash_and_sales|none\",\n  \"rationale\": \"<portfolio-level rationale linked to the decisive claims>\",\n  \"rejected_alternatives\": [{\"ticker\": \"<TICKER or null>\", \"reason\": \"<why not>\"}],\n  \"unresolved_uncertainties\": [\"<what remains unknown>\"],\n  \"data_sufficiency\": \"sufficient|insufficient\"\n}\n\nBRIEF (the only permitted source of facts):\n{\n  \"brief_schema_version\": \"portfolio_brief.v1\",\n  \"decision_boundary\": \"portfolio\",\n  \"responsibility\": \"chief_investment_officer\",\n  \"objective\": \"Allocate the portfolio's capital across the permitted instruments under the stated constraints. This is a constrained capital-allocation decision, not a forecast and not a guarantee of profitability.\",\n  \"portfolio_version\": \"pv-c0785b6dce8e81826b2b3898\",\n  \"snapshot_id\": \"2b04f2d0-ff13-463a-8c4d-b7106b6d514e\",\n  \"captured_at\": \"2026-11-12T07:21:03.225753Z\",\n  \"analysis_cutoff\": \"2026-11-12T07:21:03.225753Z\",\n  \"investment_horizon_days\": 30,\n  \"equity_usd\": \"19200.00\",\n  \"cash\": {\n    \"balance_usd\": \"5000.00\",\n    \"weight\": \"0.26041667\",\n    \"currency\": \"USD\",\n    \"buffer_required_usd\": \"1920.00\"\n  },\n  \"weights\": {\n    \"AAPL\": \"0.39583333\",\n    \"CASH\": \"0.26041667\",\n    \"JPM\": \"0.12500000\",\n    \"MSFT\": \"0.21875000\",\n    \"NVDA\": \"0\"\n  },\n  \"holdings\": [\n    {\n      \"ticker\": \"AAPL\",\n      \"quantity\": \"40.00000000\",\n      \"avg_cost\": \"180.00\",\n      \"price\": \"190.00\",\n      \"price_source\": \"provided_quote\",\n      \"market_value_usd\": \"7600.00\",\n      \"weight\": \"0.39583333\",\n      \"sector\": \"technology\",\n      \"asset_class\": \"equity\",\n      \"classification_source\": \"fixture\"\n    },\n    {\n      \"ticker\": \"JPM\",\n      \"quantity\": \"15.00000000\",\n      \"avg_cost\": \"150.00\",\n      \"price\": \"160.00\",\n      \"price_source\": \"provided_quote\",\n      \"market_value_usd\": \"2400.00\",\n      \"weight\": \"0.12500000\",\n      \"sector\": \"financials\",\n      \"asset_class\": \"equity\",\n      \"classification_source\": \"fixture\"\n    },\n    {\n      \"ticker\": \"MSFT\",\n      \"quantity\": \"10.00000000\",\n      \"avg_cost\": \"400.00\",\n      \"price\": \"420.00\",\n      \"price_source\": \"provided_quote\",\n      \"market_value_usd\": \"4200.00\",\n      \"weight\": \"0.21875000\",\n      \"sector\": \"technology\",\n      \"asset_class\": \"equity\",\n      \"classification_source\": \"fixture\"\n    }\n  ],\n  \"permitted_tickers\": [\n    \"AAPL\",\n    \"JPM\",\n    \"MSFT\",\n    \"NVDA\"\n  ],\n  \"exposure\": {\n    \"sector_exposure\": [\n      {\n        \"value_usd\": \"11800.00\",\n        \"tickers\": [\n          \"AAPL\",\n          \"MSFT\"\n        ],\n        \"sector\": \"technology\",\n        \"weight\": \"0.61458333\"\n      },\n      {\n        \"value_usd\": \"2400.00\",\n        \"tickers\": [\n          \"JPM\"\n        ],\n        \"sector\": \"financials\",\n        \"weight\": \"0.12500000\"\n      }\n    ],\n    \"asset_class_exposure\": [\n      {\n        \"value_usd\": \"14200.00\",\n        \"tickers\": [\n          \"AAPL\",\n          \"JPM\",\n          \"MSFT\"\n        ],\n        \"asset_class\": \"equity\",\n        \"weight\": \"0.73958333\"\n      }\n    ],\n    \"unclassified\": {\n      \"value_usd\": \"0.00\",\n      \"weight\": \"0\",\n      \"tickers\": []\n    },\n    \"coverage\": {\n      \"status\": \"complete\",\n      \"known_value_usd\": \"14200.00\",\n      \"unclassified_value_usd\": \"0.00\",\n      \"coverage_pct\": \"100.00\",\n      \"positions_value_usd\": \"14200.00\"\n    },\n    \"note\": \"Every valued position has an explicit classification.\"\n  },\n  \"limits\": {\n    \"policy_version\": \"portfolio_allocation.v1\",\n    \"limits\": {\n      \"max_name_weight\": \"0.30\",\n      \"max_sector_weight\": \"0.40\",\n      \"max_total_exposure\": \"0.90\",\n      \"min_cash_weight\": \"0.10\",\n      \"max_turnover\": \"0.40\",\n      \"max_trade_fraction_of_cash\": \"0.9999\"\n    },\n    \"execution\": {\n      \"min_trade_notional_usd\": \"1\",\n      \"default_lot_size\": \"1\",\n      \"lot_sizes\": {},\n      \"price_quantum\": \"0.01\"\n    },\n    \"risk_statistics\": {\n      \"covariance_min_observations\": 20,\n      \"covariance_max_history_age_days\": 7\n    },\n    \"evidence_policy\": {\n      \"stale_snapshot\": \"block_new_risk\",\n      \"missing_correlation_history\": \"label_only\",\n      \"insufficient_evidence\": \"retain_cash\",\n      \"unknown_sector\": \"label_only\"\n    },\n    \"max_snapshot_age_seconds\": 900,\n    \"investment_horizon_days\": 30\n  },\n  \"transaction_costs\": {\n    \"model_version\": \"linear_bps.v1\",\n    \"bps\": \"10\",\n    \"fixed_per_trade_usd\": \"0\",\n    \"minimum_fee_usd\": \"0\",\n    \"source\": \"declared_assumption_not_broker_quote\",\n    \"note\": \"Costs are a planning estimate. Transaction.fee is left NULL because no broker fee was recorded; NULL is not zero.\"\n  },\n  \"theses\": [],\n  \"candidate_cases\": [\n    {\n      \"ticker\": \"NVDA\",\n      \"action\": \"BUY\",\n      \"run_id\": null,\n      \"mode\": \"operator_supplied\",\n      \"decided_at\": \"2026-11-12T07:21:03.225189Z\",\n      \"rationale\": \"Operator-supplied candidate for the recording. No completed decision run or claim catalog exists for it in this demo account, so the brief must mark its evidence as insufficient rather than invent a claim.\",\n      \"strongest_objection\": \"There is no validated evidence record for this candidate.\",\n      \"thesis\": \"\",\n      \"invalidation_condition\": \"\",\n      \"claims\": [],\n      \"claim_ids\": [],\n      \"evidence_sufficient\": false,\n      \"price\": \"120.00\"\n    }\n  ],\n  \"claim_catalog\": [],\n  \"classifications\": {\n    \"AAPL\": {\n      \"sector\": \"technology\",\n      \"asset_class\": \"equity\",\n      \"source\": \"fixture\"\n    },\n    \"JPM\": {\n      \"sector\": \"financials\",\n      \"asset_class\": \"equity\",\n      \"source\": \"fixture\"\n    },\n    \"MSFT\": {\n      \"sector\": \"technology\",\n      \"asset_class\": \"equity\",\n      \"source\": \"fixture\"\n    },\n    \"NVDA\": {\n      \"sector\": \"technology\",\n      \"asset_class\": \"equity\",\n      \"source\": \"fixture\"\n    }\n  },\n  \"risk_statistics\": {\n    \"method_version\": \"covariance.sample_daily_returns.v1\",\n    \"status\": \"not_available\",\n    \"frequency\": \"daily\",\n    \"return_definition\": \"simple_close_to_close\",\n    \"alignment\": \"pairwise_common_observations\",\n    \"history_source\": \"none\",\n    \"tickers\": [\n      \"AAPL\",\n      \"JPM\",\n      \"MSFT\",\n      \"NVDA\"\n    ],\n    \"observation_window\": null,\n    \"history_end_age_days\": null,\n    \"annualisation\": null,\n    \"annualisation_note\": \"Not annualised: the observations are date-aligned, not a guaranteed regular series, and annualising would invent a frequency.\",\n    \"pairs\": [],\n    \"covariance\": [],\n    \"correlation\": [],\n    \"variance\": [],\n    \"missing_pairs\": [\n      {\n        \"ticker_a\": \"AAPL\",\n        \"ticker_b\": \"JPM\",\n        \"observations\": 0,\n        \"reason\": \"no_history\"\n      },\n      {\n        \"ticker_a\": \"AAPL\",\n        \"ticker_b\": \"MSFT\",\n        \"observations\": 0,\n        \"reason\": \"no_history\"\n      },\n      {\n        \"ticker_a\": \"AAPL\",\n        \"ticker_b\": \"NVDA\",\n        \"observations\": 0,\n        \"reason\": \"no_history\"\n      },\n      {\n        \"ticker_a\": \"JPM\",\n        \"ticker_b\": \"MSFT\",\n        \"observations\": 0,\n        \"reason\": \"no_history\"\n      },\n      {\n        \"ticker_a\": \"JPM\",\n        \"ticker_b\": \"NVDA\",\n        \"observations\": 0,\n        \"reason\": \"no_history\"\n      },\n      {\n        \"ticker_a\": \"MSFT\",\n        \"ticker_b\": \"NVDA\",\n        \"observations\": 0,\n        \"reason\": \"no_history\"\n      }\n    ],\n    \"quality_flags\": [\n      \"no_history\"\n    ],\n    \"note\": \"No price history was supplied. Correlation and covariance are null; zero was not assumed.\"\n  },\n  \"data_quality\": {\n    \"flags\": [\n      {\n        \"code\": \"missing_correlation_history\",\n        \"severity\": \"warning\",\n        \"detail\": \"Not every permitted pair has the minimum 20 daily observations. Missing pairs are null with reasons in risk_statistics.\"\n      },\n      {\n        \"code\": \"insufficient_evidence\",\n        \"severity\": \"warning\",\n        \"detail\": \"No candidate case has a claim backed by recorded evidence.\"\n      }\n    ],\n    \"flag_codes\": [\n      \"missing_correlation_history\",\n      \"insufficient_evidence\"\n    ],\n    \"snapshot_age_seconds\": 0,\n    \"snapshot_stale\": false,\n    \"sector_coverage\": {\n      \"status\": \"complete\",\n      \"known_value_usd\": \"14200.00\",\n      \"unclassified_value_usd\": \"0.00\",\n      \"coverage_pct\": \"100.00\",\n      \"positions_value_usd\": \"14200.00\"\n    },\n    \"missing_correlation_history\": true,\n    \"insufficient_evidence\": true,\n    \"unpriced_tickers\": [],\n    \"prices_marked_at_cost\": [],\n    \"policy_actions\": [\n      {\n        \"flag\": \"insufficient_evidence\",\n        \"action\": \"retain_cash\"\n      }\n    ],\n    \"source\": {\n      \"holdings\": \"input_snapshot\",\n      \"prices\": \"input_snapshot\",\n      \"sector\": \"explicit_portfolio_classification_lookup\",\n      \"candidate_cases\": \"operator_supplied_demonstration\",\n      \"risk_statistics\": \"none\",\n      \"theses\": \"open_position_thesis_rows\"\n    }\n  },\n  \"policy\": {\n    \"policy_version\": \"portfolio_allocation.v1\",\n    \"limits\": {\n      \"max_name_weight\": \"0.30\",\n      \"max_sector_weight\": \"0.40\",\n      \"max_total_exposure\": \"0.90\",\n      \"min_cash_weight\": \"0.10\",\n      \"max_turnover\": \"0.40\",\n      \"max_trade_fraction_of_cash\": \"0.9999\"\n    },\n    \"execution\": {\n      \"min_trade_notional_usd\": \"1\",\n      \"default_lot_size\": \"1\",\n      \"lot_sizes\": {},\n      \"price_quantum\": \"0.01\"\n    },\n    \"risk_statistics\": {\n      \"covariance_min_observations\": 20,\n      \"covariance_max_history_age_days\": 7\n    },\n    \"evidence_policy\": {\n      \"stale_snapshot\": \"block_new_risk\",\n      \"missing_correlation_history\": \"label_only\",\n      \"insufficient_evidence\": \"retain_cash\",\n      \"unknown_sector\": \"label_only\"\n    },\n    \"max_snapshot_age_seconds\": 900,\n    \"investment_horizon_days\": 30\n  },\n  \"statistics_note\": \"Every risk statistic above is computed deterministically from the supplied inputs. Expected returns are not provided; a response that invents one is outside the contract.\"\n}\n",
+    "reproducible_in_shape": "The brief and prompt template version determine the prompt text. Re-rendering build_allocation_prompt(brief.as_dict()) reproduces it byte-for-byte; the model's answer is not reproducible."
+  },
+  "response": {
+    "parsed_response": {
+      "schema_version": "portfolio_targets.v1",
+      "portfolio_version": "pv-c0785b6dce8e81826b2b3898",
+      "objective": "Bring the portfolio back inside the name and technology-sector limits by trimming AAPL and MSFT, without adding new risk, since the evidence is insufficient to support any increase.",
+      "target_weights": {
+        "AAPL": "0.19791667",
+        "JPM": "0.12500000",
+        "MSFT": "0.19687500",
+        "NVDA": "0",
+        "CASH": "0.48020833"
+      },
+      "actions": [
+        {
+          "ticker": "AAPL",
+          "action": "reduce",
+          "rationale": "Current weight 0.39583333 breaches max_name_weight 0.30. Sell 20 shares (about $3,800) to reach 20 shares, weight 0.19791667. This also lowers technology sector exposure. A reduction adds no risk, so no claim is required.",
+          "claim_ids": []
+        },
+        {
+          "ticker": "JPM",
+          "action": "maintain",
+          "rationale": "Weight 0.125 is within the 0.30 name limit and the financials sector is within the 0.40 limit. No claim supports an increase, so the position is held unchanged.",
+          "claim_ids": []
+        },
+        {
+          "ticker": "MSFT",
+          "action": "reduce",
+          "rationale": "Technology sector weight 0.61458333 breaches max_sector_weight 0.40. Trimming AAPL alone leaves technology at about 0.41, so MSFT is also reduced by 1 share (about $420) to 9 shares, weight 0.196875. Combined technology weight is about 0.3948, which is within the limit. A reduction adds no risk, so no claim is required.",
+          "claim_ids": []
+        },
+        {
+          "ticker": "NVDA",
+          "action": "no_change",
+          "rationale": "Operator-supplied candidate with no claim catalog, no validated evidence, and evidence_sufficient=false. Policy requires retaining cash for insufficient evidence, so no buy is permitted and the target stays at 0.",
+          "claim_ids": []
+        }
+      ],
+      "funding_source": "none",
+      "rationale": "The existing book breaches two hard limits: AAPL at 0.396 exceeds the 0.30 name cap, and technology at 0.615 exceeds the 0.40 sector cap. The plan sells 20 AAPL shares and 1 MSFT share, which brings technology to about 0.395 and AAPL to about 0.198. Turnover is about 0.22, below the 0.40 limit. Cash rises to about 0.480, well above the 0.10 minimum and the $1,920 buffer. No purchases are made because the claim catalog is empty and insufficient_evidence triggers retain_cash. Estimated 10 bps linear cost on about $4,220 of sales is roughly $4.22, a declared planning assumption rather than a broker quote. No decisive claims exist, so no increase is supported.",
+      "rejected_alternatives": [
+        {
+          "ticker": "NVDA",
+          "reason": "Buying NVDA at $120 has no claim catalog, no thesis, and no validated evidence. Policy requires retain_cash, and a buy would also add technology exposure that is already over its sector limit."
+        },
+        {
+          "ticker": "AAPL",
+          "reason": "Holding AAPL at 0.396 breaches max_name_weight 0.30. Trimming it to exactly 0.30 would still leave technology above 0.40 once MSFT is considered, so a deeper trim was chosen."
+        },
+        {
+          "ticker": "MSFT",
+          "reason": "Trimming MSFT alone cannot fix the technology breach; AAPL must also be reduced. Selling more MSFT would be unnecessary turnover."
+        },
+        {
+          "ticker": "JPM",
+          "reason": "Increasing JPM would require a claim_id from the catalog, which is empty, and the position is not in breach. Holding is the compliant choice."
+        },
+        {
+          "ticker": null,
+          "reason": "Deploying the freed cash into any permitted name was rejected because no claim supports an increase. Leaving the residual in cash is the policy-compliant outcome under insufficient evidence."
+        }
+      ],
+      "unresolved_uncertainties": [
+        "No price history exists, so covariance and correlation are null. Portfolio risk, volatility, and diversification effects cannot be quantified.",
+        "The claim catalog is empty and no thesis is recorded for any name, so there is no evidence base for increasing exposure to any permitted instrument.",
+        "The turnover definition (one-way versus two-way) is not stated in the brief. The estimate of about 0.22 assumes sales divided by equity.",
+        "Transaction costs are a declared 10 bps planning assumption, not a broker quote, and the actual fee is NULL.",
+        "Quotes are a single provided snapshot with no independent price validation. Execution prices may differ.",
+        "Sector classifications come from fixture lookups and have not been independently verified.",
+        "The NVDA candidate is operator-supplied and its price of $120 is unverified against any market data source."
+      ],
+      "data_sufficiency": "insufficient"
+    },
+    "validated_proposal": {
+      "schema_version": "portfolio_targets.v1",
+      "portfolio_version": "pv-c0785b6dce8e81826b2b3898",
+      "objective": "Bring the portfolio back inside the name and technology-sector limits by trimming AAPL and MSFT, without adding new risk, since the evidence is insufficient to support any increase.",
+      "target_weights": {
+        "AAPL": "0.197916",
+        "CASH": "0.480209",
+        "JPM": "0.125000",
+        "MSFT": "0.196875",
+        "NVDA": "0"
+      },
+      "weights_sum": "1.000000",
+      "actions": [
+        {
+          "ticker": "AAPL",
+          "action": "reduce",
+          "target_weight": "0.197916",
+          "rationale": "Current weight 0.39583333 breaches max_name_weight 0.30. Sell 20 shares (about $3,800) to reach 20 shares, weight 0.19791667. This also lowers technology sector exposure. A reduction adds no risk, so no claim is required.",
+          "claim_ids": []
+        },
+        {
+          "ticker": "JPM",
+          "action": "maintain",
+          "target_weight": "0.125000",
+          "rationale": "Weight 0.125 is within the 0.30 name limit and the financials sector is within the 0.40 limit. No claim supports an increase, so the position is held unchanged.",
+          "claim_ids": []
+        },
+        {
+          "ticker": "MSFT",
+          "action": "reduce",
+          "target_weight": "0.196875",
+          "rationale": "Technology sector weight 0.61458333 breaches max_sector_weight 0.40. Trimming AAPL alone leaves technology at about 0.41, so MSFT is also reduced by 1 share (about $420) to 9 shares, weight 0.196875. Combined technology weight is about 0.3948, which is within the limit. A reduction adds no risk, so no claim is required.",
+          "claim_ids": []
+        },
+        {
+          "ticker": "NVDA",
+          "action": "no_change",
+          "target_weight": "0.000000",
+          "rationale": "Operator-supplied candidate with no claim catalog, no validated evidence, and evidence_sufficient=false. Policy requires retaining cash for insufficient evidence, so no buy is permitted and the target stays at 0.",
+          "claim_ids": []
+        }
+      ],
+      "funding_source": "none",
+      "rationale": "The existing book breaches two hard limits: AAPL at 0.396 exceeds the 0.30 name cap, and technology at 0.615 exceeds the 0.40 sector cap. The plan sells 20 AAPL shares and 1 MSFT share, which brings technology to about 0.395 and AAPL to about 0.198. Turnover is about 0.22, below the 0.40 limit. Cash rises to about 0.480, well above the 0.10 minimum and the $1,920 buffer. No purchases are made because the claim catalog is empty and insufficient_evidence triggers retain_cash. Estimated 10 bps linear cost on about $4,220 of sales is roughly $4.22, a declared planning assumption rather than a broker quote. No decisive claims exist, so no increase is supported.",
+      "rejected_alternatives": [
+        {
+          "ticker": "NVDA",
+          "reason": "Buying NVDA at $120 has no claim catalog, no thesis, and no validated evidence. Policy requires retain_cash, and a buy would also add technology exposure that is already over its sector limit."
+        },
+        {
+          "ticker": "AAPL",
+          "reason": "Holding AAPL at 0.396 breaches max_name_weight 0.30. Trimming it to exactly 0.30 would still leave technology above 0.40 once MSFT is considered, so a deeper trim was chosen."
+        },
+        {
+          "ticker": "MSFT",
+          "reason": "Trimming MSFT alone cannot fix the technology breach; AAPL must also be reduced. Selling more MSFT would be unnecessary turnover."
+        },
+        {
+          "ticker": "JPM",
+          "reason": "Increasing JPM would require a claim_id from the catalog, which is empty, and the position is not in breach. Holding is the compliant choice."
+        },
+        {
+          "ticker": null,
+          "reason": "Deploying the freed cash into any permitted name was rejected because no claim supports an increase. Leaving the residual in cash is the policy-compliant outcome under insufficient evidence."
+        }
+      ],
+      "unresolved_uncertainties": [
+        "No price history exists, so covariance and correlation are null. Portfolio risk, volatility, and diversification effects cannot be quantified.",
+        "The claim catalog is empty and no thesis is recorded for any name, so there is no evidence base for increasing exposure to any permitted instrument.",
+        "The turnover definition (one-way versus two-way) is not stated in the brief. The estimate of about 0.22 assumes sales divided by equity.",
+        "Transaction costs are a declared 10 bps planning assumption, not a broker quote, and the actual fee is NULL.",
+        "Quotes are a single provided snapshot with no independent price validation. Execution prices may differ.",
+        "Sector classifications come from fixture lookups and have not been independently verified.",
+        "The NVDA candidate is operator-supplied and its price of $120 is unverified against any market data source."
+      ],
+      "data_sufficiency": "insufficient"
+    },
+    "response_sha256": "65ddb20128ba1dd273bfacec365107c9f36c9adf764e92f5887a585ed9a615d1",
+    "note": "The raw provider text was decoded and validated by the target contract. This object is the validated JSON that was accepted."
+  },
+  "usage": {
+    "adapter": "budgeted_provider_client",
+    "provider": "anthropic",
+    "model": "claude-haiku-5-5",
+    "parameters": {
+      "temperature": 0.2,
+      "max_output_tokens": 8192,
+      "request_timeout_seconds": 90
+    },
+    "budget": {
+      "stage_timeout_seconds": 90,
+      "run_deadline_seconds": 180,
+      "max_input_tokens": 60000,
+      "max_output_tokens": 4000,
+      "schema_repair_attempts": 0,
+      "provider_retries": 0,
+      "provider_retry_backoff_seconds": 0,
+      "monetary_budget_usd": "0.25"
+    },
+    "usage": {
+      "cost_usd": null,
+      "cost_reported": false,
+      "calls": 1,
+      "provider_retries_used": 0,
+      "schema_repairs_used": 0,
+      "token_accounting": "provider_reported",
+      "input_tokens": 5005,
+      "output_tokens": 3020,
+      "measured_tokens": {
+        "input": 5005,
+        "output": 3020
+      },
+      "estimated_tokens": {
+        "input": 0,
+        "output": 0
+      },
+      "price_table_cost_usd": "0.002010",
+      "price_table_cost_partial_usd": null,
+      "price_table_cost_complete": true,
+      "price_table_cost_unknown_calls": 0,
+      "price_table_cost_unknown_reason": null,
+      "billed_cost_usd": null,
+      "billed_cost_unknown_calls": 1,
+      "billed_cost_unknown_reason": "provider_reported_cost_unavailable",
+      "timed_out_calls": 0,
+      "reconciled_timeout_calls": 0,
+      "unreconciled_timeout_calls": 0,
+      "unreconciled_charge_note": null,
+      "monetary_ceiling_basis": "price_table_estimate",
+      "monetary_ceiling_spent_usd": "0.002010",
+      "strict_billed_ceiling": false,
+      "monetary_ceiling": {
+        "limit_usd": "0.25",
+        "enforced_on": "price_table_estimate",
+        "strict_billed_ceiling": false,
+        "late_charges_possible": true
+      }
+    },
+    "calls": [
+      {
+        "stage": "portfolio_allocation",
+        "kind": "model_call",
+        "input_tokens": 5005,
+        "output_tokens": 3020,
+        "token_accounting": "provider_reported",
+        "cost_usd": null,
+        "price_table_cost_usd": "0.00201",
+        "cost_unknown_reason": "provider_reported_cost_unavailable",
+        "elapsed_ms": 13952
+      }
+    ],
+    "notes": []
+  },
+  "plan": {
+    "plan_id": "3031c29d-5ff4-4eef-aba5-9683c595692e",
+    "created": true,
+    "plan_version": 1,
+    "status": "proposed",
+    "execution_mode": "live",
+    "plan": {
+      "plan_id": "3031c29d-5ff4-4eef-aba5-9683c595692e",
+      "portfolio_id": 29,
+      "snapshot_id": "2b04f2d0-ff13-463a-8c4d-b7106b6d514e",
+      "submission_key": "fix08-live-recording.v1",
+      "submission_request_hash": "d958dc56a15fed5cbc61e51dcb44516d847d3dfebefb3ed287c2fb39d6ca93b9",
+      "execution_mode": "live",
+      "status": "proposed",
+      "protocol_version": "portfolio_allocation.v1",
+      "policy_version": "portfolio_allocation.v1",
+      "proposal_portfolio_version": "pv-c0785b6dce8e81826b2b3898",
+      "evaluated_portfolio_version": "pv-c0785b6dce8e81826b2b3898",
+      "investment_horizon_days": 30,
+      "plan_version": 1,
+      "data_sufficiency": "insufficient",
+      "objective": "Bring the portfolio back inside the name and technology-sector limits by trimming AAPL and MSFT, without adding new risk, since the evidence is insufficient to support any increase.",
+      "requested_target_weights": {
+        "JPM": "0.125000",
+        "AAPL": "0.197916",
+        "CASH": "0.480209",
+        "MSFT": "0.196875",
+        "NVDA": "0"
+      },
+      "target_weights": {
+        "JPM": "0.125000",
+        "AAPL": "0.197916",
+        "CASH": "0.480209",
+        "MSFT": "0.196875",
+        "NVDA": "0"
+      },
+      "target_weights_sum": "1.000000",
+      "actions": [
+        {
+          "action": "reduce",
+          "ticker": "AAPL",
+          "claim_ids": [],
+          "rationale": "Current weight 0.39583333 breaches max_name_weight 0.30. Sell 20 shares (about $3,800) to reach 20 shares, weight 0.19791667. This also lowers technology sector exposure. A reduction adds no risk, so no claim is required.",
+          "target_weight": "0.197916",
+          "applied_target_weight": "0.197916"
+        },
+        {
+          "action": "maintain",
+          "ticker": "JPM",
+          "claim_ids": [],
+          "rationale": "Weight 0.125 is within the 0.30 name limit and the financials sector is within the 0.40 limit. No claim supports an increase, so the position is held unchanged.",
+          "target_weight": "0.125000",
+          "applied_target_weight": "0.125000"
+        },
+        {
+          "action": "reduce",
+          "ticker": "MSFT",
+          "claim_ids": [],
+          "rationale": "Technology sector weight 0.61458333 breaches max_sector_weight 0.40. Trimming AAPL alone leaves technology at about 0.41, so MSFT is also reduced by 1 share (about $420) to 9 shares, weight 0.196875. Combined technology weight is about 0.3948, which is within the limit. A reduction adds no risk, so no claim is required.",
+          "target_weight": "0.196875",
+          "applied_target_weight": "0.196875"
+        },
+        {
+          "action": "no_change",
+          "ticker": "NVDA",
+          "claim_ids": [],
+          "rationale": "Operator-supplied candidate with no claim catalog, no validated evidence, and evidence_sufficient=false. Policy requires retaining cash for insufficient evidence, so no buy is permitted and the target stays at 0.",
+          "target_weight": "0.000000",
+          "applied_target_weight": "0"
+        }
+      ],
+      "funding_source": "none",
+      "funding": {
+        "note": "Buy legs are funded from the planned sell proceeds in sequence. At apply time every selling leg is revalidated and applied before any buying leg; a failed sale halts the plan and its proceeds are not treated as available.",
+        "source": "none",
+        "min_cash_usd": "1920.00",
+        "buy_spend_usd": "0.00",
+        "ending_cash_usd": "9215.78",
+        "sell_proceeds_usd": "4215.78",
+        "starting_cash_usd": "5000.00",
+        "estimated_costs_usd": "4.22",
+        "assumes_sell_proceeds": false
+      },
+      "rationale": "The existing book breaches two hard limits: AAPL at 0.396 exceeds the 0.30 name cap, and technology at 0.615 exceeds the 0.40 sector cap. The plan sells 20 AAPL shares and 1 MSFT share, which brings technology to about 0.395 and AAPL to about 0.198. Turnover is about 0.22, below the 0.40 limit. Cash rises to about 0.480, well above the 0.10 minimum and the $1,920 buffer. No purchases are made because the claim catalog is empty and insufficient_evidence triggers retain_cash. Estimated 10 bps linear cost on about $4,220 of sales is roughly $4.22, a declared planning assumption rather than a broker quote. No decisive claims exist, so no increase is supported.",
+      "rejected_alternatives": [
+        {
+          "reason": "Buying NVDA at $120 has no claim catalog, no thesis, and no validated evidence. Policy requires retain_cash, and a buy would also add technology exposure that is already over its sector limit.",
+          "ticker": "NVDA"
+        },
+        {
+          "reason": "Holding AAPL at 0.396 breaches max_name_weight 0.30. Trimming it to exactly 0.30 would still leave technology above 0.40 once MSFT is considered, so a deeper trim was chosen.",
+          "ticker": "AAPL"
+        },
+        {
+          "reason": "Trimming MSFT alone cannot fix the technology breach; AAPL must also be reduced. Selling more MSFT would be unnecessary turnover.",
+          "ticker": "MSFT"
+        },
+        {
+          "reason": "Increasing JPM would require a claim_id from the catalog, which is empty, and the position is not in breach. Holding is the compliant choice.",
+          "ticker": "JPM"
+        },
+        {
+          "reason": "Deploying the freed cash into any permitted name was rejected because no claim supports an increase. Leaving the residual in cash is the policy-compliant outcome under insufficient evidence.",
+          "ticker": null
+        }
+      ],
+      "unresolved_uncertainties": [
+        "No price history exists, so covariance and correlation are null. Portfolio risk, volatility, and diversification effects cannot be quantified.",
+        "The claim catalog is empty and no thesis is recorded for any name, so there is no evidence base for increasing exposure to any permitted instrument.",
+        "The turnover definition (one-way versus two-way) is not stated in the brief. The estimate of about 0.22 assumes sales divided by equity.",
+        "Transaction costs are a declared 10 bps planning assumption, not a broker quote, and the actual fee is NULL.",
+        "Quotes are a single provided snapshot with no independent price validation. Execution prices may differ.",
+        "Sector classifications come from fixture lookups and have not been independently verified.",
+        "The NVDA candidate is operator-supplied and its price of $120 is unverified against any market data source."
+      ],
+      "deviations": [
+        {
+          "code": "policy:insufficient_evidence",
+          "detail": "Policy retains cash while insufficient_evidence is present; cash floor raised to 0.480209. Increases removed for none."
+        }
+      ],
+      "constraints": {
+        "note": "Limits are applied to weights of pre-cost equity scaled by the cost reserve, so post-cost weights stay inside the policy limits. The reserve is an estimate from the declared cost model, not a broker fee.",
+        "checks": {
+          "cash_buffer": {
+            "status": "pass",
+            "min_cash_weight": "0.100198281250",
+            "observed_cash_weight": "0.480209",
+            "policy_min_cash_weight": "0.10"
+          },
+          "max_turnover": {
+            "limit": "0.40",
+            "status": "pass",
+            "observed": "0.2197923333333333333333333333"
+          },
+          "max_name_weight": {
+            "limit": "0.299933906250",
+            "status": "pass",
+            "per_name": [
+              {
+                "limit": "0.299933906250",
+                "status": "pass",
+                "ticker": "AAPL",
+                "observed": "0.197916",
+                "policy_limit": "0.30"
+              },
+              {
+                "limit": "0.299933906250",
+                "status": "pass",
+                "ticker": "JPM",
+                "observed": "0.125000",
+                "policy_limit": "0.30"
+              },
+              {
+                "limit": "0.299933906250",
+                "status": "pass",
+                "ticker": "MSFT",
+                "observed": "0.196875",
+                "policy_limit": "0.30"
+              },
+              {
+                "limit": "0.299933906250",
+                "status": "pass",
+                "ticker": "NVDA",
+                "observed": "0",
+                "policy_limit": "0.30"
+              }
+            ],
+            "policy_limit": "0.30"
+          },
+          "max_sector_weight": {
+            "limit": "0.399911875000",
+            "status": "pass",
+            "per_sector": [
+              {
+                "limit": "0.399911875000",
+                "sector": "financials",
+                "status": "pass",
+                "observed": "0.125000",
+                "policy_limit": "0.40"
+              },
+              {
+                "limit": "0.399911875000",
+                "sector": "technology",
+                "status": "pass",
+                "observed": "0.394791",
+                "policy_limit": "0.40"
+              }
+            ],
+            "policy_limit": "0.40",
+            "not_evaluated": []
+          },
+          "max_total_exposure": {
+            "limit": "0.90",
+            "status": "pass",
+            "observed": "0.519791",
+            "effective_limit": "0.899801718750"
+          }
+        },
+        "inputs": [
+          "input_snapshot_holdings",
+          "input_snapshot_cash",
+          "input_snapshot_quotes",
+          "explicit_instrument_classification",
+          "deterministic_price_statistics",
+          "candidate_cases_and_claims"
+        ],
+        "limits": {
+          "max_turnover": "0.40",
+          "max_name_weight": "0.30",
+          "min_cash_weight": "0.10",
+          "max_sector_weight": "0.40",
+          "max_total_exposure": "0.90",
+          "max_trade_fraction_of_cash": "0.9999"
+        },
+        "solver": {
+          "note": "The model proposes weights; this layer projects them into the feasible set. There is no mean-variance or expected-return objective.",
+          "type": "deterministic_projection",
+          "method": "deterministic_constrained_projection.v1",
+          "not_an_optimizer": true
+        },
+        "limit_scale": "0.9997796875",
+        "unevaluated": [],
+        "method_version": "deterministic_constrained_projection.v1",
+        "policy_version": "portfolio_allocation.v1",
+        "objective_version": "constrained_capital_allocation.v1",
+        "binding_constraints": [
+          "policy:insufficient_evidence"
+        ],
+        "cost_reserve_fraction": "0.0002203125",
+        "covariance_method_version": "covariance.sample_daily_returns.v1"
+      },
+      "data_quality": {
+        "flags": [
+          {
+            "code": "missing_correlation_history",
+            "detail": "Not every permitted pair has the minimum 20 daily observations. Missing pairs are null with reasons in risk_statistics.",
+            "severity": "warning"
+          },
+          {
+            "code": "insufficient_evidence",
+            "detail": "No candidate case has a claim backed by recorded evidence.",
+            "severity": "warning"
+          }
+        ],
+        "source": {
+          "prices": "input_snapshot",
+          "sector": "explicit_portfolio_classification_lookup",
+          "theses": "open_position_thesis_rows",
+          "holdings": "input_snapshot",
+          "candidate_cases": "operator_supplied_demonstration",
+          "risk_statistics": "none"
+        },
+        "flag_codes": [
+          "missing_correlation_history",
+          "insufficient_evidence"
+        ],
+        "policy_actions": [
+          {
+            "flag": "insufficient_evidence",
+            "action": "retain_cash"
+          }
+        ],
+        "snapshot_stale": false,
+        "sector_coverage": {
+          "status": "complete",
+          "coverage_pct": "100.00",
+          "known_value_usd": "14200.00",
+          "positions_value_usd": "14200.00",
+          "unclassified_value_usd": "0.00"
+        },
+        "unpriced_tickers": [],
+        "snapshot_age_seconds": 0,
+        "insufficient_evidence": true,
+        "prices_marked_at_cost": [],
+        "missing_correlation_history": true
+      },
+      "brief_hash": "a5d08f2039f473de5ddcfb46b87a177e84d18bf7481ec817b573b756fa0b87bb",
+      "cost_model": {
+        "bps": "10",
+        "note": "Costs are a planning estimate. Transaction.fee is left NULL because no broker fee was recorded; NULL is not zero.",
+        "source": "declared_assumption_not_broker_quote",
+        "model_version": "linear_bps.v1",
+        "minimum_fee_usd": "0",
+        "fixed_per_trade_usd": "0"
+      },
+      "model_metadata": {
+        "note": "The brief is recorded verbatim in the plan and the validated response is stored as weights, actions and rationales. Replaying the arithmetic is deterministic; regenerating model output is not.",
+        "calls": [
+          {
+            "error": "",
+            "stage": "portfolio_allocation",
+            "status": "accepted",
+            "elapsed_ms": 13952,
+            "prompt_hash": "1686a062dfcac397f581033bffd05332969bbfdb1020d7ff963398cb450d35d0",
+            "response_hash": "65ddb20128ba1dd273bfacec365107c9f36c9adf764e92f5887a585ed9a615d1"
+          }
+        ],
+        "model": "claude-haiku-5-5",
+        "adapter": {
+          "calls": [
+            {
+              "kind": "model_call",
+              "stage": "portfolio_allocation",
+              "cost_usd": null,
+              "elapsed_ms": 13952,
+              "input_tokens": 5005,
+              "output_tokens": 3020,
+              "token_accounting": "provider_reported",
+              "cost_unknown_reason": "provider_reported_cost_unavailable",
+              "price_table_cost_usd": "0.00201"
+            }
+          ],
+          "model": "claude-haiku-5-5",
+          "notes": [],
+          "usage": {
+            "calls": 1,
+            "cost_usd": null,
+            "input_tokens": 5005,
+            "cost_reported": false,
+            "output_tokens": 3020,
+            "billed_cost_usd": null,
+            "measured_tokens": {
+              "input": 5005,
+              "output": 3020
+            },
+            "timed_out_calls": 0,
+            "estimated_tokens": {
+              "input": 0,
+              "output": 0
+            },
+            "monetary_ceiling": {
+              "limit_usd": "0.25",
+              "enforced_on": "price_table_estimate",
+              "late_charges_possible": true,
+              "strict_billed_ceiling": false
+            },
+            "token_accounting": "provider_reported",
+            "schema_repairs_used": 0,
+            "price_table_cost_usd": "0.002010",
+            "provider_retries_used": 0,
+            "strict_billed_ceiling": false,
+            "monetary_ceiling_basis": "price_table_estimate",
+            "reconciled_timeout_calls": 0,
+            "unreconciled_charge_note": null,
+            "billed_cost_unknown_calls": 1,
+            "price_table_cost_complete": true,
+            "billed_cost_unknown_reason": "provider_reported_cost_unavailable",
+            "monetary_ceiling_spent_usd": "0.002010",
+            "unreconciled_timeout_calls": 0,
+            "price_table_cost_partial_usd": null,
+            "price_table_cost_unknown_calls": 0,
+            "price_table_cost_unknown_reason": null
+          },
+          "budget": {
+            "max_input_tokens": 60000,
+            "provider_retries": 0,
+            "max_output_tokens": 4000,
+            "monetary_budget_usd": "0.25",
+            "run_deadline_seconds": 180,
+            "stage_timeout_seconds": 90,
+            "schema_repair_attempts": 0,
+            "provider_retry_backoff_seconds": 0
+          },
+          "adapter": "budgeted_provider_client",
+          "provider": "anthropic",
+          "parameters": {
+            "temperature": 0.2,
+            "max_output_tokens": 8192,
+            "request_timeout_seconds": 90
+          }
+        },
+        "cost_usd": null,
+        "provider": "anthropic",
+        "parameters": {
+          "temperature": 0.2,
+          "max_output_tokens": 8192,
+          "request_timeout_seconds": 90
+        },
+        "prompt_hash": "1686a062dfcac397f581033bffd05332969bbfdb1020d7ff963398cb450d35d0",
+        "input_tokens": 5005,
+        "analysis_mode": "live",
+        "cost_reported": false,
+        "output_tokens": 3020,
+        "repair_attempts": 0,
+        "protocol_version": "portfolio_allocation.v1",
+        "token_accounting": "provider_reported",
+        "synthetic_response": false,
+        "prompt_template_version": "portfolio_targets.v1",
+        "cost_reported_note": "Corrected label after recording: the provider reported tokens but not a billed dollar amount; the cost is unknown and the price-table figure is an estimate."
+      },
+      "equity_usd": "19200.00",
+      "cash_usd": "5000.00",
+      "min_cash_usd": "1920.00",
+      "estimated_cost_usd": "4.22",
+      "estimated_turnover_pct": "21.9792",
+      "approval_hash": "f2c908764389d2ab54f00ac62e0ac0f4d8833c09ca3917df50fa6c7eaed055d5",
+      "approval_binding": {
+        "legs": [
+          {
+            "side": "SELL",
+            "price": "190.00",
+            "ticker": "AAPL",
+            "quantity": "20.00000000",
+            "sequence": 1
+          },
+          {
+            "side": "SELL",
+            "price": "420.00",
+            "ticker": "MSFT",
+            "quantity": "1.00000000",
+            "sequence": 2
+          }
+        ],
+        "policy": {
+          "limits": {
+            "max_turnover": "0.40",
+            "max_name_weight": "0.30",
+            "min_cash_weight": "0.10",
+            "max_sector_weight": "0.40",
+            "max_total_exposure": "0.90",
+            "max_trade_fraction_of_cash": "0.9999"
+          },
+          "execution": {
+            "lot_sizes": {},
+            "price_quantum": "0.01",
+            "default_lot_size": "1",
+            "min_trade_notional_usd": "1"
+          },
+          "policy_version": "portfolio_allocation.v1",
+          "evidence_policy": {
+            "stale_snapshot": "block_new_risk",
+            "unknown_sector": "label_only",
+            "insufficient_evidence": "retain_cash",
+            "missing_correlation_history": "label_only"
+          },
+          "risk_statistics": {
+            "covariance_min_observations": 20,
+            "covariance_max_history_age_days": 7
+          },
+          "investment_horizon_days": 30,
+          "max_snapshot_age_seconds": 900
+        },
+        "schema": "portfolio_plan.binding.v1",
+        "cost_model": {
+          "bps": "10",
+          "note": "Costs are a planning estimate. Transaction.fee is left NULL because no broker fee was recorded; NULL is not zero.",
+          "source": "declared_assumption_not_broker_quote",
+          "model_version": "linear_bps.v1",
+          "minimum_fee_usd": "0",
+          "fixed_per_trade_usd": "0"
+        },
+        "post_trade": {
+          "status": "within_limits",
+          "weights": {
+            "JPM": "0.1250274799982079394533590195",
+            "AAPL": "0.1979601766638292374678184476",
+            "CASH": "0.4800940623407853184397820771",
+            "MSFT": "0.1969182809971775046390404558"
+          },
+          "breaches": [],
+          "cash_usd": "9215.78",
+          "equity_usd": "19195.78",
+          "cash_weight": "0.4800940623407853184397820771",
+          "sector_weights": {
+            "financials": "0.1250274799982079394533590195",
+            "technology": "0.3948784576610067421068589034"
+          },
+          "total_exposure": "0.5199059376592146815602179229",
+          "positions_value_usd": "9980.00",
+          "unclassified_weight": "0"
+        },
+        "constraints": {
+          "note": "Limits are applied to weights of pre-cost equity scaled by the cost reserve, so post-cost weights stay inside the policy limits. The reserve is an estimate from the declared cost model, not a broker fee.",
+          "checks": {
+            "cash_buffer": {
+              "status": "pass",
+              "min_cash_weight": "0.100198281250",
+              "observed_cash_weight": "0.480209",
+              "policy_min_cash_weight": "0.10"
+            },
+            "max_turnover": {
+              "limit": "0.40",
+              "status": "pass",
+              "observed": "0.2197923333333333333333333333"
+            },
+            "max_name_weight": {
+              "limit": "0.299933906250",
+              "status": "pass",
+              "per_name": [
+                {
+                  "limit": "0.299933906250",
+                  "status": "pass",
+                  "ticker": "AAPL",
+                  "observed": "0.197916",
+                  "policy_limit": "0.30"
+                },
+                {
+                  "limit": "0.299933906250",
+                  "status": "pass",
+                  "ticker": "JPM",
+                  "observed": "0.125000",
+                  "policy_limit": "0.30"
+                },
+                {
+                  "limit": "0.299933906250",
+                  "status": "pass",
+                  "ticker": "MSFT",
+                  "observed": "0.196875",
+                  "policy_limit": "0.30"
+                },
+                {
+                  "limit": "0.299933906250",
+                  "status": "pass",
+                  "ticker": "NVDA",
+                  "observed": "0",
+                  "policy_limit": "0.30"
+                }
+              ],
+              "policy_limit": "0.30"
+            },
+            "max_sector_weight": {
+              "limit": "0.399911875000",
+              "status": "pass",
+              "per_sector": [
+                {
+                  "limit": "0.399911875000",
+                  "sector": "financials",
+                  "status": "pass",
+                  "observed": "0.125000",
+                  "policy_limit": "0.40"
+                },
+                {
+                  "limit": "0.399911875000",
+                  "sector": "technology",
+                  "status": "pass",
+                  "observed": "0.394791",
+                  "policy_limit": "0.40"
+                }
+              ],
+              "policy_limit": "0.40",
+              "not_evaluated": []
+            },
+            "max_total_exposure": {
+              "limit": "0.90",
+              "status": "pass",
+              "observed": "0.519791",
+              "effective_limit": "0.899801718750"
+            }
+          },
+          "inputs": [
+            "input_snapshot_holdings",
+            "input_snapshot_cash",
+            "input_snapshot_quotes",
+            "explicit_instrument_classification",
+            "deterministic_price_statistics",
+            "candidate_cases_and_claims"
+          ],
+          "limits": {
+            "max_turnover": "0.40",
+            "max_name_weight": "0.30",
+            "min_cash_weight": "0.10",
+            "max_sector_weight": "0.40",
+            "max_total_exposure": "0.90",
+            "max_trade_fraction_of_cash": "0.9999"
+          },
+          "solver": {
+            "note": "The model proposes weights; this layer projects them into the feasible set. There is no mean-variance or expected-return objective.",
+            "type": "deterministic_projection",
+            "method": "deterministic_constrained_projection.v1",
+            "not_an_optimizer": true
+          },
+          "limit_scale": "0.9997796875",
+          "unevaluated": [],
+          "method_version": "deterministic_constrained_projection.v1",
+          "policy_version": "portfolio_allocation.v1",
+          "objective_version": "constrained_capital_allocation.v1",
+          "binding_constraints": [
+            "policy:insufficient_evidence"
+          ],
+          "cost_reserve_fraction": "0.0002203125",
+          "covariance_method_version": "covariance.sample_daily_returns.v1"
+        },
+        "planned_marks": {
+          "JPM": "160.00",
+          "AAPL": "190.00",
+          "MSFT": "420.00"
+        },
+        "execution_mode": "live",
+        "target_weights": {
+          "JPM": "0.125000",
+          "AAPL": "0.197916",
+          "CASH": "0.480209",
+          "MSFT": "0.196875",
+          "NVDA": "0"
+        },
+        "classifications": {
+          "JPM": {
+            "sector": "financials",
+            "asset_class": "equity"
+          },
+          "AAPL": {
+            "sector": "technology",
+            "asset_class": "equity"
+          },
+          "MSFT": {
+            "sector": "technology",
+            "asset_class": "equity"
+          }
+        },
+        "permission_hash": "1963c94d10faad3fcad024743125fdea40899268f5653ebdc59acf36b911dec0",
+        "requested_allocation": {
+          "JPM": "0.125000",
+          "AAPL": "0.197916",
+          "CASH": "0.480209",
+          "MSFT": "0.196875",
+          "NVDA": "0"
+        }
+      },
+      "approval_version": 0,
+      "approved_by": null,
+      "approved_at": null,
+      "approval_expires_at": null,
+      "applied_approval_version": 0,
+      "applied_by": null,
+      "revalidation_required": false,
+      "revalidation_count": 0,
+      "executed_target_weights": {},
+      "execution_reasons": [],
+      "failure_code": null,
+      "failure_detail": null,
+      "created_at": "2026-11-12T07:21:17.288266Z",
+      "applied_at": null,
+      "legs": [
+        {
+          "leg_id": 62,
+          "sequence": 1,
+          "ticker": "AAPL",
+          "side": "SELL",
+          "quantity": "20.00000000",
+          "price": "190.00000000",
+          "notional_usd": "3800.00",
+          "estimated_cost_usd": "3.80",
+          "priority": "risk_reducing",
+          "sector": "technology",
+          "asset_class": "equity",
+          "status": "planned",
+          "transaction_id": null,
+          "reason": "Reduce AAPL from 0.3958333333333333333333333333 to 0.197916 of equity."
+        },
+        {
+          "leg_id": 63,
+          "sequence": 2,
+          "ticker": "MSFT",
+          "side": "SELL",
+          "quantity": "1.00000000",
+          "price": "420.00000000",
+          "notional_usd": "420.00",
+          "estimated_cost_usd": "0.42",
+          "priority": "risk_reducing",
+          "sector": "technology",
+          "asset_class": "equity",
+          "status": "planned",
+          "transaction_id": null,
+          "reason": "Reduce MSFT from 0.21875 to 0.196875 of equity."
+        }
+      ]
+    },
+    "review": {
+      "plan_id": "3031c29d-5ff4-4eef-aba5-9683c595692e",
+      "portfolio_id": 29,
+      "status": "proposed",
+      "reviewable": true,
+      "plan_version": 1,
+      "review_fingerprint": "ba72da77f9e2eea8aca315f5f96e33511559ea54437eac3f7bea6ceca768907f",
+      "created_at": "2026-11-12T07:21:17.288266Z",
+      "updated_at": "2026-11-12T07:47:52.271665Z",
+      "applied_at": null,
+      "execution_mode": "live",
+      "protocol_version": "portfolio_allocation.v1",
+      "policy_version": "portfolio_allocation.v1",
+      "proposal_portfolio_version": "pv-c0785b6dce8e81826b2b3898",
+      "evaluated_portfolio_version": "pv-c0785b6dce8e81826b2b3898",
+      "brief_hash": "a5d08f2039f473de5ddcfb46b87a177e84d18bf7481ec817b573b756fa0b87bb",
+      "approval_hash": "f2c908764389d2ab54f00ac62e0ac0f4d8833c09ca3917df50fa6c7eaed055d5",
+      "data_sufficiency": "insufficient",
+      "objective": "Bring the portfolio back inside the name and technology-sector limits by trimming AAPL and MSFT, without adding new risk, since the evidence is insufficient to support any increase.",
+      "rationale": "The existing book breaches two hard limits: AAPL at 0.396 exceeds the 0.30 name cap, and technology at 0.615 exceeds the 0.40 sector cap. The plan sells 20 AAPL shares and 1 MSFT share, which brings technology to about 0.395 and AAPL to about 0.198. Turnover is about 0.22, below the 0.40 limit. Cash rises to about 0.480, well above the 0.10 minimum and the $1,920 buffer. No purchases are made because the claim catalog is empty and insufficient_evidence triggers retain_cash. Estimated 10 bps linear cost on about $4,220 of sales is roughly $4.22, a declared planning assumption rather than a broker quote. No decisive claims exist, so no increase is supported.",
+      "actions": [
+        {
+          "action": "reduce",
+          "ticker": "AAPL",
+          "claim_ids": [],
+          "rationale": "Current weight 0.39583333 breaches max_name_weight 0.30. Sell 20 shares (about $3,800) to reach 20 shares, weight 0.19791667. This also lowers technology sector exposure. A reduction adds no risk, so no claim is required.",
+          "target_weight": "0.197916",
+          "applied_target_weight": "0.197916"
+        },
+        {
+          "action": "maintain",
+          "ticker": "JPM",
+          "claim_ids": [],
+          "rationale": "Weight 0.125 is within the 0.30 name limit and the financials sector is within the 0.40 limit. No claim supports an increase, so the position is held unchanged.",
+          "target_weight": "0.125000",
+          "applied_target_weight": "0.125000"
+        },
+        {
+          "action": "reduce",
+          "ticker": "MSFT",
+          "claim_ids": [],
+          "rationale": "Technology sector weight 0.61458333 breaches max_sector_weight 0.40. Trimming AAPL alone leaves technology at about 0.41, so MSFT is also reduced by 1 share (about $420) to 9 shares, weight 0.196875. Combined technology weight is about 0.3948, which is within the limit. A reduction adds no risk, so no claim is required.",
+          "target_weight": "0.196875",
+          "applied_target_weight": "0.196875"
+        },
+        {
+          "action": "no_change",
+          "ticker": "NVDA",
+          "claim_ids": [],
+          "rationale": "Operator-supplied candidate with no claim catalog, no validated evidence, and evidence_sufficient=false. Policy requires retaining cash for insufficient evidence, so no buy is permitted and the target stays at 0.",
+          "target_weight": "0.000000",
+          "applied_target_weight": "0"
+        }
+      ],
+      "holdings": [
+        {
+          "price": "190.00",
+          "sector": "technology",
+          "ticker": "AAPL",
+          "weight": "0.39583333",
+          "avg_cost": "180.00",
+          "quantity": "40.00000000",
+          "asset_class": "equity",
+          "price_source": "provided_quote",
+          "market_value_usd": "7600.00",
+          "classification_source": "fixture"
+        },
+        {
+          "price": "160.00",
+          "sector": "financials",
+          "ticker": "JPM",
+          "weight": "0.12500000",
+          "avg_cost": "150.00",
+          "quantity": "15.00000000",
+          "asset_class": "equity",
+          "price_source": "provided_quote",
+          "market_value_usd": "2400.00",
+          "classification_source": "fixture"
+        },
+        {
+          "price": "420.00",
+          "sector": "technology",
+          "ticker": "MSFT",
+          "weight": "0.21875000",
+          "avg_cost": "400.00",
+          "quantity": "10.00000000",
+          "asset_class": "equity",
+          "price_source": "provided_quote",
+          "market_value_usd": "4200.00",
+          "classification_source": "fixture"
+        }
+      ],
+      "weights": [
+        {
+          "ticker": "AAPL",
+          "is_cash": false,
+          "current_weight": "0.395833",
+          "requested_weight": "0.197916",
+          "constrained_weight": "0.197916",
+          "change_from_current": "-0.197917",
+          "requested_vs_constrained": "0",
+          "executed_weight": null,
+          "action": "reduce",
+          "rationale": "Current weight 0.39583333 breaches max_name_weight 0.30. Sell 20 shares (about $3,800) to reach 20 shares, weight 0.19791667. This also lowers technology sector exposure. A reduction adds no risk, so no claim is required.",
+          "claim_ids": []
+        },
+        {
+          "ticker": "CASH",
+          "is_cash": true,
+          "current_weight": "0.260417",
+          "requested_weight": "0.480209",
+          "constrained_weight": "0.480209",
+          "change_from_current": "0.219792",
+          "requested_vs_constrained": "0",
+          "executed_weight": null,
+          "action": null,
+          "rationale": null,
+          "claim_ids": []
+        },
+        {
+          "ticker": "JPM",
+          "is_cash": false,
+          "current_weight": "0.125000",
+          "requested_weight": "0.125000",
+          "constrained_weight": "0.125000",
+          "change_from_current": "0",
+          "requested_vs_constrained": "0",
+          "executed_weight": null,
+          "action": "maintain",
+          "rationale": "Weight 0.125 is within the 0.30 name limit and the financials sector is within the 0.40 limit. No claim supports an increase, so the position is held unchanged.",
+          "claim_ids": []
+        },
+        {
+          "ticker": "MSFT",
+          "is_cash": false,
+          "current_weight": "0.218750",
+          "requested_weight": "0.196875",
+          "constrained_weight": "0.196875",
+          "change_from_current": "-0.021875",
+          "requested_vs_constrained": "0",
+          "executed_weight": null,
+          "action": "reduce",
+          "rationale": "Technology sector weight 0.61458333 breaches max_sector_weight 0.40. Trimming AAPL alone leaves technology at about 0.41, so MSFT is also reduced by 1 share (about $420) to 9 shares, weight 0.196875. Combined technology weight is about 0.3948, which is within the limit. A reduction adds no risk, so no claim is required.",
+          "claim_ids": []
+        },
+        {
+          "ticker": "NVDA",
+          "is_cash": false,
+          "current_weight": "0",
+          "requested_weight": "0",
+          "constrained_weight": "0",
+          "change_from_current": "0",
+          "requested_vs_constrained": "0",
+          "executed_weight": null,
+          "action": "no_change",
+          "rationale": "Operator-supplied candidate with no claim catalog, no validated evidence, and evidence_sufficient=false. Policy requires retaining cash for insufficient evidence, so no buy is permitted and the target stays at 0.",
+          "claim_ids": []
+        }
+      ],
+      "requested_target_weights": {
+        "JPM": "0.125000",
+        "AAPL": "0.197916",
+        "CASH": "0.480209",
+        "MSFT": "0.196875",
+        "NVDA": "0"
+      },
+      "constrained_target_weights": {
+        "JPM": "0.125000",
+        "AAPL": "0.197916",
+        "CASH": "0.480209",
+        "MSFT": "0.196875",
+        "NVDA": "0"
+      },
+      "cash_effect": {
+        "current_cash_weight": "0.260417",
+        "requested_cash_weight": "0.480209",
+        "constrained_cash_weight": "0.480209",
+        "current_cash_usd": "5000.00",
+        "target_cash_usd": "9220.01",
+        "min_cash_usd": "1920.00",
+        "change_usd": "4220.01",
+        "buffer_status": "within_policy",
+        "note": "Cash is a deliberate allocation, not a failure. The target is the deterministic projection's cash weight after limits and rounding."
+      },
+      "sector_effects": {
+        "rows": [
+          {
+            "sector": "financials",
+            "current_weight": "0.125000",
+            "target_weight": "0.125000",
+            "change": "0"
+          },
+          {
+            "sector": "technology",
+            "current_weight": "0.614583",
+            "target_weight": "0.394791",
+            "change": "-0.219792"
+          }
+        ],
+        "asset_class_target": {
+          "equity": "0.519791"
+        },
+        "unclassified_target_weight": "0",
+        "unclassified_target_tickers": [],
+        "current_coverage": {
+          "status": "complete",
+          "coverage_pct": "100.00",
+          "known_value_usd": "14200.00",
+          "positions_value_usd": "14200.00",
+          "unclassified_value_usd": "0.00"
+        },
+        "target_coverage_status": "complete",
+        "note": "Sector weights come only from the explicit InstrumentClassification lookup. Unclassified target weight is not assigned to a default sector."
+      },
+      "funding": {
+        "note": "Buy legs are funded from the planned sell proceeds in sequence. At apply time every selling leg is revalidated and applied before any buying leg; a failed sale halts the plan and its proceeds are not treated as available.",
+        "source": "none",
+        "min_cash_usd": "1920.00",
+        "buy_spend_usd": "0.00",
+        "ending_cash_usd": "9215.78",
+        "sell_proceeds_usd": "4215.78",
+        "starting_cash_usd": "5000.00",
+        "estimated_costs_usd": "4.22",
+        "assumes_sell_proceeds": false
+      },
+      "costs": {
+        "estimated_cost_usd": "4.22",
+        "estimated_turnover_pct": "21.9792",
+        "cost_model": {
+          "bps": "10",
+          "note": "Costs are a planning estimate. Transaction.fee is left NULL because no broker fee was recorded; NULL is not zero.",
+          "source": "declared_assumption_not_broker_quote",
+          "model_version": "linear_bps.v1",
+          "minimum_fee_usd": "0",
+          "fixed_per_trade_usd": "0"
+        },
+        "per_leg_estimated_cost_usd": {
+          "AAPL": "3.80",
+          "MSFT": "0.42"
+        },
+        "recorded_fee_note": "These are planning estimates. Transaction.fee is NULL because no broker fee was recorded; NULL means no fee was recorded, not a zero fee.",
+        "fees_recorded_in_ledger": false
+      },
+      "estimated_turnover_pct": "21.9792",
+      "rejected_alternatives": [
+        {
+          "reason": "Buying NVDA at $120 has no claim catalog, no thesis, and no validated evidence. Policy requires retain_cash, and a buy would also add technology exposure that is already over its sector limit.",
+          "ticker": "NVDA"
+        },
+        {
+          "reason": "Holding AAPL at 0.396 breaches max_name_weight 0.30. Trimming it to exactly 0.30 would still leave technology above 0.40 once MSFT is considered, so a deeper trim was chosen.",
+          "ticker": "AAPL"
+        },
+        {
+          "reason": "Trimming MSFT alone cannot fix the technology breach; AAPL must also be reduced. Selling more MSFT would be unnecessary turnover.",
+          "ticker": "MSFT"
+        },
+        {
+          "reason": "Increasing JPM would require a claim_id from the catalog, which is empty, and the position is not in breach. Holding is the compliant choice.",
+          "ticker": "JPM"
+        },
+        {
+          "reason": "Deploying the freed cash into any permitted name was rejected because no claim supports an increase. Leaving the residual in cash is the policy-compliant outcome under insufficient evidence.",
+          "ticker": null
+        }
+      ],
+      "unresolved_uncertainties": [
+        "No price history exists, so covariance and correlation are null. Portfolio risk, volatility, and diversification effects cannot be quantified.",
+        "The claim catalog is empty and no thesis is recorded for any name, so there is no evidence base for increasing exposure to any permitted instrument.",
+        "The turnover definition (one-way versus two-way) is not stated in the brief. The estimate of about 0.22 assumes sales divided by equity.",
+        "Transaction costs are a declared 10 bps planning assumption, not a broker quote, and the actual fee is NULL.",
+        "Quotes are a single provided snapshot with no independent price validation. Execution prices may differ.",
+        "Sector classifications come from fixture lookups and have not been independently verified.",
+        "The NVDA candidate is operator-supplied and its price of $120 is unverified against any market data source."
+      ],
+      "deviations": [
+        {
+          "code": "policy:insufficient_evidence",
+          "detail": "Policy retains cash while insufficient_evidence is present; cash floor raised to 0.480209. Increases removed for none."
+        }
+      ],
+      "constraints": {
+        "note": "Limits are applied to weights of pre-cost equity scaled by the cost reserve, so post-cost weights stay inside the policy limits. The reserve is an estimate from the declared cost model, not a broker fee.",
+        "checks": {
+          "cash_buffer": {
+            "status": "pass",
+            "min_cash_weight": "0.100198281250",
+            "observed_cash_weight": "0.480209",
+            "policy_min_cash_weight": "0.10"
+          },
+          "max_turnover": {
+            "limit": "0.40",
+            "status": "pass",
+            "observed": "0.2197923333333333333333333333"
+          },
+          "max_name_weight": {
+            "limit": "0.299933906250",
+            "status": "pass",
+            "per_name": [
+              {
+                "limit": "0.299933906250",
+                "status": "pass",
+                "ticker": "AAPL",
+                "observed": "0.197916",
+                "policy_limit": "0.30"
+              },
+              {
+                "limit": "0.299933906250",
+                "status": "pass",
+                "ticker": "JPM",
+                "observed": "0.125000",
+                "policy_limit": "0.30"
+              },
+              {
+                "limit": "0.299933906250",
+                "status": "pass",
+                "ticker": "MSFT",
+                "observed": "0.196875",
+                "policy_limit": "0.30"
+              },
+              {
+                "limit": "0.299933906250",
+                "status": "pass",
+                "ticker": "NVDA",
+                "observed": "0",
+                "policy_limit": "0.30"
+              }
+            ],
+            "policy_limit": "0.30"
+          },
+          "max_sector_weight": {
+            "limit": "0.399911875000",
+            "status": "pass",
+            "per_sector": [
+              {
+                "limit": "0.399911875000",
+                "sector": "financials",
+                "status": "pass",
+                "observed": "0.125000",
+                "policy_limit": "0.40"
+              },
+              {
+                "limit": "0.399911875000",
+                "sector": "technology",
+                "status": "pass",
+                "observed": "0.394791",
+                "policy_limit": "0.40"
+              }
+            ],
+            "policy_limit": "0.40",
+            "not_evaluated": []
+          },
+          "max_total_exposure": {
+            "limit": "0.90",
+            "status": "pass",
+            "observed": "0.519791",
+            "effective_limit": "0.899801718750"
+          }
+        },
+        "inputs": [
+          "input_snapshot_holdings",
+          "input_snapshot_cash",
+          "input_snapshot_quotes",
+          "explicit_instrument_classification",
+          "deterministic_price_statistics",
+          "candidate_cases_and_claims"
+        ],
+        "limits": {
+          "max_turnover": "0.40",
+          "max_name_weight": "0.30",
+          "min_cash_weight": "0.10",
+          "max_sector_weight": "0.40",
+          "max_total_exposure": "0.90",
+          "max_trade_fraction_of_cash": "0.9999"
+        },
+        "solver": {
+          "note": "The model proposes weights; this layer projects them into the feasible set. There is no mean-variance or expected-return objective.",
+          "type": "deterministic_projection",
+          "method": "deterministic_constrained_projection.v1",
+          "not_an_optimizer": true
+        },
+        "limit_scale": "0.9997796875",
+        "unevaluated": [],
+        "method_version": "deterministic_constrained_projection.v1",
+        "policy_version": "portfolio_allocation.v1",
+        "objective_version": "constrained_capital_allocation.v1",
+        "binding_constraints": [
+          "policy:insufficient_evidence"
+        ],
+        "cost_reserve_fraction": "0.0002203125",
+        "covariance_method_version": "covariance.sample_daily_returns.v1"
+      },
+      "data_quality": {
+        "flags": [
+          {
+            "code": "missing_correlation_history",
+            "detail": "Not every permitted pair has the minimum 20 daily observations. Missing pairs are null with reasons in risk_statistics.",
+            "severity": "warning"
+          },
+          {
+            "code": "insufficient_evidence",
+            "detail": "No candidate case has a claim backed by recorded evidence.",
+            "severity": "warning"
+          }
+        ],
+        "source": {
+          "prices": "input_snapshot",
+          "sector": "explicit_portfolio_classification_lookup",
+          "theses": "open_position_thesis_rows",
+          "holdings": "input_snapshot",
+          "candidate_cases": "operator_supplied_demonstration",
+          "risk_statistics": "none"
+        },
+        "flag_codes": [
+          "missing_correlation_history",
+          "insufficient_evidence"
+        ],
+        "policy_actions": [
+          {
+            "flag": "insufficient_evidence",
+            "action": "retain_cash"
+          }
+        ],
+        "snapshot_stale": false,
+        "sector_coverage": {
+          "status": "complete",
+          "coverage_pct": "100.00",
+          "known_value_usd": "14200.00",
+          "positions_value_usd": "14200.00",
+          "unclassified_value_usd": "0.00"
+        },
+        "unpriced_tickers": [],
+        "snapshot_age_seconds": 0,
+        "insufficient_evidence": true,
+        "prices_marked_at_cost": [],
+        "missing_correlation_history": true,
+        "risk_statistics": {
+          "status": "not_available",
+          "method_version": "covariance.sample_daily_returns.v1",
+          "history_source": "none",
+          "observation_window": null,
+          "min_observations": null,
+          "missing_pairs": [
+            {
+              "reason": "no_history",
+              "ticker_a": "AAPL",
+              "ticker_b": "JPM",
+              "observations": 0
+            },
+            {
+              "reason": "no_history",
+              "ticker_a": "AAPL",
+              "ticker_b": "MSFT",
+              "observations": 0
+            },
+            {
+              "reason": "no_history",
+              "ticker_a": "AAPL",
+              "ticker_b": "NVDA",
+              "observations": 0
+            },
+            {
+              "reason": "no_history",
+              "ticker_a": "JPM",
+              "ticker_b": "MSFT",
+              "observations": 0
+            },
+            {
+              "reason": "no_history",
+              "ticker_a": "JPM",
+              "ticker_b": "NVDA",
+              "observations": 0
+            },
+            {
+              "reason": "no_history",
+              "ticker_a": "MSFT",
+              "ticker_b": "NVDA",
+              "observations": 0
+            }
+          ],
+          "quality_flags": [
+            "no_history"
+          ],
+          "annualisation": null,
+          "note": "No price history was supplied. Correlation and covariance are null; zero was not assumed."
+        },
+        "submission": {},
+        "input": {},
+        "limitations": [
+          "Not every permitted pair has the minimum 20 daily observations. Missing pairs are null with reasons in risk_statistics.",
+          "No candidate case has a claim backed by recorded evidence.",
+          "Correlation/covariance status: not_available. History source: none. Missing pairs are null with reasons.",
+          "Risk statistics quality flags: no_history"
+        ],
+        "declared_policies": [
+          {
+            "flag": "insufficient_evidence",
+            "action": "retain_cash"
+          }
+        ]
+      },
+      "limits": {
+        "limits": {
+          "max_turnover": "0.40",
+          "max_name_weight": "0.30",
+          "min_cash_weight": "0.10",
+          "max_sector_weight": "0.40",
+          "max_total_exposure": "0.90",
+          "max_trade_fraction_of_cash": "0.9999"
+        },
+        "execution": {
+          "lot_sizes": {},
+          "price_quantum": "0.01",
+          "default_lot_size": "1",
+          "min_trade_notional_usd": "1"
+        },
+        "policy_version": "portfolio_allocation.v1",
+        "evidence_policy": {
+          "stale_snapshot": "block_new_risk",
+          "unknown_sector": "label_only",
+          "insufficient_evidence": "retain_cash",
+          "missing_correlation_history": "label_only"
+        },
+        "risk_statistics": {
+          "covariance_min_observations": 20,
+          "covariance_max_history_age_days": 7
+        },
+        "investment_horizon_days": 30,
+        "max_snapshot_age_seconds": 900
+      },
+      "legs": [
+        {
+          "leg_id": 62,
+          "sequence": 1,
+          "ticker": "AAPL",
+          "side": "SELL",
+          "quantity": "20.00000000",
+          "price": "190.00000000",
+          "notional_usd": "3800.00",
+          "estimated_cost_usd": "3.80",
+          "priority": "risk_reducing",
+          "sector": "technology",
+          "asset_class": "equity",
+          "status": "planned",
+          "transaction_id": null,
+          "applied_at": null,
+          "reason": "Reduce AAPL from 0.3958333333333333333333333333 to 0.197916 of equity.",
+          "signed_cash_effect_usd": "3796.20"
+        },
+        {
+          "leg_id": 63,
+          "sequence": 2,
+          "ticker": "MSFT",
+          "side": "SELL",
+          "quantity": "1.00000000",
+          "price": "420.00000000",
+          "notional_usd": "420.00",
+          "estimated_cost_usd": "0.42",
+          "priority": "risk_reducing",
+          "sector": "technology",
+          "asset_class": "equity",
+          "status": "planned",
+          "transaction_id": null,
+          "applied_at": null,
+          "reason": "Reduce MSFT from 0.21875 to 0.196875 of equity.",
+          "signed_cash_effect_usd": "419.58"
+        }
+      ],
+      "provenance": {
+        "provider": "anthropic",
+        "model": "claude-haiku-5-5",
+        "mode": "live",
+        "synthetic_response": false,
+        "label": "Live model decision (anthropic/claude-haiku-5-5)",
+        "prompt_template_version": "portfolio_targets.v1",
+        "protocol_version": "portfolio_allocation.v1",
+        "prompt_hash": "1686a062dfcac397f581033bffd05332969bbfdb1020d7ff963398cb450d35d0",
+        "parameters": {
+          "temperature": 0.2,
+          "max_output_tokens": 8192,
+          "request_timeout_seconds": 90
+        },
+        "input_tokens": 5005,
+        "output_tokens": 3020,
+        "cost_usd": null,
+        "cost_reported": false,
+        "token_accounting": "provider_reported",
+        "adapter": {
+          "calls": [
+            {
+              "kind": "model_call",
+              "stage": "portfolio_allocation",
+              "cost_usd": null,
+              "elapsed_ms": 13952,
+              "input_tokens": 5005,
+              "output_tokens": 3020,
+              "token_accounting": "provider_reported",
+              "cost_unknown_reason": "provider_reported_cost_unavailable",
+              "price_table_cost_usd": "0.00201"
+            }
+          ],
+          "model": "claude-haiku-5-5",
+          "notes": [],
+          "usage": {
+            "calls": 1,
+            "cost_usd": null,
+            "input_tokens": 5005,
+            "cost_reported": false,
+            "output_tokens": 3020,
+            "billed_cost_usd": null,
+            "measured_tokens": {
+              "input": 5005,
+              "output": 3020
+            },
+            "timed_out_calls": 0,
+            "estimated_tokens": {
+              "input": 0,
+              "output": 0
+            },
+            "monetary_ceiling": {
+              "limit_usd": "0.25",
+              "enforced_on": "price_table_estimate",
+              "late_charges_possible": true,
+              "strict_billed_ceiling": false
+            },
+            "token_accounting": "provider_reported",
+            "schema_repairs_used": 0,
+            "price_table_cost_usd": "0.002010",
+            "provider_retries_used": 0,
+            "strict_billed_ceiling": false,
+            "monetary_ceiling_basis": "price_table_estimate",
+            "reconciled_timeout_calls": 0,
+            "unreconciled_charge_note": null,
+            "billed_cost_unknown_calls": 1,
+            "price_table_cost_complete": true,
+            "billed_cost_unknown_reason": "provider_reported_cost_unavailable",
+            "monetary_ceiling_spent_usd": "0.002010",
+            "unreconciled_timeout_calls": 0,
+            "price_table_cost_partial_usd": null,
+            "price_table_cost_unknown_calls": 0,
+            "price_table_cost_unknown_reason": null
+          },
+          "budget": {
+            "max_input_tokens": 60000,
+            "provider_retries": 0,
+            "max_output_tokens": 4000,
+            "monetary_budget_usd": "0.25",
+            "run_deadline_seconds": 180,
+            "stage_timeout_seconds": 90,
+            "schema_repair_attempts": 0,
+            "provider_retry_backoff_seconds": 0
+          },
+          "adapter": "budgeted_provider_client",
+          "provider": "anthropic",
+          "parameters": {
+            "temperature": 0.2,
+            "max_output_tokens": 8192,
+            "request_timeout_seconds": 90
+          }
+        },
+        "calls": [
+          {
+            "error": "",
+            "stage": "portfolio_allocation",
+            "status": "accepted",
+            "elapsed_ms": 13952,
+            "prompt_hash": "1686a062dfcac397f581033bffd05332969bbfdb1020d7ff963398cb450d35d0",
+            "response_hash": "65ddb20128ba1dd273bfacec365107c9f36c9adf764e92f5887a585ed9a615d1"
+          }
+        ],
+        "note": "The brief is recorded verbatim in the plan and the validated response is stored as weights, actions and rationales. Replaying the arithmetic is deterministic; regenerating model output is not."
+      },
+      "submission": null,
+      "approval": {
+        "state": "pending",
+        "executable": false,
+        "required": true,
+        "plan_version": 1,
+        "approved_version": null,
+        "approval_hash": "f2c908764389d2ab54f00ac62e0ac0f4d8833c09ca3917df50fa6c7eaed055d5",
+        "approved_at": null,
+        "approved_by": null,
+        "approved_by_id": null,
+        "expires_at": null,
+        "seconds_remaining": null,
+        "decided_at": null,
+        "note": "",
+        "reason": "No approval has been given for this plan version."
+      },
+      "approval_history": [],
+      "execution": {
+        "status": "proposed",
+        "applied_at": null,
+        "applied_by": null,
+        "applied_approval_version": null,
+        "executed_target_weights": {},
+        "reasons": [],
+        "transaction_ids": [],
+        "failure_code": null,
+        "failure_detail": null
+      },
+      "revalidation": {
+        "required": false,
+        "count": 0,
+        "revalidated_at": null
+      },
+      "review_actions": {
+        "can_approve": true,
+        "can_reject": true,
+        "can_cancel": true,
+        "can_apply": false,
+        "can_revalidate": true,
+        "default_apply_mode": "live"
+      },
+      "immutability": {
+        "plan_version": 1,
+        "approval_version": null,
+        "approval_required": true,
+        "requires_expiry": true,
+        "note": "An approval names this plan_version and approval_hash and carries an expiry. A revalidation increments plan_version and clears the approval; the old audit rows remain."
+      }
+    }
+  },
+  "approval": {
+    "required": true,
+    "state": "not_decided",
+    "note": "The plan is proposed and unapproved; no trade was placed."
+  },
+  "traded": false,
+  "limitations": [
+    "The input holdings, prices and classifications are operator-supplied demonstration data, not realised market history.",
+    "No price history was supplied or fetched, so correlation and covariance are not available. No correlation was invented.",
+    "The provider adapter reports tokens; it does not receive a provider-billed dollar amount. Any dollar figure here is a price-table estimate, not a bill.",
+    "This is one sample. The recorded plan would not be regenerated by asking the model again, even with an identical prompt."
+  ],
+  "cost": {
+    "billed_cost_usd": null,
+    "billed_cost_reported": false,
+    "billed_cost_unknown_calls": 1,
+    "billed_cost_unknown_reason": "provider_reported_cost_unavailable",
+    "price_table_estimated_cost_usd": "0.002010",
+    "price_table_cost_complete": true,
+    "input_tokens": 5005,
+    "output_tokens": 3020,
+    "token_accounting": "provider_reported",
+    "note": "The provider reports tokens, not a billed dollar amount. Billed cost is null; the price-table figure is an estimate."
+  }
+}
