@@ -314,7 +314,7 @@ class SubmissionApiTests(AllocationWorkflowFixture):
         ]
         self.assertEqual(len(declared), 1)
         self.assertEqual(declared[0]["claims"], [])
-        self.assertTrue(declared[0]["evidence_sufficient"] is False)
+        self.assertIs(declared[0]["evidence_sufficient"], False)
         self.assertTrue(plan.brief["data_quality"]["insufficient_evidence"])
 
     def test_missing_classification_is_declared_and_never_inferred(self):

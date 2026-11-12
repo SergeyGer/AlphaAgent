@@ -38,6 +38,7 @@ from core.allocation_models import (
     PortfolioPlan,
 )
 from core.decision_json import utc_iso
+from core.log_safety import log_safe
 from services.events import EventType, emit_portfolio_plan
 from services.portfolio_allocation import (
     ApprovalReference,
@@ -417,7 +418,7 @@ def approve_plan(
         "Plan %s version %s approved by %s until %s",
         plan.id,
         plan.plan_version,
-        getattr(user, "username", "system"),
+        log_safe(getattr(user, "username", "system")),
         expiry,
     )
     return approval
@@ -478,7 +479,7 @@ def reject_plan(
         extra={"approval_id": approval.id, "reason": text[:2000]},
         dedupe_key=f"plan-rejection:{approval.id}",
     )
-    logger.info("Plan %s rejected by %s", plan.id, getattr(user, "username", "system"))
+    logger.info("Plan %s rejected by %s", plan.id, log_safe(getattr(user, "username", "system")))
     return approval
 
 
@@ -534,7 +535,7 @@ def cancel_plan(plan_id, *, user, reason: str = "") -> tuple[PlanApproval | None
         extra={"approval_id": approval.id, "reason": text[:2000]},
         dedupe_key=f"plan-cancellation:{approval.id}",
     )
-    logger.info("Plan %s cancelled by %s", plan.id, getattr(user, "username", "system"))
+    logger.info("Plan %s cancelled by %s", plan.id, log_safe(getattr(user, "username", "system")))
     return approval, False
 
 

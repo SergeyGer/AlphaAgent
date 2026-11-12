@@ -67,6 +67,8 @@ from services.cost_accounting import (  # noqa: E402
 from services.cost_accounting import (  # noqa: E402
     TokenUsage as TokenUsage,
 )
+
+# Re-exported public API: callers and tests import estimate_cost from this module.
 from services.cost_accounting import (  # noqa: E402
     estimate_cost as estimate_cost,
 )
