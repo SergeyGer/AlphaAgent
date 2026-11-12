@@ -21,8 +21,8 @@ the guarantees of one leak into the other.
 | Produces | a live scorecard per horizon | a versioned experiment report |
 | Read at | `GET /api/portfolio/attribution/` and the dashboard panel | `GET /api/experiments/<id>/report/` |
 | Committed evidence | none — the scorecard is computed from the live database at read time | [`fixtures/experiments/phase3-engineering.v1.report.json`](fixtures/experiments/phase3-engineering.v1.report.json) |
-| Point-in-time protection | none beyond using a price at or after the decision date | `PriceBook` separates validity from knowledge time; a mark before the decision is refused |
-| Method version on each row | `attribution.legacy.v1` when carried into the Phase 3 family; the legacy table itself has no method-version column | `signal_diagnostics.v1`, `portfolio_accounting.v1` |
+| Point-in-time protection | The live engine records the measurement basis and reference instant, and the execution path refuses an untimed or stale mark. It does not accept an `as_of`, so it lacks the Phase 3 knowledge-time guarantee. | `PriceBook` separates validity from knowledge time; a mark before the decision is refused |
+| Method version on each row | `attribution.v1` / `attribution.v2` on `DecisionOutcome`; `attribution.legacy.v1` when carried into the Phase 3 family | `signal_diagnostics.v1`, `portfolio_accounting.v1` |
 
 The live scorecard is a product feature: it reads `DecisionOutcome` rows that
 `services.attribution.evaluate_pending` writes at 1, 7 and 30 days. It is **not**
@@ -31,14 +31,17 @@ not committed. No number from that scorecard is quoted in this document. The
 committed report is produced from the three synthetic Phase 1 fixtures and a
 synthetic accounting ledger, and is labelled as engineering evidence.
 
-The distinction matters for a specific reason: the dashboard scorecard starts a
-forward return from the executed transaction price or, for a HOLD, the first close
-at or after the decision date (`_start_price` in `services/attribution.py`). It reads price
-history with `_close_on_or_after`, and it stores no `price_observed_at` on the
-legacy row. The Phase 3 engine refuses a mark whose knowledge time is after the
-evaluation instant and refuses an entry mark before the decision. The older
-engine is directionally correct but does not carry the newer leakage guarantee.
-Do not describe the dashboard scorecard with the Phase 3 method versions.
+The distinction matters for a specific reason: the dashboard scorecard measures an
+executed decision from its linked fill's stored price and timestamp
+(`measurement_basis: "execution_fill"`) and a HOLD or rejection from the first
+close at or after the proposal (`measurement_basis: "proposal_close"`), via
+`resolve_measurement_reference` in `services/attribution.py`. It stores
+`measurement_basis`, `reference_at` and `price_observed_at_decision` on the row.
+It still does not accept an `as_of` and does not reject a backfilled mark; the
+Phase 3 engine refuses a mark whose knowledge time is after the evaluation instant
+and refuses an entry mark before the decision. The live engine now has an honest
+**basis**, not the newer leakage guarantee. Do not describe the dashboard scorecard
+with the Phase 3 method versions.
 
 ## 1. Signal diagnostics
 
@@ -328,13 +331,17 @@ in `core/tests/test_experiments.py`.
 
 ### 4.3 The older dashboard engine is weaker
 
-`services/attribution.py` starts at the transaction price when one exists, falls
-back to the first close at or after the decision date for a HOLD, and finds the
-horizon close with `_close_on_or_after`. It does not record a knowledge time,
-does not carry an `as_of`, and does not reject a backfilled mark. That is why
-this document does not attribute the Phase 3 leakage guarantee to the dashboard
+`services/attribution.py` measures an executed decision from the linked fill's
+stored price and timestamp, falls back to the first close at or after the decision
+date for a HOLD or rejection, and finds the horizon close with
+`_close_on_or_after`. It records `measurement_basis` and `reference_at`, and the
+scorecard publishes `portfolio_performance: false` and `summable: false`. It does
+not accept an `as_of` and does not reject a backfilled mark. That is why this
+document does not attribute the Phase 3 leakage guarantee to the dashboard
 scorecard. The scores are still signed by the action and HOLDs still have a null
 directional hit, but the point-in-time guarantee belongs to the Phase 3 engine.
+The fill-based correction is pinned by
+`test_p1_attribution_remediation.py::test_the_unmocked_start_price_is_the_recorded_fill_not_the_proposal_close`.
 
 ## 5. The counterfactual rule for a guard-rejected proposal
 

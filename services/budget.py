@@ -76,7 +76,6 @@ __all__ = [
 ]
 
 ZERO = Decimal("0.00")
-CENT = Decimal("0.01")
 #: Six decimal places, not cents. A sub-cent price-table estimate (a small
 #: Haiku call is worth fractions of a cent) must not round to a measured zero.
 MICRO_CENT = Decimal("0.000001")

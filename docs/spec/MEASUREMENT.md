@@ -118,6 +118,48 @@ A stored horizon price observed before its decision is rejected as leakage
 (`price_before_decision_rejected`). An outcome evaluated after the report's
 `as_of` is shown as unavailable (`future_evaluation_excluded`), not scored.
 
+### 1.5 Live attribution basis (`attribution.v2`)
+
+The dashboard scorecard is the same signal-diagnostics family as §1, with a
+reference policy chosen for a live decision rather than a frozen experiment.
+`resolve_measurement_reference` decides it, and every row publishes the choice:
+
+| Case | Reference price and instant | `measurement_basis` |
+| --- | --- | --- |
+| Executed decision with a linked fill | The fill's stored `price` and `timestamp`; a recommendation approved at 130 is measured from 130, not from the proposal price of 100 | `execution_fill` |
+| HOLD, rejection, or executed decision with no linked fill | The first close at or after the proposal, with `fill: null` and a stated reason | `proposal_close` |
+| No price at or after the proposal | No score; `maturity: unavailable` with a reason | `unavailable` |
+
+A fill for a different instrument is ignored with a warning and left for the
+backfill report; it is never used to measure the wrong asset. The basis is
+written to `DecisionOutcome.measurement_basis` and `reference_at`, and to the
+detail projection's `signal_diagnostics.measurement_basis` together with
+`portfolio_performance: false`.
+
+Each horizon has its own `OutcomeEvaluation` row keyed by decision, horizon and
+method version. The scheduler selects per horizon, so a day-one score does not
+make days seven and thirty ineligible; the row carries `pending`, `matured`,
+`unavailable` or `evaluated`, an attempt count, `next_attempt_at` and a reason.
+`build_scorecard` publishes the state counts and the basis counts beside the
+aggregate. The aggregate explicitly says `portfolio_performance: false` and
+`summable: false`: this is a per-decision signal diagnostic, not the account's
+realised return.
+
+`manage.py backfill_outcome_records` recovers older rows that were scored from
+the proposal close or a missing horizon. It is a dry run by default, preserves
+the older `attribution.v1` row and prior revisions, and logs an unresolvable fill
+rather than guessing.
+
+The tests that hold this section:
+
+| Rule | Test |
+| --- | --- |
+| The fill, not the proposal close, is the start price | `test_p1_attribution_remediation.py::test_the_unmocked_start_price_is_the_recorded_fill_not_the_proposal_close` |
+| A HOLD has a proposal basis and no fabricated fill | `test_a_hold_keeps_a_proposal_basis_and_has_no_fabricated_fill` |
+| A day-one score does not block 7 or 30 | `test_a_day_one_score_does_not_prevent_days_seven_and_thirty` |
+| The scorecard publishes the signal-diagnostic basis | `test_the_scorecard_publishes_that_this_is_a_signal_diagnostic` |
+| The backfill preserves provenance and is idempotent | `test_apply_recovers_horizons_preserves_provenance_and_is_idempotent` |
+
 ## 2. Portfolio accounting (`services/portfolio_accounting.py`)
 
 ### 2.1 Equity

@@ -146,3 +146,21 @@ internally consistent. It does **not** re-run the model, prove a provider
 response is authentic, or establish profitability. A recording can still be
 honest about a synthetic input - the artefact's own `synthetic_input_data`,
 `mode` and `source` fields remain the authority for that.
+
+## 5. Committed records at HEAD `7969cd7` (2026-11-12)
+
+The mechanism is complete; the evidence for the current release commit is not.
+This is the state of the two committed records:
+
+| Record | Commit | Stages | Counts | What it supports |
+| --- | --- | --- | --- | --- |
+| `4e6c71f7e01c50b4e43ff44b40e90265837a3a0a.json` | `4e6c71f` | all eight | 928 backend / 275 frontend | A full pass at the steps 7–8 commit |
+| `03308ca6cff5ba6cc36c3d72869c45447193f518.json` | `03308ca` (pre-merge branch commit) | backend-tests, lint, format, migration-check | 955 backend / **0** frontend | The backend and static checks at the steps 9–10 pre-merge commit |
+
+There is **no** `docs/spec/acceptance/7969cd7....json`. The four-stage record is
+honest about what it ran - it records `frontend_tests: 0` - but it is not
+evidence that the merged commit passed the frontend, typecheck, build or smoke
+stages. Do not cite it as a full acceptance. Recording the full result at the
+release commit is tracked as
+[#65](https://github.com/SergeyGer/AlphaAgent/issues/65); until then this page
+must not imply a complete eight-stage record exists for `7969cd7`.

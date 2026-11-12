@@ -30,6 +30,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+import services.portfolio_allocation as allocation
 from core.allocation_models import PlanApproval, PlanExecutionAttempt, PlanStatus
 from core.decision_models import (
     DecisionExecutionState,
@@ -47,7 +48,6 @@ from core.tests.test_portfolio_allocation import (
 )
 from services.execution import ExecutionRejected, ExecutionRequest, execute_trade
 from services.market_data import PriceQuote
-from services.portfolio_allocation import apply_plan, build_hold_proposal, create_plan
 from services.portfolio_targets import validate_target_proposal
 from services.recommendations import (
     approve_recommendation,
@@ -121,17 +121,17 @@ class PlanQuotePolicyAcceptanceTests(APITestCase):
             msft = self.brief.state.weight("MSFT")
             weights = {"AAPL": D("0.20"), "MSFT": msft, "CASH": D("1") - D("0.20") - msft}
         proposal = (
-            build_hold_proposal(self.brief, "Hold current weights.")
+            allocation.build_hold_proposal(self.brief, "Hold current weights.")
             if hold
             else proposal_for(self.brief, weights)
         )
-        plan, _created = create_plan(
+        plan = allocation.create_plan(
             self.portfolio,
             brief=self.brief,
             proposal=proposal,
             submission_key=key,
             execution_mode=execution_mode,
-        )
+        )[0]
         return plan
 
     def approve(self, plan):
@@ -560,7 +560,7 @@ def _concurrent_apply(plan_id, quotes, barrier, results):
     try:
         if barrier is not None:
             barrier.wait(timeout=15)
-        application = apply_plan(plan_id, quotes=quotes)
+        application = allocation.apply_plan(plan_id, quotes=quotes)
         results.append(("applied", application))
     except Exception as exc:
         results.append(("error", exc))
@@ -581,12 +581,12 @@ class PlanFailureConcurrencyAcceptanceTests(TransactionTestCase):
             {"MSFT": D("0.25"), "JPM": D("0.15"), "CASH": D("0.60")},
             claim_ids={"MSFT": ["claim-msft"], "JPM": ["claim-jpm"]},
         )
-        self.plan, _created = create_plan(
+        self.plan = allocation.create_plan(
             self.portfolio,
             brief=self.brief,
             proposal=proposal,
             submission_key="concurrent-failure",
-        )
+        )[0]
         self.fresh = quotes_for(["MSFT", "JPM"], prices={"MSFT": D("320"), "JPM": D("160")})
         self.stale = quotes_for(
             ["MSFT", "JPM"],
@@ -595,8 +595,6 @@ class PlanFailureConcurrencyAcceptanceTests(TransactionTestCase):
         )
 
     def test_one_connection_fails_while_another_applies_and_delayed_failure_is_ignored(self):
-        import services.portfolio_allocation as allocation
-
         barrier = None
         first_failed = threading.Event()
         release_failure = threading.Event()
@@ -652,10 +650,10 @@ class RepairCommandAcceptanceTests(TestCase):
             {"MSFT": D("0.25"), "JPM": D("0.15"), "CASH": D("0.60")},
             claim_ids={"MSFT": ["claim-msft"], "JPM": ["claim-jpm"]},
         )
-        plan, _created = create_plan(
+        plan = allocation.create_plan(
             portfolio, brief=brief, proposal=proposal, submission_key="repair"
-        )
-        apply_plan(
+        )[0]
+        allocation.apply_plan(
             plan.id,
             quotes=quotes_for(["MSFT", "JPM"], prices={"MSFT": D("320"), "JPM": D("160")}),
         )

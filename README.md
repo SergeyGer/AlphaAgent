@@ -186,7 +186,7 @@ from a decision the model never made.
 
 | Step | Read | Time |
 | --- | --- | --- |
-| 1 | [▶ Watch the walkthrough](https://youtu.be/DfOMb_l19p8) — real dashboard, real debate, real guard | **2 min** |
+| 1 | [▶ Watch the walkthrough](docs/demo-walkthrough.mp4) — real dashboard, real debate, real guard | **2 min** |
 | 2 | [Incident log](https://github.com/SergeyGer/AlphaAgent/wiki/Incident-Log) — eleven real defects, root causes and fixes | **8 min** |
 | 3 | [ADR index](docs/adr/README.md) — seventeen decisions with the alternatives that were rejected | **6 min** |
 | 4 | [Quality and testing](https://github.com/SergeyGer/AlphaAgent/wiki/Quality-and-Testing) — what each gate actually proves | **2 min** |
@@ -196,19 +196,17 @@ from a decision the model never made.
 ---
 ## See it running
 
-[![AlphaAgent walkthrough](docs/demo-walkthrough-poster.png)](https://youtu.be/DfOMb_l19p8)
+[![AlphaAgent walkthrough](docs/demo-walkthrough-poster.png)](docs/demo-walkthrough.mp4)
 
-**▶ [Watch the walkthrough](https://youtu.be/DfOMb_l19p8)** — narrated, and recorded from the
-running system. The dashboard, the AI debate, the risk guard, and the scorecard it
-publishes.
+**▶ [Watch the walkthrough](docs/demo-walkthrough.mp4)** — the one recording, narrated and taken
+from the running system: the dashboard, the AI debate, the risk guard and the scorecard it
+publishes. It is also on [YouTube](https://youtu.be/DfOMb_l19p8).
 
-### ▶ [Try the offline Streamlit demo](https://alphaagent-6stcj667tqeawiupedhygh.streamlit.app/) — a browser page that drives the real risk guard, with no installation and no API keys
-
-![AlphaAgent guided tour](docs/demo.gif)
-
-*Recorded from the live React application (not the Streamlit risk-guard demo above) — sign-in,
+*Recorded from the live React application (not the Streamlit risk-guard demo below) — sign-in,
 portfolio metrics, the equity curve, an agent debate expanding, news sentiment and the trade
 ledger.*
+
+### ▶ [Try the offline Streamlit demo](https://alphaagent-6stcj667tqeawiupedhygh.streamlit.app/) — a browser page that drives the real risk guard, with no installation and no API keys
 
 ### The headline metric: decision attribution
 
@@ -227,7 +225,10 @@ It reports three things per horizon:
 
 **The scorecard is published as measured, not curated.** A performance number that
 can only ever produce good news is not a measurement; it is marketing. The scorecard is the feature, not the demo — it is what lets a reader judge
-the system instead of taking its word.
+the system instead of taking its word. It is computed at read time and shown to a
+signed-in visitor; it is not a committed file, and publishing a generated,
+always-current scorecard remains open as
+[#34](https://github.com/SergeyGer/AlphaAgent/issues/34).
 
 > **What the audit trail adds:** every figure traces back to a stored decision row —
 > both sides of the argument that produced it (`bull_case`, `bear_case`), the tokens
@@ -397,7 +398,8 @@ the wiki:
 | [**Methodology**](docs/spec/METHODOLOGY.md) | What the numbers mean, and what they do not |
 | [**Claims index**](docs/spec/CLAIMS.md) | Every public claim, and the file that supports it |
 | [**Curated cases**](docs/spec/CASES.md) | Reviewed disagreement, risk-intervention, uncertainty and outcome cases |
-| [**Reproducing the demos**](docs/spec/DEMO.md) | Exact offline commands for the guard demo, decision replay, allocation and report |
+| [**Verified acceptance**](docs/spec/ACCEPTANCE.md) | The verifier, the commit-keyed record, and the guard that stops an unverified recording |
+| [**Reproducing the demos**](docs/spec/DEMO.md) | Exact offline commands for the guard demo, recorded decision replay, allocation and report |
 
 **The stack, in detail:**
 
@@ -415,22 +417,76 @@ the wiki:
 **Also in the stack:** Django REST Framework · Django Channels (WebSockets) ·
 Recharts · GitHub Actions
 
+**At HEAD `7969cd7` (2026-11-12):** the suites contain 955 backend tests and 276
+frontend tests. `scripts/verify_application.py` runs those plus lint, format,
+migration check, typecheck, build and an HTTP smoke test, and writes a
+commit-keyed record; the contract, and what the committed record currently
+covers, are in [`ACCEPTANCE.md`](docs/spec/ACCEPTANCE.md).
+
+<details>
+<summary><b>What the remediation programme changed</b> — ten steps between FIX-07 and HEAD, each with the test that holds it</summary>
+
+The acceptance review that followed FIX-07 produced ten remediation steps. Each
+finding behind them was reproduced against the tree before it was fixed. The
+merge commits are `602a899` (steps 1–2), `76c3017` (3–4), `f54b2bf` (5–6),
+`4e6c71f` (7–8) and `7969cd7` (9–10).
+
+| Step | What changed | Where it lives | Proving test |
+| --- | --- | --- | --- |
+| 1 | Observation times on every execution mark, a declared freshness policy, and an approval that binds the terms the operator saw | `services/quote_policy.py`; `services/execution.py` | `test_p0_execution_remediation.py::test_untimed_quote_is_missing_data_not_a_current_mark` |
+| 2 | The fill, guard record, run link, run event and outbox row commit in one transaction; a retry cannot return an executed recommendation whose run never completed | `services/execution.py`; `services/execution_audit.py` | `test_p0_execution_remediation.py::test_injected_audit_failure_rolls_back_then_retry_writes_one_fill` |
+| 3 | Each horizon is evaluated independently from the linked fill; a day-one score no longer blocks days seven and thirty, and a backfill repairs the older basis | `services/attribution.py`; `manage.py backfill_outcome_records` | `test_p1_attribution_remediation.py::test_a_day_one_score_does_not_prevent_days_seven_and_thirty` |
+| 4 | Replay resolves the guard visible at the cursor, and a late outcome is appended to a completed run as a versioned event | `core/decision_serializers.py`; `frontend/src/lib/replayGuard.ts` | `test_p1_replay_remediation.py::test_a_completed_run_keeps_its_execution_state_and_records_the_late_outcome` |
+| 5 | One declared canonical JSON form in Python and the browser, so an untouched export verifies after the trip | `core/decision_json.py`; `frontend/viewer/bundle.ts` | `test_p1_export_portability.py::test_every_shared_vector_matches_python` |
+| 6 | Analysis is a durable, pollable job with explicit ownership, attempts and a repair command, not work done inside the request | `services/allocation_submission.py`; `manage.py repair_allocation_submissions` | `test_p1_allocation_jobs.py::test_6a_the_response_returns_before_the_model_is_called` |
+| 7 | Experiment executions have their own namespace, snapshots and cost scope, and the pre-registered metric is computed with its denominator, rejection reasons, dispersion and interval | `services/experiment_execution.py`; `services/experiment_rebuild.py` | `test_p1_experiment_isolation_metric.py::test_a_supported_horizon_carries_a_value_denominator_and_dispersion` |
+| 8 | Simulated time only moves forward; a later-priced fill is deferred, and an archived report rebuilds from its recorded inputs | `services/experiment_simulation.py`; `manage.py rebuild_experiment_report` | `test_p1_simulation_rebuild.py::test_a_fill_priced_after_the_clock_is_deferred_and_invisible_to_the_next_decision` |
+| 9 | A durable reservation ledger counts unknown cost conservatively before the provider call and reconciles afterwards | `services/budget.py`; `core/models.py` (`AIUsageLedger`) | `test_p1_cost_limiter.py::test_tokens_without_dollars_reconcile_to_an_estimate_not_zero` |
+| 10 | One verifier runs the checks, refuses a dirty tree, and writes a commit-keyed acceptance record every recording must name | `scripts/verify_application.py`; `services/recording_provenance.py` | `test_p1_acceptance_verification.py::test_the_record_contains_the_commit_stages_counts_and_digest` |
+
+The suite gate and the commit-keyed acceptance record are described under
+**At HEAD** above; the mechanism, its refusal codes and the
+commit/record ordering are specified in
+[`ACCEPTANCE.md`](docs/spec/ACCEPTANCE.md).
+
+Two residual gaps are tracked separately: a **full** acceptance record for the
+release commit ([#65](https://github.com/SergeyGer/AlphaAgent/issues/65)) and the
+never-executed V4 allocation arm ([#66](https://github.com/SergeyGer/AlphaAgent/issues/66)).
+
+</details>
+
 <a href="#top">↑ back to top</a>
 
 ## Roadmap
 
-Tracked as issues, so each can be discussed and claimed:
-[deployment ceilings](https://github.com/SergeyGer/AlphaAgent/issues/27) ·
-[backtesting](https://github.com/SergeyGer/AlphaAgent/issues/28) ·
-[decision replay](https://github.com/SergeyGer/AlphaAgent/issues/29) ·
-[per-user strategies](https://github.com/SergeyGer/AlphaAgent/issues/30) ·
-[hosted instance](https://github.com/SergeyGer/AlphaAgent/issues/31) ·
-[more asset classes](https://github.com/SergeyGer/AlphaAgent/issues/32).
-Three further proposals come from comparing the project against
-[TradingAgents](https://github.com/TauricResearch/TradingAgents):
-[point-in-time data](https://github.com/SergeyGer/AlphaAgent/issues/33),
-[a live scorecard](https://github.com/SergeyGer/AlphaAgent/issues/34) and
-[verifiable audit bundles](https://github.com/SergeyGer/AlphaAgent/issues/35).
+Open work is tracked as issues, so each can be discussed and claimed. The
+remediation programme changed the state of four proposals without completing
+their acceptance criteria; the issue bodies now say exactly what remains.
+
+| Not started | What is still missing |
+| --- | --- |
+| [#27 portfolio deployment ceiling](https://github.com/SergeyGer/AlphaAgent/issues/27) | A daily deployment total in the guard. The existing exposure, concentration, sector and turnover limits bound a position or one plan, not a day's sequence of individually-permitted trades |
+| [#28 backtesting](https://github.com/SergeyGer/AlphaAgent/issues/28) | A point-in-time data source with stated completeness. The agent tools still fetch "now", so a historical replay would leak the future |
+| [#30 per-user strategies](https://github.com/SergeyGer/AlphaAgent/issues/30) | More than one portfolio per user, and per-portfolio watchlist and AI-spend ceiling. The autonomy toggle is already per portfolio |
+| [#31 hosted instance](https://github.com/SergeyGer/AlphaAgent/issues/31) | A read-only dashboard deployment. The Streamlit page demonstrates the guard only; the offline viewer is a static, no-database replay |
+| [#32 asset classes and providers](https://github.com/SergeyGer/AlphaAgent/issues/32) | At least one non-yfinance provider behind the same read-only tool contract |
+
+Four further proposals came from comparing the project against
+[TradingAgents](https://github.com/TauricResearch/TradingAgents). They are
+partly delivered, and remain open for the part that is not:
+
+- [#29 deterministic replay](https://github.com/SergeyGer/AlphaAgent/issues/29) — stored
+  payloads replay in the offline viewer and every guard evaluation survives the export
+  round trip, but no command re-runs the guard and sweeps stored decisions.
+- [#33 point-in-time data](https://github.com/SergeyGer/AlphaAgent/issues/33) — execution
+  marks now carry and validate observation times (`services/quote_policy.py`); the tools
+  do not yet accept an `as_of` bound, and there is no leakage test over the tool registry.
+- [#34 live scorecard](https://github.com/SergeyGer/AlphaAgent/issues/34) — the scorecard
+  is computed at read time and the experiment report computes its registered metric; no
+  generated, public scorecard file or badge exists.
+- [#35 verifiable audit bundle](https://github.com/SergeyGer/AlphaAgent/issues/35) — the
+  export endpoint emits a checksummed bundle verified in Python and the browser; the
+  proposed CLI and offline guard recomputation are not built.
 
 Full roadmap and rationale: [Roadmap](https://github.com/SergeyGer/AlphaAgent/wiki/Roadmap).
 

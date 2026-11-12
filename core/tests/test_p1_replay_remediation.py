@@ -112,7 +112,8 @@ class GuardEvaluationExposureTests(TestCase):
         self.user = make_user("guard-exposure")
         self.portfolio = make_portfolio(self.user)
         self.base = timezone.now() - timedelta(days=3)
-        self.run, _decision = make_run(self.portfolio, created_at=self.base)
+        # Only the run is needed here; the fixture's legacy AgentDecisionLog is not scored.
+        self.run = make_run(self.portfolio, created_at=self.base)[0]
         self.decision = self.run.decision
         self.preflight = GuardRecord.objects.create(
             proposal=self.decision,

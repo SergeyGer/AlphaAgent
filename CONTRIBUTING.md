@@ -16,7 +16,7 @@ make up                 # PostgreSQL + Redis via Docker
 # Edit .env: set POSTGRES_PASSWORD and DJANGO_SECRET_KEY to real values
 make migrate
 make seed               # demo user + API token
-make test               # full suite (716 at the Phase 0-4 baseline; the run prints the total), no network required
+make test               # full suite (955 at HEAD 7969cd7; the run prints the total), no network required
 ```
 
 Run the API, worker and scheduler in three terminals:
@@ -184,6 +184,31 @@ file with lychee, verifies that every image and file referenced actually exists 
 the repository, and confirms that wiki pages only cross-reference pages that
 exist. A renamed screenshot or a retitled page fails the build.
 
+### Keeping the issue tracker current
+
+Issues are living specifications, not a record of what someone once intended.
+The remediation programme showed the failure mode: PRs #60–#64 changed the
+behaviour behind #29, #33, #34 and #35, but none of them referenced those issues,
+so the issue bodies kept claiming the feature was absent. Use this process:
+
+1. **Every open issue body names the commit it was audited against**, in a
+   `## Current state at HEAD <sha>` section, and its acceptance criteria are
+   checkboxes with the delivered ones ticked. A body with no commit is stale by
+   default.
+2. **A pull request that changes an issue's behaviour updates the issue in the
+   same pull request.** Use `Refs #N` for a partial delivery, and `Closes #N`
+   only when every acceptance criterion is met. The closing comment names the
+   merge commit and the test that proves the last criterion — not the whole
+   programme.
+3. **A partial delivery is not a close.** Tick the criteria that shipped, add a
+   "What remains" paragraph with the missing piece, and leave the issue open.
+4. **At every release, re-audit the open issues against the release HEAD.** The
+   Roadmap wiki links to the issues and must not mark an item done while its
+   issue still tracks a missing criterion.
+5. **Run the documentation gate after any of this:**
+   `venv/bin/python manage.py test core.tests.test_documentation_links --noinput`.
+   A source link that points at a moved line fails before the issue does.
+
 ## Technical specification: where each phase lives
 
 The five-phase programme is recorded in
@@ -221,7 +246,7 @@ different point-in-time guarantees and must not share method versions or claims.
 The suite is one Django/unittest tree; run the slice that covers your change.
 
 ```bash
-# Everything (716 at the Phase 0-4 baseline; the run prints the total)
+# Everything (955 at HEAD 7969cd7; the run prints the total)
 venv/bin/python manage.py test core.tests
 
 # Safety-critical guard and its portfolio-level ceilings
@@ -248,13 +273,15 @@ venv/bin/python manage.py test core.tests.test_api core.tests.test_dashboard_api
 venv/bin/python manage.py test core.tests.test_documentation_links \
     core.tests.test_demo_theme_contract
 
-# Frontend (178 tests on this commit)
+# Frontend (276 tests on this commit)
 cd frontend && npm test
 ```
 
 Counts are snapshots, not constants. The authoritative numbers are whatever the
-current run reports; do not copy a count into a new document without saying where
-it came from. The full-suite count is reproduced in
+current run reports; do not copy a count into a new document without naming the
+commit. The commit-pinned snapshot at HEAD `7969cd7` is 955 backend and 276
+frontend tests, reproduced in [`README.md`](README.md),
+[`docs/wiki/Quality-and-Testing.md`](docs/wiki/Quality-and-Testing.md) and
 [`docs/spec/CLAIMS.md`](docs/spec/CLAIMS.md).
 
 ### Migrations are additive only
