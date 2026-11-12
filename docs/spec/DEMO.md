@@ -68,7 +68,10 @@ from a dirty tree or without that record, and
 `venv/bin/python manage.py check_recordings` confirms every committed recording
 names the record's commit and digest. The schema, refusal codes and the
 commit/record ordering are in [`ACCEPTANCE.md`](ACCEPTANCE.md); this page only
-quotes the commands.
+quotes the commands. At HEAD `7969cd7` the committed record is the four-stage
+steps 9–10 record, not a full eight-stage pass; the gap and its evidence table
+are in [`ACCEPTANCE.md`](ACCEPTANCE.md) §5 and tracked as
+[#65](https://github.com/SergeyGer/AlphaAgent/issues/65).
 
 ## 1. Offline Streamlit demo
 

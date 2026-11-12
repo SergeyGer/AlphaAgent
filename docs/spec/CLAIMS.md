@@ -40,11 +40,11 @@ fixture or removed.
 | R-11 | The transcript is stored with the decision | `README.md` — pillar 3 | `core/decision_models.py` (`Claim`, `Rebuttal`); `core/models.py` (`bull_case`, `bear_case`) | B |
 | R-12 | The walkthrough video is a recording of the running system | `README.md` — See it running | `docs/demo-walkthrough.mp4` (media file; its contents are not machine-checkable) | media |
 | R-13 | The Streamlit page drives the real `services/execution.py` guard, with no installation or key | `README.md` — See it running | `demo/app.py`; `core/tests/test_demo_theme_contract.py` | B |
-| R-14 | The GIF was recorded from the live React application, not the Streamlit demo | `README.md` — See it running | `docs/demo.gif` (media file; the caption is a provenance statement, not a code claim) | media |
+| R-14 | The one walkthrough recording was taken from the live React application, not the Streamlit demo; the poster links to it | `README.md` — See it running | `docs/demo-walkthrough.mp4`; `docs/demo-walkthrough-poster.png` (media files; the caption is a provenance statement, not a code claim) | media |
 | R-15 | The dashboard shows the decision scorecard to a signed-in visitor | `README.md` — attribution section | `frontend/src/components/DecisionQualityPanel.tsx`; `core/views.py` (`DecisionScorecardView`) | B |
 | R-16 | The scorecard reports directional hit rate, average decision return and alpha vs SPY per horizon | `README.md` — attribution table | `services/attribution.py` (`Scorecard.as_dict`); `core/views.py`; `frontend/src/types.ts` | B |
 | R-17 | A HOLD is excluded from the hit-rate denominator | `README.md` — attribution table | `services/attribution.py`; `frontend/src/components/DecisionQualityPanel.tsx` | B |
-| R-18 | The scorecard is published as measured, not curated | `README.md` — attribution section | Design statement supported by the panel's null/zero handling and `docs/wiki/Decision-Attribution.md`; no number is claimed | B |
+| R-18 | The scorecard is published as measured, not curated; it is computed at read time, is not a committed file, and publishing one is open as #34 | `README.md` — attribution section | Design statement supported by the panel's null/zero handling and `docs/wiki/Decision-Attribution.md`; no number is claimed; `services/attribution.py` | B |
 | R-19 | A start-price flaw in the scoring biased toward flattering BUY calls | `README.md` — end of attribution section | `services/attribution.py` (`_start_price` docstring); `CHANGELOG.md` (1.1.0, "Decision scoring measured from the wrong price") | B/C |
 | R-20 | The dashboard screenshot shows equity, allocation, reasoning, approvals, trades and news | `README.md` — screenshots | `docs/screenshots/dashboard.png` (media file) | media |
 | R-21 | The risk-ceiling panel closes the INC-001 over-concentration gap | `README.md` — screenshots | `docs/wiki/Incident-Log.md` INC-001; `services/execution.py` (`_portfolio_headroom`); `docs/adr/0015-cumulative-exposure-and-concentration-limits.md` | B |
@@ -64,6 +64,8 @@ fixture or removed.
 | R-35 | The project is MIT licensed | `README.md` — footer | `LICENSE` | B |
 | R-36 | The README has nine sections | `README.md` — Contents | The nine `##` headings in the file | B |
 | R-37 | The quality-and-testing link points at a real page | `README.md` — Choose your path | `docs/wiki/Quality-and-Testing.md` | B |
+| R-38 | At HEAD `7969cd7` the suites contain 955 backend tests and 276 frontend tests | `README.md` — At HEAD; `Quality-and-Testing.md` — Measured | `core/tests/test_*.py` (955 `test_*` methods by AST walk); `docs/spec/acceptance/03308ca6cff5ba6cc36c3d72869c45447193f518.json` (backend 955); `frontend/**/*.test.*` (27 files, 276 tests from `npm test` on this checkout) | B |
+| R-39 | Remediation steps 1–10 shipped, each with the named test and commit | `README.md` — remediation programme; `CHANGELOG.md` — Unreleased | `602a899`, `76c3017`, `f54b2bf`, `4e6c71f`, `7969cd7`; the nine `core/tests/test_p0_*` / `test_p1_*` modules; `docs/spec/IMPLEMENTATION-NOTE.md` | B |
 
 ## 2. Wiki claims
 
@@ -73,7 +75,7 @@ fixture or removed.
 | --- | --- | --- | --- | --- |
 | W-H-01 | AI agents propose and deterministic code decides | `Home.md` — introduction | `services/execution.py`; `services/debate_protocol.py` | B |
 | W-H-02 | The walkthrough is recorded from the running system | `Home.md` — Watch first | `docs/demo-walkthrough.mp4` (media) | media |
-| W-H-03 | Current version is 1.1.7 (2026-11-11); 1.1.5/1.1.6/1.1.7 correspond to Phases 1/2/3 | `Home.md` — Current version | `CHANGELOG.md` entries 1.1.5–1.1.7 | C |
+| W-H-03 | Current version is 1.2.0 (2026-11-12); Phases 1/2/3 are 1.1.5/1.1.6/1.1.7, Phase 4 is 1.1.8, and FIX-08 plus the remediation steps are Unreleased at `7969cd7` | `Home.md` — Current version | `CHANGELOG.md` entries 1.1.5–1.2.0 and Unreleased | C |
 | W-H-04 | Engineering-Decisions has eight long-form records; the ADR index has seventeen | `Home.md` — If you are evaluating | `docs/wiki/Engineering-Decisions.md` (ADR-001–008 sections); `docs/adr/README.md` | B |
 | W-H-05 | Celery Beat wakes every fifteen minutes and fans out one subtask per portfolio and instrument | `Home.md` — The system; `Architecture.md`; `Operations.md` | `config/settings.py` (`autonomous-market-monitoring`, `*/15`); `tasks.py` (`group`) | B |
 | W-H-06 | A pure guard checks allocation, cash, concentration and daily loss before the ledger | `Home.md` — The system | `services/execution.py`; `core/tests/test_guardrails.py` | B |
@@ -136,11 +138,11 @@ fixture or removed.
 | W-DA-01 | A SELL scores positively when the price falls; a HOLD has a null directional hit | `Decision-Attribution.md` — Two framing choices | `services/attribution.py`; `core/tests/test_attribution.py` | B |
 | W-DA-02 | A missing benchmark is null, never zero | `Decision-Attribution.md` — Two framing choices | `services/attribution.py`; `core/tests/test_attribution.py` | B |
 | W-DA-03 | Horizons are separate rows (1, 7, 30) | `Decision-Attribution.md` — Horizons | `core/models.py` (`DecisionOutcome.HORIZONS`) | B |
-| W-DA-04 | The live scorecard is computed at read time and is not committed; no figure is quoted | `Decision-Attribution.md` — Horizons; The published scorecard | `services/attribution.py` (`build_scorecard`); `core/views.py`; the page was corrected to remove the untraceable figures | B |
+| W-DA-04 | The live scorecard is computed at read time and is not committed; no figure is quoted; each horizon is evaluated independently and the measurement basis is published | `Decision-Attribution.md` — Horizons; The live scorecard | `services/attribution.py` (`build_scorecard`, `OutcomeEvaluation`); `core/views.py`; `test_p1_attribution_remediation.py` | B |
 | W-DA-05 | A migration backfilled 62 ticker rows; 1,247 pre-migration HOLD/HALT rows stay blank and unscorable | `Decision-Attribution.md` — The ticker column | `docs/adr/0014-decision-outcome-attribution.md`; `core/migrations/0006_agentdecisionlog_ticker.py`; the counts are recorded, not reproducible | C |
 | W-DA-06 | The outcome evaluator runs hourly on Beat | `Decision-Attribution.md` — Running it | `config/settings.py` (`evaluate-decision-outcomes`, minute 25) | B |
 | W-DA-07 | The measure is per-decision, not portfolio-level; the benchmark is naive; the sample is small | `Decision-Attribution.md` — What it does not measure | Design limitations; `docs/spec/METHODOLOGY.md` §1, §7 | B |
-| W-DA-08 | The start-price flaw and its correction are documented | `Decision-Attribution.md` — The published scorecard | `services/attribution.py`; `CHANGELOG.md` 1.1.0 | B/C |
+| W-DA-08 | The historical start-price flaw and the current fill-based basis are documented | `Decision-Attribution.md` — The live scorecard | `services/attribution.py` (`resolve_measurement_reference`); `test_p1_attribution_remediation.py::test_the_unmocked_start_price_is_the_recorded_fill_not_the_proposal_close`; `CHANGELOG.md` 1.1.0 and Unreleased | B/C |
 
 ### LLM-Quality-and-Guardrails
 
@@ -161,14 +163,14 @@ fixture or removed.
 
 | # | Claim | Where stated | Supporting evidence | Class |
 | --- | --- | --- | --- | --- |
-| W-Q-01 | The backend suite has 716 tests in 28 modules at the Phase 0-4 baseline; the frontend suite has 178 tests in 16 files; the runner's printed total is authoritative | `Quality-and-Testing.md` — Measured | `core/tests/`; `frontend/src/**/*.test.*`; reproducible by `manage.py test core.tests` and `npm test` (not stored in a fixture) | B (snapshot) |
+| W-Q-01 | The backend suite has 955 tests in 43 modules at HEAD `7969cd7`; the frontend suite has 276 tests in 27 files; the runner's printed total is authoritative | `Quality-and-Testing.md` — Measured | `core/tests/` (955 `test_*` methods by AST walk); `frontend/**/*.test.*` (27 files, 276 tests); reproducible by `manage.py test core.tests` and `npm test` (not stored in a fixture) | B (snapshot) |
 | W-Q-02 | CI runs four jobs in `ci.yml`: lint, test, frontend, docker | `Quality-and-Testing.md` — CI pipeline | `.github/workflows/ci.yml` job names | B |
 | W-Q-03 | The backend coverage floor is 70% | `Quality-and-Testing.md` — CI pipeline; Quality signals | `.github/workflows/ci.yml` (`coverage report --fail-under=70`) | B |
 | W-Q-04 | The frontend has two coverage floors: `src/lib` 75% and a global ratchet | `Quality-and-Testing.md` — Frontend tests | `frontend/vitest.config.ts` thresholds | B |
 | W-Q-05 | Tests make no external network calls; yfinance, RSS, LLM and Redis are stubbed | `Quality-and-Testing.md` — How external services are isolated | `core/tests/helpers.py`; `core/tests/test_services.py`; `core/tests/test_llm_hooks.py` | B |
 | W-Q-06 | CodeQL, Dependabot and the secret scan are configured | `Quality-and-Testing.md` — Static analysis | `.github/workflows/codeql.yml`; `.github/dependabot.yml`; `core/tests/test_security.py` | B |
 | W-Q-07 | The dependency files are hash-pinned lockfiles | `Quality-and-Testing.md` — Dependency locking | `requirements.txt`, `requirements-dev.txt`, `requirements.in`, `requirements-dev.in` | B |
-| W-Q-08 | A count quoted in several files drifts; the README states none and this page plus CONTRIBUTING carry the snapshot | `Quality-and-Testing.md` — Quality signals | `README.md` (no test count); `CONTRIBUTING.md` (716); this index | B |
+| W-Q-08 | A count quoted in several files drifts; the README carries one commit-pinned snapshot and this page plus CONTRIBUTING carry the same snapshot | `Quality-and-Testing.md` — Quality signals | `README.md` (955/276 at `7969cd7`); `CONTRIBUTING.md` (955/276); this index | B |
 | W-Q-09 | The project had 22 CodeQL findings, all resolved | `Quality-and-Testing.md` — Static analysis | `CHANGELOG.md` 1.1.0 ("Twenty-two CodeQL alerts"); historical, not reproducible | C |
 | W-Q-10 | The `chromadb` advisory triage was recorded when no patched version existed; the lockfile has moved on | `Quality-and-Testing.md` — What enabling alerts revealed | `requirements.txt` (`chromadb==1.5.9`); `CHANGELOG.md`; the page now says to re-check the advisory database | C/B |
 
@@ -268,9 +270,12 @@ fixture or removed.
 
 | # | Claim | Where stated | Supporting evidence | Class |
 | --- | --- | --- | --- | --- |
-| W-RM-01 | Phases 0–4 are complete; Phase 5 is in progress | `Roadmap.md` — Implementation programme | `docs/spec/IMPLEMENTATION-NOTE.md`; `CHANGELOG.md`; this change | B |
-| W-RM-02 | A cumulative daily deployment ceiling, backtesting, deterministic guard replay, per-user strategies and more asset classes are not built | `Roadmap.md` — Next/Later | `services/execution.py` has no daily deployment total; no backtest module; no guard-replay command | B |
+| W-RM-01 | Phases 0–5 are complete, and the P0/P1 remediation steps 1–10 shipped in #60–#64 | `Roadmap.md` — Implementation programme; Delivered since FIX-07 | `docs/spec/IMPLEMENTATION-NOTE.md`; `CHANGELOG.md` Unreleased; `docs/spec/ACCEPTANCE.md` | B |
+| W-RM-02 | A cumulative daily deployment ceiling, backtesting, deterministic guard replay, per-user strategies and more asset classes are not fully built | `Roadmap.md` — Next/Later | `services/execution.py` has no daily deployment total; no backtest module; `core/management/commands/` has no guard-replay command; `ai_agent._build_tools` has no `as_of` | B |
 | W-RM-03 | Leverage, margin and short selling are explicitly not planned | `Roadmap.md` — Explicitly not planned | `services/execution.py` long-only; `services/portfolio_targets.py` long-only contract; `docs/spec/ALLOCATION.md` §3 | B |
+| W-RM-04 | The remediation shipped execution-time observation checks, replay of stored payloads, a checksummed export and a read-time scorecard, without completing the #29/#33/#34/#35 acceptance criteria | `Roadmap.md` — What the programme did not complete | `services/quote_policy.py`; `core/decision_json.py`; `services/attribution.py`; `ai_agent.py` (`_build_tools`); `core/management/commands/` | B |
+| W-RM-05 | The current version is 1.2.0; FIX-08 and remediation are Unreleased at HEAD `7969cd7` | `Roadmap.md` — Delivered since FIX-07 | `CHANGELOG.md`; `docs/spec/acceptance/` | B/C |
+| W-RM-06 | The committed acceptance record at HEAD covers four stages; no full eight-stage record exists for `7969cd7` | `Roadmap.md` — Delivered since FIX-07; `ACCEPTANCE.md` §5; `DEMO.md` §0 | `docs/spec/acceptance/03308ca...json` (four stages, `frontend_tests: 0`); `docs/spec/acceptance/4e6c71f...json` (eight stages); no `7969cd7` record | B |
 
 ### Engineering-Decisions
 
@@ -338,6 +343,16 @@ The "was" column quotes the claim as it stood before Phase 5.
 | C-49 | `Execution-Guard.md` | The overspend "around $0.15" | Removed the number | Not a committed measurement |
 | C-50 | `Engineering-Decisions.md` | ADR-002: cases built from different evidence; "~100k tokens and about $0.10 per run" | Independent first cases from one catalog; per-run usage is recorded, no dollar figure asserted | Phase 2 changed the evidence supply; no committed run supports the cost figure |
 | C-51 | `Home.md`; `Architecture.md` | "Missing market data becomes HOLD" / "degrades to HOLD" | Missing data does not abort; the gap is recorded and the guard refuses an execution without a price | Only the heuristic engine is guaranteed to return HOLD when it cannot size; an LLM proposal can be rejected by the guard instead |
+
+| C-52 | `README.md` — See it running | Two poster embeds, one pointing at YouTube and one at a local file; the older screenshot tour still pointed at `docs/demo.gif` | One walkthrough at `docs/demo-walkthrough.mp4` with `docs/demo-walkthrough-poster.png`; YouTube is a text link | `demo.gif` and `demo.mp4` were deleted; one video file is the committed recording |
+| C-53 | `README.md` — Roadmap | All nine issues listed as undifferentiated proposals | Five not started; four partly delivered with the specific missing acceptance criterion named | The remediation changed four of them without completing their criteria; the issue bodies are the authority |
+| C-54 | `README.md` — Under the hood | No test counts | 955 backend and 276 frontend tests at HEAD `7969cd7`, with the verifier and the acceptance record named | The task requires a checkable count; the commit makes the snapshot falsifiable |
+| C-55 | `Decision-Attribution.md` — The live scorecard | "The engine now prefers the transaction's own price and falls back to the close only for a HOLD" | Executed decisions use the linked fill's price and timestamp; non-executed decisions use the proposal close with `fill: null`; the basis is published | `resolve_measurement_reference` and `attribution.v2` in `services/attribution.py` |
+| C-56 | `Home.md` — Current version | 1.1.7 (2026-11-11); Phase 4 in Unreleased | 1.2.0 (2026-11-12); Phase 4 in 1.1.8; FIX-08 and remediation Unreleased at `7969cd7` | `CHANGELOG.md` has 1.1.8/1.1.9/1.2.0 |
+| C-57 | `Roadmap.md` | Phase 5 "In progress"; no record of the remediation; #33/#34/#35 absent | Phase 5 done at `0724f11`; remediation #60–#64 recorded; #33/#34/#35 listed with their missing half | The phase and the remediation are merged; the old page contradicted the changelog |
+| C-58 | `Quality-and-Testing.md`; `CONTRIBUTING.md` | 716 backend / 178 frontend at the Phase 0-4 baseline; "the README states no test count" | 955 backend in 43 modules / 276 frontend in 27 files at HEAD `7969cd7`; README carries the same commit-pinned snapshot | The suite grew and the README now states the count with its commit |
+| C-59 | `CLAIMS.md` — R-14 | The GIF was recorded from the live application | The one walkthrough recording is the evidence; the GIF no longer exists | `docs/demo.gif` was deleted |
+| C-60 | `METHODOLOGY.md` — the live-vs-Phase-3 table and §4.3 | The live engine "stores no `price_observed_at`" and "starts at the transaction price" | It measures from the linked fill, records `measurement_basis`, `reference_at` and `price_observed_at_decision`, and publishes the signal-diagnostic basis; it still has no `as_of` | `resolve_measurement_reference` and `attribution.v2` in `services/attribution.py` |
 
 ## 4. Claims that could not be traced, and what happened to them
 

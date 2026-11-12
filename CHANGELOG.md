@@ -48,6 +48,143 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   policies, approval binding and expiry, apply without approval refused, apply through
   the shared execution service, and rejection and cancellation audit rows.
 
+### Fixed
+
+- **Remediation steps 1–10 [P0/P1] — ten remediation steps from the acceptance
+  review, and the mechanism that verifies the repair.** Each finding behind them was
+  reproduced against the tree before anything changed. The suite at `7969cd7` is **955 backend tests and 276
+  frontend tests**; ruff, the format check and the migration check are clean.
+
+  **Step 1 — quote provenance and approval binding (`602a899`).** Observation times
+  now travel from provider to cache to quote collection to proposal to approval to
+  application. A cache hit keeps the cached UTC instant; a daily bar maps to the real
+  16:00 New York close. An unknown observation time stays unknown and is treated as
+  missing data, which is what stops an untimed mark authorising a fill. The shared
+  check in `services/quote_policy.py` validates the traded instrument and every
+  material holding used for exposure, with per-source and per-instrument ceilings.
+  Approval persists the side, quantity, reference price, observation time, tolerance,
+  expiry and policy versions the operator actually saw, so the drift check no longer
+  compares the current price with itself. Proved by
+  `test_p0_execution_remediation.py::test_untimed_quote_is_missing_data_not_a_current_mark`,
+  `test_stale_traded_quote_is_refused_with_a_stable_reason` and
+  `test_price_drift_returns_revised_terms_and_writes_no_fill`.
+
+  **Step 2 — execution and audit commit together (`602a899`).** The fill, final guard
+  evaluation, decision-run link and state, run event and durable outbox row now commit
+  inside the ledger transaction; model calls and notifications stay outside it. A
+  repeated execution key returns the original transaction and run id, and
+  `manage.py repair_execution_audit` is dry-run by default. Plan failure and staleness
+  updates are conditional on status, version and attempt, so a delayed failure can no
+  longer overwrite a successful apply. Proved by
+  `test_injected_audit_failure_rolls_back_then_retry_writes_one_fill`,
+  `test_one_connection_fails_while_another_applies_and_delayed_failure_is_ignored` and
+  `test_a_suppressed_duplicate_run_is_terminal_and_links_the_existing_recommendation`.
+
+  **Step 3 — attribution across every horizon (`76c3017`).** The starting price was
+  read from a `Transaction.created_at` field that does not exist, and the scheduler
+  excluded any decision that already had an outcome, so a day-one score made days
+  seven and thirty permanently ineligible. Executed decisions now measure from the
+  linked fill's stored price and timestamp; HOLD and rejection keep a proposal-close
+  basis with no fabricated fill. `OutcomeEvaluation` is keyed by decision, horizon and
+  method version, so each horizon is selected independently. The scorecard and each
+  detail outcome publish `portfolio_performance: false` and `summable: false`, and
+  `manage.py backfill_outcome_records` corrects older revisions from the fill while
+  preserving the v1 row. Proved by
+  `test_p1_attribution_remediation.py::test_the_unmocked_start_price_is_the_recorded_fill_not_the_proposal_close`,
+  `test_a_day_one_score_does_not_prevent_days_seven_and_thirty` and
+  `test_apply_recovers_horizons_preserves_provenance_and_is_idempotent`.
+
+  **Step 4 — replay order and late outcomes (`76c3017`).** The shared replay reducer
+  painted the final guard record from the first guard event, so a cursor before
+  adjudication showed the eventual rejection instead of the approved quantity true at
+  that instant. Detail and export now publish every guard evaluation with a stable id,
+  and the reducer resolves the latest one visible at the cursor. Scoring a completed
+  run now writes a versioned `outcome.recorded.v1` event and outbox row in the same
+  transaction as the result and projection, so an open view learns that a later
+  horizon matured; a retry does not append a second event. Proved by
+  `test_p1_replay_remediation.py::test_detail_publishes_every_evaluation_with_its_identifier`
+  and `test_a_completed_run_keeps_its_execution_state_and_records_the_late_outcome`.
+
+  **Step 5 — portable exports and cross-language canonical JSON (`f54b2bf`).** The
+  browser canonical serialiser hashed `90` where Python hashed `90.0`, so an untouched
+  export failed its own digest. Both runtimes now share one declared canonical form -
+  sorted keys, compact UTF-8, ECMAScript number formatting and normalised fixed-point
+  decimals - pinned by `docs/spec/fixtures/canonical-json.v1.json`, which a Python test
+  and a Vitest test both read. The importer preserves the full run envelope, the whole
+  `guard_evaluations` collection, superseded outcomes and the outcome schedule.
+  Verification hashes the stored payload, names an unsupported version by field and
+  value, and fails on a semantic edit anywhere. Proved by
+  `test_p1_export_portability.py::test_every_shared_vector_matches_python` and
+  `test_a_semantic_edit_anywhere_fails_verification`.
+
+  **Step 6 — analysis is a recoverable job (`f54b2bf`).** `POST /api/decision-runs/`
+  wrote a durable `AllocationSubmission` and returned before the provider was called.
+  The worker owns an attempt count, an idempotency key and a visible state - queued,
+  running, succeeded, failed, cancelled, timed out - and a retry cannot duplicate the
+  plan or spend a second provider call for the same submission. A cancelled or timed
+  out submission cannot later apply a trade. `manage.py repair_allocation_submissions`
+  reports a stuck worker without changing it, and `--execute` times it out, fails an
+  unreconciled provider call, or re-queues a worker that died before the paid call.
+  Proved by
+  `test_p1_allocation_jobs.py::test_6a_the_response_returns_before_the_model_is_called`,
+  `test_6b_a_crash_after_the_provider_result_resumes_without_a_second_spend` and
+  `test_6c_a_cancelled_running_submission_cannot_attach_its_persisted_result`.
+
+  **Step 7 — isolated experiments and the registered metric (`4e6c71f`).** The
+  comparison report gave the pre-registered seven-day metric a null value on every
+  run because it was described in the pre-registration and never computed. It now
+  reads the definition from the immutable pre-registration and computes it, publishing
+  `mean_action_score_pct`, the scheduled/usable/excluded denominator with a reason per
+  exclusion, sample deviation, min, max and a seeded time-block bootstrap interval. A
+  null now means "not measurable from this data" with the missing input named.
+  Experiment executions have their own id, runs, immutable input snapshots and scoped
+  cost ledger, so two experiments cannot see or overwrite each other's decisions. Proved
+  by
+  `test_p1_experiment_isolation_metric.py::test_two_portfolios_do_not_share_decisions_snapshots_or_spend`
+  and `test_a_supported_horizon_carries_a_value_denominator_and_dispersion`.
+
+  **Step 8 — monotonic simulated time and report rebuild (`4e6c71f`).**
+  `services/experiment_simulation.py` enforces a monotonic simulated clock: a fill may
+  not be priced from an observation after the current instant, and the refusal carries
+  a stable reason. Each step records the clock, the data available at that instant, the
+  decision and the fill, so replaying the same fixtures twice produces byte-identical
+  records. `manage.py rebuild_experiment_report` rebuilds an archived report from its
+  recorded inputs, names the difference when an input does not reproduce, reports an
+  unsupported format version by name, and keeps synthetic content labelled synthetic.
+  It is a dry run by default. Proved by
+  `test_p1_simulation_rebuild.py::test_a_fill_priced_after_the_clock_is_deferred_and_invisible_to_the_next_decision`,
+  `test_replaying_twice_produces_byte_identical_decision_records` and
+  `test_rebuild_reproduces_the_numbers_and_hash`.
+
+  **Step 9 — the spend limiter counts unknown cost (`7969cd7`).** A day of real token
+  spend looked free: the cents quantiser rounded a sub-cent estimate away, and the main
+  adapter reports tokens with `cost_usd: None`, which the aggregate read as nothing to
+  add. A new `AIUsageLedger` keyed by a unique call key reserves the declared upper
+  bound before the provider call, refuses with `ai_spend_reserve_exceeded` or
+  `ai_spend_ceiling` on the conservative figure before the adapter is touched, and
+  reconciles afterwards. Provider dollars settle as billed; tokens with a price-table
+  figure settle as estimated with billed null; no usable report stays unknown with the
+  reservation held. The state publishes spent, estimated, reserved, committed,
+  remaining, unknown-cost runs and `basis: lower_bound`, so an operator sees a floor
+  rather than a fact. Proved by
+  `test_p1_cost_limiter.py::test_tokens_without_dollars_reconcile_to_an_estimate_not_zero`,
+  `test_a_provider_that_reports_nothing_stays_unknown_not_zero` and
+  `test_the_provider_is_not_called_when_the_reserved_bound_breaches`.
+
+  **Step 10 — a recorded artefact tied to a verified application (`7969cd7`).**
+  `scripts/verify_application.py` runs backend tests, frontend tests, typecheck, build,
+  lint, format, migrations and an HTTP smoke test, prints `VERIFY_STAGE` lines and one
+  `VERIFY_SUMMARY` JSON, and exits non-zero on failure or a required skip. `--record`
+  writes `docs/spec/acceptance/<commit>.json` with the commit, tree state, verdict,
+  per-stage results and a deterministic digest. Recording refuses a dirty tree and a
+  missing or failing record with stable codes, before provider configuration is read,
+  so a refusal cannot spend. Committed recordings carry a `recording` block naming
+  their commit and digest, and `manage.py check_recordings` fails on a mismatch. Proved
+  by
+  `test_p1_acceptance_verification.py::test_the_record_contains_the_commit_stages_counts_and_digest`,
+  `test_a_clean_tree_without_an_acceptance_record_is_refused` and
+  `test_every_committed_recording_names_a_passing_record`.
+
 ## [1.2.0] — 2026-11-12
 
 ### Fixed

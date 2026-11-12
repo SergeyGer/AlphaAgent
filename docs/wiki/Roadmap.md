@@ -1,12 +1,66 @@
 # Roadmap
 
-What is deliberately not built yet, and why. Several of these are ideas the
-system's own incident history argues for — those are marked.
+What has shipped, what is deliberately not built yet, and why. The open items are
+tracked as GitHub Issues; this page keeps the reasoning and the boundary between
+shipped and planned. When the two disagree, the issue and the code at HEAD are
+newer than this page.
 
-> **Each item below is tracked as a GitHub Issue** — see the
-> [issue list](https://github.com/SergeyGer/AlphaAgent/issues?q=is%3Aissue+is%3Aopen+label%3Aroadmap).
-> This page keeps the reasoning; the issue is where the work is discussed, claimed
-> and closed. When the two disagree, the issue is newer.
+> **Open work** — see the [issue list](https://github.com/SergeyGer/AlphaAgent/issues).
+> The issue body names the current state at HEAD and what remains. This page does
+> not claim an issue is done because part of it shipped.
+
+---
+
+## Delivered since FIX-07
+
+The acceptance review after FIX-07 produced ten remediation steps across five
+merges. Each finding behind them was reproduced before it was fixed. The commit
+and the proving test are recorded in
+[`CHANGELOG.md`](https://github.com/SergeyGer/AlphaAgent/blob/main/CHANGELOG.md)
+under Unreleased.
+
+| Delivered | Commit / PR | What it established |
+| --- | --- | --- |
+| FIX-08 portfolio advisory product, one real recorded provider run | `4078a94` / #54 | Submission, review, approval and apply; one recorded real model call |
+| Steps 1–2: quote provenance, approval binding, execution/audit atomicity | `602a899` / #60 | An untimed or stale mark cannot authorise a fill; a fill and its audit commit together |
+| Steps 3–4: attribution across horizons, replay order, late outcomes | `76c3017` / #61 | Each horizon is independent and measured from the fill; the guard visible at the cursor is the one shown |
+| Steps 5–6: portable exports, recoverable analysis jobs | `f54b2bf` / #62 | One canonical JSON in Python and the browser; analysis is a pollable worker job with a repair path |
+| Steps 7–8: isolated experiments, registered metric, simulated time, report rebuild | `4e6c71f` / #63 | The pre-registered metric is computed; simulated time is monotonic; an archive rebuilds from its recorded inputs |
+| Steps 9–10: conservative spend limiter, verified acceptance | `7969cd7` / #64 | Unknown cost is reserved, not counted as zero; a recording names a passing commit |
+| FIX-10: the walkthrough rebuilt around one decision | `3d229cd` / #59 | One narrated recording at `docs/demo-walkthrough.mp4`, with a poster |
+
+The suites at HEAD `7969cd7` contain 955 backend tests and 276 frontend tests.
+`scripts/verify_application.py` also runs lint, format, migration check,
+typecheck, build and an HTTP smoke test; the committed full eight-stage record is
+for `4e6c71f`, and a full record for HEAD is tracked as #65. The verification
+command and the record contract are in
+[`ACCEPTANCE.md`](https://github.com/SergeyGer/AlphaAgent/blob/main/docs/spec/ACCEPTANCE.md).
+
+Two operational gaps from the same programme are tracked separately:
+[#65](https://github.com/SergeyGer/AlphaAgent/issues/65) (a full eight-stage
+acceptance record for the release commit) and
+[#66](https://github.com/SergeyGer/AlphaAgent/issues/66) (the V4 allocation arm,
+declared in every manifest and never executed).
+
+### What the programme did not complete
+
+Four proposals from comparing against
+[TradingAgents](https://github.com/TauricResearch/TradingAgents) gained a real
+capability without meeting their full acceptance criteria. They remain open:
+
+- **#29 deterministic replay** — the offline viewer replays stored payloads
+  deterministically and the export round-trips every guard evaluation. No command
+  re-runs the guard against a recorded proposal and sweeps every stored decision.
+- **#33 point-in-time contract** — execution marks now carry and validate an
+  observation time (`services/quote_policy.py`), and experiment evaluation refuses
+  future knowledge. The agent tools still fetch "now"; they do not accept an `as_of`
+  bound, and no test iterates the tool registry looking for leakage.
+- **#34 live scorecard** — the scorecard is computed at read time, and the
+  experiment report now computes its pre-registered metric. No generated public
+  scorecard file, scheduled regeneration or README badge exists.
+- **#35 verifiable audit bundle** — the export endpoint emits a checksummed bundle
+  verified in Python and in the browser, with tamper and redaction tests. The
+  proposed CLI and the offline re-run of the guard verdict are not built.
 
 ---
 
@@ -21,19 +75,28 @@ deliberate sequence of individually-permitted trades. Two sweeps three seconds
 apart each respected the per-trade ceiling and together doubled the intended
 exposure.
 
-The remaining gap is a portfolio-level cap: total capital deployed per day,
-enforced the same way the per-trade ceiling is — in the execution guard, as a
-pure function, not in a prompt.
+Phase 4 added useful ceilings — `max_portfolio_exposure_pct`,
+`max_ticker_concentration_pct`, `max_sector_concentration_pct`,
+`max_turnover_pct` and `min_cash_buffer_pct` — and none of them closes this gap.
+The sector and exposure checks bound the *state after one trade*; turnover bounds
+*one plan*, not a day's sequence of plans. The missing control is a portfolio-level
+cap on total capital deployed per day, enforced in `evaluate_proposal` as a pure
+function, with today's deployment total as an input.
 
-*Why not done:* it changes the guard's signature (it needs today's deployment
-total as an input), and that is a change worth making deliberately rather than
-alongside the throttling work.
+*Why not done:* it changes the guard's signature, and that is a change worth
+making deliberately rather than alongside the throttling work.
 
 ### Backtesting against historical data
 **Tracked as [#28](https://github.com/SergeyGer/AlphaAgent/issues/28).**
 The agent layer produces a decision for a point in time. Replaying a historical
 period would answer the question the project cannot currently answer: *would this
 strategy have made money?*
+
+Even after the remediation, the answer is blocked by the missing half of #33: a
+backtest must be able to ask every tool "what was true on 2026-06-01", and the
+tools still fetch the current quote and the current news feed. The experiment
+simulator (`services/experiment_simulation.py`) is not a backtest: it replays an
+authored opportunity set with a monotonic clock, not a historical market.
 
 *Why not done:* yfinance's historical coverage is uneven for the instruments in
 use, and a backtest that silently skips missing data is worse than none. It needs
@@ -47,9 +110,12 @@ would re-run the guard against a recorded proposal and confirm it still produces
 the same verdict — proving the risk behaviour is reproducible rather than merely
 tested.
 
-*Why not done:* needs a serialised form of the evaluation context. Straightforward,
-but it is a testing facility rather than a feature, and it competes for priority
-with the deployment ceiling above.
+The shipped part is a replay of *stored payloads*: `docs/viewer/index.html` and
+the authenticated detail screen resolve the guard evaluation visible at a cursor,
+and the export preserves every evaluation. They do not re-evaluate the guard; the
+viewer says so in its own limitations. The remaining work is a management command
+that replays one decision, a sweep over every stored decision, and a failing exit
+code on divergence.
 
 ---
 
@@ -57,8 +123,10 @@ with the deployment ceiling above.
 
 ### Per-user strategy configuration
 **Tracked as [#30](https://github.com/SergeyGer/AlphaAgent/issues/30).**
-Risk profile, watchlist and limits are currently portfolio-level. A user model
-would let several strategies run concurrently against separate portfolios.
+`Portfolio.user` is a `OneToOneField`, so one user owns one portfolio. Risk
+profile and limits are already per portfolio, and `is_autonomous` is too. The
+watchlist (`ALPHA_WATCHLIST`) and the AI spend ceiling
+(`AI_DAILY_SPEND_LIMIT_USD`, with `AIUsageLedger`) are deployment-global.
 
 *Why not done:* the multi-tenant boundaries exist (every query is ownership-scoped)
 but there is no reason to rush into a user-facing configuration surface before
@@ -67,13 +135,13 @@ there is more than one user.
 ### Hosted demonstration instance
 **Tracked as [#31](https://github.com/SergeyGer/AlphaAgent/issues/31).**
 A read-only public deployment would let a reviewer explore the dashboard without
-running Docker.
+running Docker. The current public surfaces are the Streamlit page, which runs the
+real guard on unsaved objects and nothing else, and the offline viewer, which is a
+static no-database replay with no execution or approval path.
 
 *Why not done:* this is a system that executes trades. A public instance needs
 hard isolation — a sandboxed broker, no outbound LLM spend, seeded data — and
-getting that wrong is worse than not having a demo. The recorded
-[demo](https://github.com/SergeyGer/AlphaAgent#see-it-running) covers the same
-ground safely.
+getting that wrong is worse than not having a demo.
 
 ### Additional asset classes and providers
 **Tracked as [#32](https://github.com/SergeyGer/AlphaAgent/issues/32).**
@@ -81,8 +149,29 @@ The ledger already handles fractional quantities to eight decimal places for
 crypto. Extending to other instruments is mostly a matter of additional market
 data adapters behind the existing tool interface.
 
-*Why not done:* no verified data source with the same reliability as the current
-one.
+*Why not done:* every market-data path still goes through yfinance
+(`services/market_data.py`, `services/fundamentals.py`), and there is no verified
+second source with the same graceful-degradation behaviour.
+
+### Point-in-time data contract
+**Tracked as [#33](https://github.com/SergeyGer/AlphaAgent/issues/33).**
+Execution marks now carry observation times and pass the freshness policy; the
+live path treats an untimed mark as missing data. The tool contract still has no
+`as_of` parameter, so a historical question cannot be asked safely. See the
+delivered/remaining note above.
+
+### Live performance scorecard
+**Tracked as [#34](https://github.com/SergeyGer/AlphaAgent/issues/34).**
+The dashboard scorecard is computed at read time for 1/7/30 days, with the basis
+and sample size beside the rate. It is not published as a generated file, and no
+badge reflects it. See the delivered/remaining note above.
+
+### Verifiable audit bundle
+**Tracked as [#35](https://github.com/SergeyGer/AlphaAgent/issues/35).**
+`GET /api/decision-runs/<id>/export/` emits a redacted, checksummed bundle; the
+offline viewer verifies it in the browser with the same canonical JSON as Python.
+The proposed CLI and guard recomputation are the missing part. See the
+delivered/remaining note above.
 
 ---
 
@@ -111,10 +200,11 @@ By what the system's own evidence argues for, not by what is most interesting to
 build:
 
 1. **INC-001** is the only incident in the log where the *design* was incomplete
-   rather than the implementation. A cumulative ceiling is the remaining half of
-   that fix.
+   rather than the implementation. A cumulative daily ceiling is the remaining
+   half of that fix, and the Phase 4 ceilings do not replace it.
 2. Replay and backtesting both increase confidence in behaviour that is currently
-   only unit-tested.
+   only unit-tested. Replay has a shipped foundation; backtesting is still blocked
+   on the tool-level `as_of` bound.
 3. Everything else is a feature, and features are cheaper to add than trust is to
    recover.
 
@@ -137,8 +227,9 @@ and planned stays explicit.
 | **1 / Explain one decision** | Decision detail, guard comparison, legacy labels, recorded fixture playback, accurate README and video edits | **Done** — v1.1.5; see `docs/spec/FIXTURES.md` |
 | **2 / Real rebuttals** | Evidence and claim contracts populated by a live protocol, independent first round, one bounded response round, stage events, repair budgets | **Done** — v1.1.6; `services/debate_protocol.py` |
 | **3 / Measure value** | Versioned signal diagnostics, ledger-based portfolio performance, experiment manifests, V0–V3 reports | **Done** — v1.1.7; `docs/spec/MEASUREMENT.md` |
-| **4 / Allocate capital** | Complete portfolio brief, target weights, deterministic plan sizing, advisory workflow | **Done** — Unreleased; `docs/spec/ALLOCATION.md` |
-| **5 / Publish evidence** | Curated recorded cases, revised demonstration, methodology report | **In progress** — this change: `docs/spec/METHODOLOGY.md`, `CASES.md`, `DEMO.md`, `CLAIMS.md` |
+| **4 / Allocate capital** | Complete portfolio brief, target weights, deterministic plan sizing, advisory workflow | **Done** — v1.1.8; `docs/spec/ALLOCATION.md` |
+| **5 / Publish evidence** | Curated recorded cases, revised demonstration, methodology report | **Done** — `0724f11`; `docs/spec/METHODOLOGY.md`, `CASES.md`, `DEMO.md`, `CLAIMS.md` |
+| **P0/P1 remediation** | Quote provenance, execution/audit atomicity, attribution horizons, replay order, portable exports, recoverable jobs, experiment isolation and metric, simulated time, spend limiter, verified acceptance | **Done** — steps 1–10 in #60–#64; `docs/spec/IMPLEMENTATION-NOTE.md` and `ACCEPTANCE.md` |
 
 ### Why the phases cannot be collapsed
 

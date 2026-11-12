@@ -30,15 +30,19 @@ Full annotated tracks, with a per-step breakdown:
 
 ## Current version
 
-**1.1.7** (2026-11-11). See the
+**1.2.0** (2026-11-12). See the
 [changelog](https://github.com/SergeyGer/AlphaAgent/blob/main/CHANGELOG.md) for what
 changed, and the
 [releases page](https://github.com/SergeyGer/AlphaAgent/releases) for the notes.
-Phase 4 (portfolio allocation) is in the changelog's Unreleased section.
+Phase 4 (portfolio allocation) is in 1.1.8; FIX-08 and the remediation steps 1–10
+are in the changelog's Unreleased section, at HEAD `7969cd7`.
 
 | Version | Date | Headline |
 | --- | --- | --- |
-| **1.1.7** | 2026-11-11 | Signal diagnostics and portfolio accounting, kept separate by construction (Phase 3) |
+| **1.2.0** | 2026-11-12 | Cost and deadline semantics, and executable experiment arms (FIX-07) |
+| 1.1.9 | 2026-11-11 | Decision lifecycle, execution revalidation, durable events, the offline viewer |
+| 1.1.8 | 2026-11-11 | Portfolio-aware capital allocation (Phase 4) |
+| 1.1.7 | 2026-11-11 | Signal diagnostics and portfolio accounting, kept separate by construction (Phase 3) |
 | 1.1.6 | 2026-11-11 | A real, bounded debate protocol (Phase 2) |
 | 1.1.5 | 2026-11-10 | Decision runs: explain one decision (Phase 1) |
 | 1.1.0 | 2026-10-23 | Decision attribution, portfolio ceilings, position theses, security pass |

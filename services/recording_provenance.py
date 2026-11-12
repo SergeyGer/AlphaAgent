@@ -192,7 +192,6 @@ def recording_provenance(*, root: Path | str | None = None) -> dict:
                 record_relpath = str(found_path)
 
     unexpected = _unexpected_dirty_paths(state.dirty_paths, state.commit)
-    status = "unverified"
     if not state.available:
         status = "git_unavailable"
     elif unexpected:

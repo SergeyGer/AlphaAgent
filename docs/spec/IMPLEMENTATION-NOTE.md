@@ -416,12 +416,16 @@ Divergences recorded rather than absorbed:
    duplicate the portfolio call or invent a ticker. `POST /api/decision-runs/`
    is the route the review proposed, and its status URL points at the
    submission.
-2. **Submission executes inline.** A single portfolio call cannot rely on a
-   Celery worker being present, and a queued task with no worker would leave the
-   run `accepted` forever. The response is still 202 with the status URL; the
-   submission row is committed before the model call so a crash is visible as
-   `running`. This is not an asynchronous job, and the status URL is the
-   authority.
+2. **Submission executes inline (superseded by step 6).** A single portfolio call
+   cannot rely on a Celery worker being present, and a queued task with no worker
+   would leave the run `accepted` forever. The response is still 202 with the
+   status URL; the submission row is committed before the model call so a crash
+   is visible as `running`. This is not an asynchronous job, and the status URL
+   is the authority. **This is the state FIX-08 shipped; it is no longer the
+   current behaviour.** Step 6 (see the P1 remediation section below) moved the
+   provider call into the worker and gave the submission six pollable states and
+   a repair command. The FIX-08 paragraph is retained as the record of why the
+   inline choice was made, not as a description of HEAD.
 3. **The live recording is one real model call with no retry and no repair.**
    `max_repairs=0` and `provider_retries=0` mean a malformed answer is recorded
    as a failure rather than re-prompted. That keeps spend bounded and avoids
@@ -483,6 +487,108 @@ The committed evidence is still what the earlier phases produced: the three
 synthetic decision fixtures, the synthetic Phase 3 experiment report and the
 synthetic Phase 4 paper allocation. No live run was added, and no number in the
 new documents is quoted from a live database.
+
+## P0 remediation — quote provenance and execution/audit integrity (steps 1 and 2)
+
+The acceptance review reproduced four defects that the existing tests did not
+exercise: a `PriceQuote` with `as_of=None` passed through `apply_plan` and wrote
+fills; a recommendation displayed at `$100` executed at a refreshed `$120`
+because `approved_price` was set from the fresh decision price, so the drift
+check compared the new price with itself; patching `complete_run` to raise still
+left the fill committed and a retry returned an executed recommendation whose
+run had never completed; and calling the plan failure handler after a successful
+apply changed the plan from `applied` to `failed`. Both steps are P0.
+
+### 1 — quote provenance and approval binding
+
+Observation times are now carried end to end: provider to cache to quote
+collection to proposal to approval to application. A cache hit preserves the
+cached UTC instant instead of substituting "now"; a daily bar maps to the real
+16:00 New York session close in UTC. An unknown observation time stays unknown
+and is treated as missing data, which is what stops an untimed mark authorising
+a fill.
+
+The evidence below is in `core/tests/test_p0_execution_remediation.py` unless another module is named.
+
+| Requirement | Where it is enforced | Evidence |
+| --- | --- | --- |
+| A price without an observation time is missing data | `services/quote_policy.py` (`validate_mark`); `services/execution.py` refuses `quote_time_missing` wherever a current valuation is required | `test_p0_execution_remediation.py::test_untimed_quote_is_missing_data_not_a_current_mark` |
+| Freshness is declared by source and instrument | `ExecutionFreshnessPolicy.from_settings`; `EXECUTION_MAX_QUOTE_AGE_SECONDS`, `EXECUTION_MAX_PRICE_DRIFT_PCT`, `EXECUTION_FRESHNESS_POLICY`. The narrowest matching ceiling wins; an override may tighten but never make an untimed or future-dated mark acceptable. | `test_stale_traded_quote_is_refused_with_a_stable_reason`, `test_future_dated_quote_is_refused_before_a_fill` |
+| A stale material holding cannot lend false equity | The shared check under the portfolio lock validates the traded instrument **and** every material holding used for exposure | `test_stale_material_holding_is_refused_when_valuation_is_required` |
+| Fallback and acquisition-cost marks are labelled estimates | Allowed only in an explicitly labelled `paper` / `estimate` / `simulated` mode; a live execution is refused with `fallback_quote_disallowed` | `test_fallback_quote_is_refused_outside_paper_or_estimation_mode`, `test_paper_mode_is_explicitly_labelled_and_may_use_planned_marks` |
+| A de-risking sale can use the risk-reducing exception | Permitted on a **non-traded** holding, with the rule and reason recorded on the plan | `test_risk_reducing_sale_records_the_exception_and_fills` |
+| Approval binds what the operator saw | `approved_side`, quantity, reference price, observation time, tolerance, expiry and the policy/classification versions are persisted; the drift check compares against the approved terms, not against itself | `test_approval_persists_side_quantity_reference_price_tolerance_and_versions`, `test_price_drift_returns_revised_terms_and_writes_no_fill`, `test_a_second_approval_at_the_refreshed_terms_fills_once` |
+
+Divergences recorded rather than absorbed:
+
+1. **A legacy approval with no stored terms cannot be reused.** It is refused
+   with a stable reason and requires a fresh approval. Inventing terms for a
+   permission that was never recorded would defeat the binding.
+2. **The risk-reducing exception is narrow.** It applies to a sale of the traded
+   instrument and only to non-traded holdings whose stale mark cannot increase
+   exposure; the exception and its reason are stored on the plan, not inferred
+   later from a log message.
+3. **An unknown observation time cannot be repaired by an estimate.** A provider
+   that returns a price without a time is treated exactly like a missing price.
+
+### 2 — execution and audit commit together
+
+| Requirement | Where it is enforced | Evidence |
+| --- | --- | --- |
+| One transaction covers the fill and its audit | The fill, final guard evaluation, decision-run link and state, run event and durable outbox row commit inside the ledger transaction; model calls and notifications stay outside it | `test_injected_audit_failure_rolls_back_then_retry_writes_one_fill` |
+| A retry returns the original, not a second fill | The unique execution key resolves the existing transaction and run id; an incomplete audit is repaired before the request is treated as complete | `test_injected_audit_failure_rolls_back_then_retry_writes_one_fill` |
+| Notification failure does not lose the trade or the audit | The outbox row is committed with the event; dispatch is a separate retryable step | `test_notification_dispatch_failure_does_not_lose_the_fill_or_audit` |
+| Failure, reapproval and staleness are conditional | Plan updates require the expected status, version and attempt, and record `PlanExecutionAttempt` without touching filled legs | `test_one_connection_fails_while_another_applies_and_delayed_failure_is_ignored`, `test_a_suppressed_duplicate_run_is_terminal_and_links_the_existing_recommendation` |
+| Ambiguity is repaired, not guessed | `manage.py repair_execution_audit` is dry-run by default and sends an ambiguous match to review | `test_repair_command_dry_run_reports_without_writing` |
+
+Divergences recorded rather than absorbed:
+
+1. **`repair_execution_audit` does not execute a trade.** It repairs a missing
+   audit row for an existing fill; it cannot invent a fill that was never
+   written.
+2. **A duplicate pending recommendation resolves the new run as suppressed.** It
+   links the existing recommendation rather than parking a run in an approval
+   state nothing can resolve.
+3. **The execution transaction includes the outbox, not the network.** The
+   transaction is atomic over database state; provider and notification I/O
+   remain outside by design.
+
+## P1 remediation — attribution horizons and replay order (steps 3 and 4)
+
+### 3 — attribution across all horizons
+
+The starting price was read from `Transaction.created_at`, a field that does not
+exist: a real Django `Transaction` fixture raised `AttributeError` immediately.
+The scheduler also excluded any decision that already had an outcome, so a
+day-one score made days seven and thirty permanently ineligible.
+
+The evidence below is in `core/tests/test_p1_attribution_remediation.py` and `core/tests/test_p1_replay_remediation.py` unless another module is named.
+
+| Requirement | Where it is enforced | Evidence |
+| --- | --- | --- |
+| Executed decisions measure from the fill | `resolve_measurement_reference` resolves the linked fill and uses its stored price and timestamp; a recommendation approved at 130 is measured from 130, not from the proposal price of 100 | `test_p1_attribution_remediation.py::test_the_unmocked_start_price_is_the_recorded_fill_not_the_proposal_close` |
+| HOLD and rejection are honest about their basis | They keep a proposal-close basis, record `fill: null` and a stated reason rather than inventing a fill | `test_a_hold_keeps_a_proposal_basis_and_has_no_fabricated_fill` |
+| Each horizon is selected independently | `OutcomeEvaluation` is keyed by decision, horizon and method version; `evaluate_pending` selects per horizon, so a day-one score does not block 7 or 30 | `test_a_day_one_score_does_not_prevent_days_seven_and_thirty` |
+| Retries and overlapping ticks cannot double-write | A row lock, attempt count and content hash make a retry idempotent and give an unpriceable decision a visible state and reason | `test_retried_and_overlapping_ticks_are_idempotent`, `test_an_unpriceable_decision_does_not_stop_the_valid_one` |
+| The measurement basis travels with the number | The scorecard and each detail outcome publish `portfolio_performance: false`, `summable: false` and the basis counts | `test_the_scorecard_publishes_that_this_is_a_signal_diagnostic` |
+| Historical rows can be corrected without erasing them | `manage.py backfill_outcome_records` rewrites `OutcomeRecord` corrections from the fill, preserves prior revisions and the older v1 row, is a dry run by default, and logs unresolvable fills | `test_dry_run_reports_the_missing_horizon_and_the_wrong_basis_without_writing`, `test_apply_recovers_horizons_preserves_provenance_and_is_idempotent` |
+
+### 4 — replay order and late updates
+
+The shared replay reducer painted the final guard record from the first guard
+event, so at the preflight the screen showed the eventual rejection instead of
+the approved 10 units that were true at that moment. Scoring a completed run
+also wrote no event and no outbox row, so an open view could never learn that a
+later horizon had matured.
+
+| Requirement | Where it is enforced | Evidence |
+| --- | --- | --- |
+| Every guard evaluation is addressable | Detail and export publish each evaluation with a stable id, in order | `test_detail_publishes_every_evaluation_with_its_identifier`, `test_the_export_preserves_the_whole_collection` |
+| The cursor resolves the visible evaluation | The reducer takes the latest evaluation at or before the cursor, hides the card before the first check, and labels a legacy event that recorded no id | `frontend/src/lib/replayGuard.test.ts` (`guard resolution at the replay cursor`) |
+| A late outcome is a durable event | Each evaluated outcome writes a versioned `outcome.recorded.v1` event and outbox row in the same transaction as the result and projection | `test_a_completed_run_keeps_its_execution_state_and_records_the_late_outcome` |
+| A retry is not a correction | The idempotency key distinguishes a retry from a genuine correction; a correction gets a new revision | `test_a_retry_does_not_append_a_second_event`, `test_a_genuine_correction_gets_a_new_idempotency_key_and_revision` |
+| A completed run stays completed | Status remains `completed` and execution state remains `executed` while an outcome is appended; the detail view polls only while measurement work remains | `test_a_completed_run_keeps_its_execution_state_and_records_the_late_outcome` |
+| Event failure rolls back the result | A failed event write rolls back the outcome and projection | `test_an_event_write_failure_rolls_back_the_result_and_projection` |
 
 ## P1 remediation — export portability and recoverable analysis jobs (steps 5 and 6)
 
@@ -643,7 +749,9 @@ Divergences recorded rather than absorbed:
 6. **V4's reason no longer names FIX-08 as an unfinished dependency.** FIX-08
    supplies the allocation path, but no V4 arm has ever been scheduled or
    measured, so the report says exactly that and keeps V4 outside the
-   denominator.
+   denominator. Running the arm is tracked as
+   [#66](https://github.com/SergeyGer/AlphaAgent/issues/66); until then the
+   report must not show it as a zero.
 
 ## P1 remediation — provider cost accounting and verified acceptance (steps 9 and 10)
 
@@ -736,3 +844,11 @@ Divergences recorded rather than absorbed:
    `provenance_kind: "attached_at_remediation"` and names the commit whose clean
    acceptance record was used. It does not claim the recorder emitted the block.
    New recordings write it at creation time.
+6. **The committed record for the steps 9–10 commit covers four stages, not
+   eight.** `docs/spec/acceptance/03308ca...json` records backend-tests, lint,
+   format and migration-check, with `frontend_tests: 0`; it names the pre-merge
+   commit `03308ca`, not the merged HEAD `7969cd7`. The full eight-stage record
+   exists for `4e6c71f` (928 backend / 275 frontend). The mechanism is complete;
+   the *current* full-environment record is not. Tracked as
+   [#65](https://github.com/SergeyGer/AlphaAgent/issues/65), and stated in
+   [`ACCEPTANCE.md`](ACCEPTANCE.md) §5.

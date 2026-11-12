@@ -122,8 +122,6 @@ _ACTION_PATTERNS = (
     ("HOLD", ("hold", "no action", "no trade", "wait", "skip", "monitor")),
 )
 
-_RETRYABLE_STATES = frozenset({OutcomeEvaluationState.PENDING, OutcomeEvaluationState.MATURED})
-
 
 def action_of(action_taken: str | None) -> str:
     """Normalise a free-text ``action_taken`` into BUY / SELL / HOLD / OTHER."""

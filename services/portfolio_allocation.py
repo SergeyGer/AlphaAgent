@@ -1682,10 +1682,8 @@ def apply_plan(
     plan: PortfolioPlan | None = None
     applications: list[PlanApplication] = []
     attempt_id = uuid4()
-    attempt_number = 1
     expected_plan_version: int | None = None
     expected_portfolio_version = ""
-    execution_mode_value = (mode or EXECUTION_MODE_LIVE).lower()
     # Record the attempt identity before the application transaction. A failure
     # handler runs after a rollback, so an identity written only inside that
     # transaction would vanish and the delayed handler would have nothing to

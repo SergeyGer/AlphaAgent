@@ -10,9 +10,9 @@ Measured on this checkout:
 
 | Metric | Value | How it was measured |
 | --- | --- | --- |
-| Backend test modules | 28 (`test_*.py`) plus `helpers.py` | `ls core/tests/` |
-| Backend test methods | **716** at the Phase 0-4 baseline (the runner prints the current total) | `venv/bin/python manage.py test core.tests` |
-| Frontend test files / tests | 16 / **178** | `cd frontend && npm test` |
+| Backend test modules | 43 (`test_*.py`) plus `helpers.py` | `ls core/tests/` |
+| Backend test methods | **955** at HEAD `7969cd7` (2026-11-12; the runner prints the current total) | `venv/bin/python manage.py test core.tests` |
+| Frontend test files / tests | 27 / **276** | `cd frontend && npm test` |
 | Result | `OK` | both commands, PostgreSQL backend for the Django suite |
 | Lint status | `All checks passed!` | `venv/bin/ruff check .` |
 | Format status | clean | `venv/bin/ruff format --check .` |
@@ -20,21 +20,26 @@ Measured on this checkout:
 
 ## Test modules
 
-Counts are `def test_*` methods per module at the Phase 0-4 baseline, verified by AST
-walk and consistent with the runner's total of 716. The authoritative number is
-the total the runner prints on the commit being reviewed.
+Counts are `def test_*` methods per module at HEAD `7969cd7`, verified by AST
+walk and consistent with the runner's total of 955. The authoritative number is
+the total the runner prints on the commit being reviewed; the commit is named
+because a count without one is a claim that will drift.
 
 | Module | Tests | What it actually covers |
 | --- | --- | --- |
-| `test_ai_agent.py` | 33 | `TradeProposal` payload contract, JSON extraction from prose/fenced output, heuristic engine sizing, token cost accounting, and real CrewAI crew construction (guardrail annotation contract, tool schemas). |
+| `test_ai_agent.py` | 36 | `TradeProposal` payload contract, JSON extraction from prose/fenced output, heuristic engine sizing, token cost accounting, and real CrewAI crew construction (guardrail annotation contract, tool schemas). |
 | `test_api.py` | 19 | REST auth, portfolio payload + bounded query count, graceful market-data degradation, autonomy toggle confirmation rules, decision-log filtering/scoping, transaction listing, `/healthz`, token issuance. |
 | `test_attribution.py` | 24 | Outcome scoring: SELL is right when the price falls, HOLD never enters the hit rate, empty scorecard reports no rate, start-price choice, idempotent evaluation. |
 | `test_dashboard_api.py` | 29 | Equity snapshot series and hour filtering, recommendation list/approve/reject, advisory sweep dispatch, SPA serving, API-over-SPA route precedence. |
-| `test_debate_protocol.py` | 32 | Independent first round, one rebuttal round, adjudication, stage budgets, typed failures, fallback separation, reproducibility metadata. |
+| `test_debate_protocol.py` | 41 | Independent first round, one rebuttal round, adjudication, stage budgets, typed failures, fallback separation, reproducibility metadata. |
 | `test_decision_runs.py` | 25 | Decision-run list/metadata/detail/events/export contracts, fixture label propagation, ownership scoping and redaction. |
+| `test_decision_lifecycle.py` | 14 | One run from analysis to validation, approval, execution, rejection and expiry; the guard record is persisted from the under-lock evaluation. |
+| `test_event_delivery.py` | 8 | Durable outbox delivery, retry/backoff, catch-up ordering and delivery metrics. |
+| `test_execution_integrity.py` | 12 | Execution-key idempotency, under-lock revalidation, audit pairing and the repair path. |
 | `test_demo_theme_contract.py` | 3 | The Streamlit demo's theme contract against the pinned Streamlit version. |
 | `test_documentation_links.py` | 6 | Every absolute source link resolves to a file and line in the checkout; the wiki-breaking relative form is rejected. |
-| `test_experiments.py` | 38 | Experiment manifest validation, variant publication, report assembly, fairness, sample gates, evidence coverage, Sharpe absence and counterfactual reporting. |
+| `test_experiments.py` | 47 | Experiment manifest validation, variant publication, report assembly, fairness, sample gates, evidence coverage, Sharpe absence and counterfactual reporting. |
+| `test_experiment_execution.py` | 21 | Arm execution, one frozen opportunity set, execution namespaces, the pre-registered metric, cost scope and report build. |
 | `test_exposure_limits.py` | 26 | Portfolio-level ceilings: exact clamp, binding limit named, SELL never blocked, production callers pass `Exposure`. |
 | `test_guardrails.py` | 17 | The execution guard: allocation ceiling and clamping, daily-loss limit, HOLD never executes, missing/zero price, zero amount, SELL sizing, fractional crypto. |
 | `test_llm_hooks.py` | 19 | LLM transport interceptor: headers, malformed-JSON tolerance, and an end-to-end mock Anthropic HTTP endpoint. |
@@ -43,6 +48,8 @@ the total the runner prints on the commit being reviewed.
 | `test_models.py` | 11 | Schema contract: documented defaults, one portfolio per user, negative balance and non-positive amount rejected at the database, derivations. |
 | `test_portfolio_accounting.py` | 35 | Equity, fees, flows, TWR approximations, missing prices and benchmarks, weekend maturities, leakage, overlapping decisions, LLM cost, counterfactuals. |
 | `test_portfolio_allocation.py` | 53 | Brief completeness, target contract, deterministic projection, leg sizing, atomic apply, revalidation, concurrency and the paper command. |
+| `test_allocation_workflow.py` | 36 | Submission, review, approval, apply, cancellation and provider recording through the advisory workflow. |
+| `test_policy_application.py` | 15 | Portfolio policy rechecked at application time: limits, classifications, cost model and version binding. |
 | `test_recommendations.py` | 36 | Human-in-the-loop creation, de-duplication, TTL expiry, approval re-validated at current prices, double approval, audit rows, snapshots. |
 | `test_regressions.py` | 104 | One class per defect found by review rather than a failing test: payload shapes, sweep scoping, truthful 429, debounce keys, link-code expiry, token purge, limit parsing, autonomy broadcast, webhook fail-closed, SPA containment and more. |
 | `test_security.py` | 9 | `env_required` semantics and the repository-wide secret scan. |
@@ -53,6 +60,15 @@ the total the runner prints on the commit being reviewed.
 | `test_thesis.py` | 30 | One live thesis per instrument, superseded not overwritten, empty position closes it, absence stated in the prompt, wiring. |
 | `test_thinking_budget.py` | 2 | Adaptive-thinking token budget guard for models that expose one. |
 | `test_throttle.py` | 18 | Sweep-ticker cooldowns and debounce: effectiveness, independence, zero-window disable, release, fail-open. |
+| `test_p0_execution_remediation.py` | 20 | Quote freshness and provenance, approval binding, price-drift refusal, audit/fill atomicity, duplicate recommendations, plan failure races and the repair command. |
+| `test_p1_attribution_remediation.py` | 9 | Fill-based measurement, HOLD proposal basis, independent horizons, idempotent retries, backfill provenance. |
+| `test_p1_replay_remediation.py` | 8 | Stable guard-evaluation ids, cursor resolution, late-outcome events and outcome atomicity. |
+| `test_p1_export_portability.py` | 16 | Shared canonical JSON vectors, export sample verification, tamper detection, endpoint shape and the full guard collection. |
+| `test_p1_allocation_jobs.py` | 11 | 202-before-provider, crash resume without double spend, cancellation, timeout, repair and ownership. |
+| `test_p1_experiment_isolation_metric.py` | 9 | Execution isolation, the registered metric, denominator and dispersion, and the committed archive recompute. |
+| `test_p1_simulation_rebuild.py` | 12 | Monotonic simulated time, byte-identical replays and archived report rebuild. |
+| `test_p1_cost_limiter.py` | 9 | Reservation before the provider call, tokens-without-dollars reconciliation, unknown cost, durable replay and state shape. |
+| `test_p1_acceptance_verification.py` | 18 | Verifier stages and exit codes, acceptance record digest, dirty-tree refusal, recording pairing and committed recordings. |
 | `test_websockets.py` | 14 | ASGI consumer auth, ping/pong, unknown frames, event relay to the owning user only, Decimal serialisation, soft failure without a channel layer. |
 
 `core/tests/helpers.py` is not a test module. It supplies `TEST_CACHES` (a `LocMemCache`
@@ -258,7 +274,7 @@ The Makefile wraps the common paths; the underlying commands are shown beside th
 
 | Target | Command it runs | Purpose |
 | --- | --- | --- |
-| `make test` | `venv/bin/python manage.py test core.tests` | The full suite (716 at the Phase 0-4 baseline). Requires PostgreSQL reachable (`make up` starts `db` and `redis` only). |
+| `make test` | `venv/bin/python manage.py test core.tests` | The full suite (955 at HEAD `7969cd7`). Requires PostgreSQL reachable (`make up` starts `db` and `redis` only). |
 | `make test-guardrails` | `venv/bin/python manage.py test core.tests.test_guardrails core.tests.test_security` | The safety-critical subset: execution guardrails plus secret hygiene. |
 | `make lint` | `venv/bin/ruff check .` | Lint only. |
 | `make format` | `venv/bin/ruff check . --fix && venv/bin/ruff format .` | Auto-fix and format. |
@@ -398,13 +414,14 @@ Related pages: [[Execution-Guard]], [[Architecture]], [[Operations]], [[Configur
 
 Numbers here are deliberately kept in as few places as possible. A count quoted in
 several files drifts apart — this project once had three different test counts in
-three files at once — so the README states no test count, and this page plus
-`CONTRIBUTING.md` carry the current snapshot. The authoritative number is whatever
-CI reports on the commit being reviewed.
+three files at once. The README now carries one **commit-pinned** snapshot (955
+backend / 276 frontend at `7969cd7`), and this page plus `CONTRIBUTING.md` carry
+the same snapshot. A number without the commit is still a claim that will drift;
+the authoritative number is whatever CI reports on the commit being reviewed.
 
 | | |
 | --- | --- |
-| **Two test suites** | 716 Python tests at the Phase 0-4 baseline — risk guard, ledger, API, task pipeline, WebSockets, Telegram bot, tool server, decision runs, debate protocol, measurement, allocation, documentation links and the demo's theme contract — plus 178 frontend tests (Vitest + Testing Library) covering formatters, the WebSocket frame validator, feed merging and the metric grid. The authoritative number is whatever CI reports on the current commit; treat any figure written down, including this one, as a snapshot |
+| **Two test suites** | 955 Python tests at HEAD `7969cd7` — risk guard, ledger, API, task pipeline, WebSockets, Telegram bot, tool server, decision runs, debate protocol, measurement, allocation, the P0/P1 remediation modules, documentation links and the demo's theme contract — plus 276 frontend tests in 27 files (Vitest + Testing Library) covering formatters, the WebSocket frame validator, feed merging, the metric grid, portfolio plans, replay and the offline viewer. The authoritative number is whatever CI reports on the current commit; treat any figure written down, including this one, as a snapshot |
 | **Coverage enforced** | CI fails below a 70% floor on the backend |
 | **Continuous integration** | Lint, format, the full backend suite against PostgreSQL 16 with a 70% coverage floor, the frontend typecheck/build/Vitest suite, and a Docker image build — on every push |
 | **Security scanning** | CodeQL analysis, Dependabot, secret scanning, and a test that walks every publishable file looking for committed credentials |

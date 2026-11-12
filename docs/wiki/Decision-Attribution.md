@@ -48,6 +48,13 @@ interesting part, so it is preserved rather than collapsed into a single score.
 The scorecard prints `evaluated`, `directional_calls`, `hit_rate_pct`,
 `avg_decision_return_pct` and `avg_alpha_pct` per horizon.
 
+Each horizon is now scheduled independently. `OutcomeEvaluation` is keyed by
+decision, horizon and method version, so a day-one score no longer makes days
+seven and thirty ineligible; an unpriceable decision gets a state and a reason
+instead of silently blocking the batch. `manage.py backfill_outcome_records`
+repairs older rows that were scored on the wrong basis, preserving the prior
+revision rather than overwriting it.
+
 This page does not reproduce a live scorecard dump. The dashboard computes it from
 the database on every read, so the figures change as outcomes mature and as new
 decisions are scored; they are not a committed artefact and cannot be checked from
@@ -55,7 +62,7 @@ this repository. The measurements that *are* committed are the synthetic Phase 3
 report at
 `docs/spec/fixtures/experiments/phase3-engineering.v1.report.json`, and it is
 labelled engineering evidence only. For the method behind each number, see
-`docs/spec/METHODOLOGY.md`.
+[`MEASUREMENT.md`](https://github.com/SergeyGer/AlphaAgent/blob/main/docs/spec/MEASUREMENT.md) §1.5.
 
 ## The ticker column
 
@@ -106,13 +113,15 @@ Worth stating plainly, because a scorecard invites more confidence than it earns
 
 Related pages: [[Execution-Guard]], [[Agent-Debate]], [[Data-Model]], [[Quality-and-Testing]].
 
-## The published scorecard
+## The live scorecard
 
 Every decision that names an instrument is scored against what the market did
 next, and the scorecard is shown to a signed-in visitor of the dashboard. The
 numbers are read at request time from `DecisionOutcome` rows; this page does not
 quote them, because a figure that changes between reads and cannot be reproduced
-from the repository is not evidence a reviewer can check.
+from the repository is not evidence a reviewer can check. Publishing the same
+numbers as a generated, always-current file with its sample size is open as
+[#34](https://github.com/SergeyGer/AlphaAgent/issues/34).
 
 What can be checked here is the method: the action signing, the HOLD null, the
 benchmark null, the start-price choice and the limitations below. The only
@@ -122,10 +131,23 @@ committed measurement report is the synthetic Phase 3 fixture report, and it say
 
 The flaw I found in my own scoring method is recorded in
 `services/attribution.py` and `CHANGELOG.md`: forward returns used to start at
-the day's close while trades executed at the live quote. The engine now prefers
-the transaction's own price and falls back to the close only for a HOLD. The
-direction of that bias — it flattered a BUY whenever the close sat below the
-entry — is why it is kept documented rather than quietly corrected.
+the day's close while trades executed at the live quote. An executed decision is
+now measured from its linked fill's stored price and timestamp
+(`measurement_basis: "execution_fill"`), so a recommendation approved at 130 is
+measured from 130, not from the proposal price of 100. A HOLD, a rejection or an
+executed decision with no linked fill uses the first close at or after the
+proposal (`measurement_basis: "proposal_close"`) with `fill: null` and a stated
+reason; an unknown basis is never presented as a fill. The row publishes both
+`measurement_basis` and `reference_at`, and the scorecard says
+`portfolio_performance: false` and `summable: false` beside the aggregate.
+
+The direction of the historical bias — it flattered a BUY whenever the close sat
+below the entry — is why it is kept documented rather than quietly corrected.
+The correction is pinned by
+`test_p1_attribution_remediation.py::test_the_unmocked_start_price_is_the_recorded_fill_not_the_proposal_close`;
+the basis and independence of each horizon are pinned by
+`test_p1_attribution_remediation.py::test_the_scorecard_publishes_that_this_is_a_signal_diagnostic`
+and `test_a_day_one_score_does_not_prevent_days_seven_and_thirty`.
 
 ### Why this is a product feature, not a leaderboard
 

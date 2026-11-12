@@ -42,7 +42,7 @@ from core.decision_models import (
 )
 from core.models import TradeRecommendation
 from services.decision_runs import append_event, can_transition, transition_status
-from services.execution import GuardDecision
+from services.execution_types import GuardDecision
 
 logger = logging.getLogger("alphaagent.decision_lifecycle")
 
