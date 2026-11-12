@@ -57,6 +57,9 @@ export interface DecisionDetailScene {
   /** Whether adjudication has been reached at the cursor. */
   verdictVisible: boolean;
   guardVisible?: boolean;
+  /** False before the first execution event; the execution block is withheld. */
+  executionVisible?: boolean;
+  guardPartial?: boolean;
   outcomesVisible?: boolean;
   /** Counts withheld because they are later in the recording. */
   hiddenClaims?: number;
@@ -762,7 +765,9 @@ export function DecisionDetail({
   const replayScene = scene?.active === true;
   const verdictVisible = !replayScene || scene?.verdictVisible !== false;
   const guardVisible = !replayScene || scene?.guardVisible !== false;
+  const executionVisible = !replayScene || scene?.executionVisible !== false;
   const outcomesVisible = !replayScene || scene?.outcomesVisible !== false;
+  const outcomeSchedule = detail.outcome_schedule ?? null;
   // An as-of status of "collecting" on a completed replay is a position in the
   // recording, not a live run. The live-progress notice belongs only outside the
   // replay scene; the replay-scene notice explains the cursor.
@@ -944,6 +949,27 @@ export function DecisionDetail({
         {modeNotice ? (
           <StateNotice state={modeNotice.state} tone={modeNotice.tone} title={modeNotice.title}>
             {modeNotice.body}
+          </StateNotice>
+        ) : null}
+
+        {replayScene && !executionVisible ? (
+          <StateNotice state="execution-not-reached" tone="sky" title="Execution not reached">
+            No execution event has been recorded at sequence {scene?.cursorSeq ?? 'start'}. The
+            final execution state is withheld; this is not a "no trade" result.
+          </StateNotice>
+        ) : null}
+
+        {!replayScene && outcomeSchedule?.pending ? (
+          <StateNotice state="outcomes-pending" tone="amber" title="Outcome measurement pending">
+            <p>
+              A later horizon has not been measured yet. This view keeps checking for the recorded
+              result; it does not infer one.
+            </p>
+            {outcomeSchedule.next_due_at ? (
+              <p className="mt-1 font-mono text-xs text-amber-200/90">
+                Next due {outcomeSchedule.next_due_at}
+              </p>
+            ) : null}
           </StateNotice>
         ) : null}
 

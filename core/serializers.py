@@ -312,6 +312,11 @@ class DecisionOutcomeSerializer(serializers.ModelSerializer):
             "decision_return_pct",
             "benchmark_return_pct",
             "directional_hit",
+            "method_version",
+            "measurement_basis",
+            "reference_at",
+            "revision",
+            "content_hash",
             "evaluated_at",
         ]
 

@@ -253,4 +253,48 @@ describe('useDecisionRunEvents', () => {
     expect(result.current.error).toBeNull();
     expect(result.current.contiguousSequence).toBe(2);
   });
+
+  it('polls for a late outcome and merges it by event identity without a manual refresh', async () => {
+    let call = 0;
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL): Promise<Response> => {
+      call += 1;
+      const late =
+        call === 1
+          ? []
+          : [
+              runEvent({
+                event_id: 'late-outcome',
+                seq: 3,
+                type: 'outcome.recorded',
+                stage: 'completed',
+                payload: { outcome_id: 'outcome-7', horizon_days: 7 },
+              }),
+            ];
+      return jsonResponse({
+        events: [
+          runEvent({ event_id: 'e1', seq: 1 }),
+          runEvent({ event_id: 'e2', seq: 2 }),
+          ...late,
+        ],
+        next: null,
+        last_sequence: late.length > 0 ? 3 : 2,
+        latest_sequence: late.length > 0 ? 3 : 2,
+      } satisfies RunEventsResponse);
+    });
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    const { result } = renderHook(() =>
+      useDecisionRunEvents('run-1', 'token', { pollIntervalMs: 25 }),
+    );
+    await waitFor(() => expect(result.current.events.length).toBeGreaterThanOrEqual(2));
+    await waitFor(() => expect(result.current.events).toHaveLength(3), { timeout: 2_000 });
+
+    expect(result.current.events.map((event) => event.event_id)).toEqual([
+      'e1',
+      'e2',
+      'late-outcome',
+    ]);
+    expect(result.current.contiguousSequence).toBe(3);
+    expect(result.current.remaining).toBe(0);
+  });
 });

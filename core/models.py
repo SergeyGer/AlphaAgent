@@ -64,6 +64,8 @@ __all__ = [
     "InstrumentClassificationSource",
     "MarketSentiment",
     "OutboxStatus",
+    "OutcomeEvaluation",
+    "OutcomeEvaluationState",
     "OutcomeMaturity",
     "OutcomeRecord",
     "PlanApproval",
@@ -660,6 +662,34 @@ class DecisionOutcome(models.Model):
     benchmark_price_observed_at = models.DateTimeField(null=True, blank=True)
     benchmark_price_source = models.CharField(max_length=64, blank=True, default="")
 
+    #: Which definition of return produced this row. ``attribution.v2`` measures
+    #: an executed decision from the recorded fill's price and timestamp rather
+    #: than from the day's close at proposal time.
+    method_version = models.CharField(max_length=32, default="attribution.v1")
+    #: ``execution_fill`` or ``proposal_close``. Empty on legacy rows written
+    #: before the basis was recorded; they are never relabelled.
+    measurement_basis = models.CharField(max_length=32, blank=True, default="")
+    #: The instant the horizon was measured from: the fill timestamp for an
+    #: executed decision, the proposal timestamp otherwise.
+    reference_at = models.DateTimeField(null=True, blank=True)
+    #: The fill this score was measured from. Null is meaningful: a HOLD or a
+    #: rejected proposal traded nothing and must not be given a fabricated fill.
+    fill = models.ForeignKey(
+        Transaction,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="decision_outcomes",
+    )
+    #: Monotonic revision and the canonical hash of the recorded values. A retry
+    #: of identical values keeps them; a genuine correction increments the
+    #: revision and archives the prior provenance in ``provenance``.
+    revision = models.PositiveIntegerField(default=1)
+    content_hash = models.CharField(max_length=64, blank=True, default="")
+    #: Provenance that must survive a correction: the basis and observation
+    #: times used, plus a ``prior_revisions`` list when this row superseded one.
+    provenance = models.JSONField(default=dict, blank=True)
+
     #: True when the direction was right, False when wrong, NULL when the action
     #: made no directional claim. A HOLD is not a call that can be scored this
     #: way, and counting it as a miss would be dishonest.
@@ -945,6 +975,8 @@ from core.decision_models import (  # noqa: E402
     GuardRecord,
     GuardStatus,
     InputSnapshot,
+    OutcomeEvaluation,
+    OutcomeEvaluationState,
     OutcomeMaturity,
     OutcomeRecord,
     Rebuttal,

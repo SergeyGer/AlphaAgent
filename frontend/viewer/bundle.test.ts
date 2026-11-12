@@ -267,3 +267,75 @@ describe('source labels', () => {
     ).toBe('real_recorded');
   });
 });
+
+
+describe('guard collection import', () => {
+  it('preserves every guard evaluation from an API export', () => {
+    const raw = exportSample() as unknown as Record<string, unknown>;
+    const payload: Record<string, unknown> = { ...raw };
+    delete payload['checksum'];
+    const guards = [
+      {
+        id: 'guard-preflight',
+        status: 'approved',
+        requested_quantity: '10',
+        allowed_quantity: '10',
+        binding_rule: 'max_trade_allocation_pct',
+        reason_codes: [],
+        checks: [],
+        quote_time: '2026-11-10T14:09:59Z',
+      },
+      {
+        id: 'guard-final',
+        status: 'rejected',
+        requested_quantity: '10',
+        allowed_quantity: '0',
+        binding_rule: 'approval_terms',
+        reason_codes: ['approval_terms_changed'],
+        checks: [],
+        quote_time: '2026-11-10T14:10:04Z',
+      },
+    ];
+    payload['guards'] = guards;
+    payload['guard_evaluations'] = guards;
+    payload['guard_comparison'] = guards[1];
+    const events = (payload['events'] as Array<Record<string, unknown>>) ?? [];
+    events.push({
+      sequence: 3,
+      event_id: 'evt-guard-preflight',
+      event_type: 'guard.evaluated',
+      stage: 'validating',
+      agent_role: 'system',
+      occurred_at: '2026-11-10T14:09:59Z',
+      payload: { guard_id: 'guard-preflight', status: 'approved' },
+    });
+    events.push({
+      sequence: 4,
+      event_id: 'evt-guard-final',
+      event_type: 'guard.evaluated',
+      stage: 'validating',
+      agent_role: 'system',
+      occurred_at: '2026-11-10T14:10:04Z',
+      payload: { guard_id: 'guard-final', status: 'rejected' },
+    });
+    payload['events'] = events;
+
+    const bundle = parseViewerBundle({
+      ...payload,
+      checksum: {
+        algorithm: 'sha256',
+        scope: 'this object with the checksum member removed',
+        value: sha256Hex(canonicalJson(payload)),
+      },
+    });
+
+    const detail = bundle.runs[0]?.detail;
+    expect(detail?.guard_evaluations?.map((row) => row.id)).toEqual([
+      'guard-preflight',
+      'guard-final',
+    ]);
+    expect(detail?.guards?.map((row) => row.id)).toEqual(['guard-preflight', 'guard-final']);
+    // The summary field remains the most recent evaluation for finished views.
+    expect(detail?.guard?.id).toBe('guard-final');
+  });
+});

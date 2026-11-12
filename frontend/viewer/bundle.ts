@@ -4,6 +4,7 @@ import type {
   DecisionDetailPayload,
   EvidenceItem,
   GuardComparison,
+  OutcomeSchedule,
   OutcomeView,
   Rebuttal,
   RunEvent,
@@ -430,6 +431,14 @@ function validateRunEvents(value: unknown, label: string): RunEvent[] {
   return mergeRunEvents([], events);
 }
 
+function guardCollectionFrom(value: unknown): GuardComparison[] {
+  if (!Array.isArray(value)) return [];
+  // Preserve the producer's order (oldest first). The viewer resolves the guard
+  // visible at its cursor from the event stream; the collection must not be
+  // re-sorted into an order that disagrees with the events.
+  return value.filter(isRecord).map((row) => row as unknown as GuardComparison);
+}
+
 function validateViewerRun(value: unknown, index: number): ViewerRun {
   if (!isRecord(value)) {
     throw new BundleValidationError('shape', `Run ${index + 1} is not an object.`);
@@ -448,6 +457,13 @@ function validateViewerRun(value: unknown, index: number): ViewerRun {
     : sourceLabelFromMode(mode);
   const provenanceRaw = isRecord(value['provenance']) ? value['provenance'] : {};
 
+  const guardEvaluations = guardCollectionFrom(
+    detailRaw['guard_evaluations'] ?? detailRaw['guards'],
+  );
+  const guard =
+    (detailRaw['guard'] as GuardComparison | null | undefined) ??
+    guardEvaluations[guardEvaluations.length - 1] ??
+    null;
   const detail: DecisionDetailPayload = {
     run: { ...run, mode },
     action: text(detailRaw['action']),
@@ -457,8 +473,17 @@ function validateViewerRun(value: unknown, index: number): ViewerRun {
     claims: Array.isArray(detailRaw['claims']) ? (detailRaw['claims'] as Claim[]) : [],
     rebuttals: Array.isArray(detailRaw['rebuttals']) ? (detailRaw['rebuttals'] as Rebuttal[]) : [],
     evidence: Array.isArray(detailRaw['evidence']) ? (detailRaw['evidence'] as EvidenceItem[]) : [],
-    guard: (detailRaw['guard'] as GuardComparison | null | undefined) ?? null,
+    guard,
+    guards: guardEvaluations,
+    guard_evaluations: guardEvaluations,
     outcomes: Array.isArray(detailRaw['outcomes']) ? (detailRaw['outcomes'] as OutcomeView[]) : [],
+    superseded_outcomes: Array.isArray(detailRaw['superseded_outcomes'])
+      ? (detailRaw['superseded_outcomes'] as OutcomeView[])
+      : [],
+    outcome_schedule:
+      isRecord(detailRaw['outcome_schedule'])
+        ? (detailRaw['outcome_schedule'] as unknown as OutcomeSchedule)
+        : null,
     has_rebuttals: Boolean(detailRaw['has_rebuttals']),
   };
 
@@ -531,7 +556,10 @@ function importDecisionExport(raw: Record<string, unknown>): ImportedBundle {
 
   const run = validateRunSummary(raw['run'], 'the exported run');
   const verdict = isRecord(raw['verdict']) ? raw['verdict'] : {};
-  const guardRaw = raw['guard_comparison'] ?? (Array.isArray(raw['guards']) ? raw['guards'][0] : null);
+  const guardEvaluations = guardCollectionFrom(
+    raw['guard_evaluations'] ?? raw['guards'],
+  );
+  const guardRaw = raw['guard_comparison'] ?? guardEvaluations[guardEvaluations.length - 1] ?? null;
   const guard = isRecord(guardRaw) ? (guardRaw as unknown as GuardComparison) : null;
   const claims = flattenCases(raw['cases']);
   const rebuttals = flattenObjectList(raw['rebuttals']);
@@ -549,7 +577,15 @@ function importDecisionExport(raw: Record<string, unknown>): ImportedBundle {
     rebuttals,
     evidence: Array.isArray(raw['evidence']) ? (raw['evidence'] as EvidenceItem[]) : [],
     guard,
+    guards: guardEvaluations,
+    guard_evaluations: guardEvaluations,
     outcomes: Array.isArray(raw['outcomes']) ? (raw['outcomes'] as OutcomeView[]) : [],
+    superseded_outcomes: Array.isArray(raw['superseded_outcomes'])
+      ? (raw['superseded_outcomes'] as OutcomeView[])
+      : [],
+    outcome_schedule: isRecord(raw['outcome_schedule'])
+      ? (raw['outcome_schedule'] as unknown as OutcomeSchedule)
+      : null,
     has_rebuttals: rebuttals.length > 0,
   };
 

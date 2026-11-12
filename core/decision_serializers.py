@@ -21,6 +21,8 @@ credential or an account identifier are dropped recursively.
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -31,11 +33,14 @@ from core.decision_models import (
     DecisionRun,
     EvidenceItem,
     GuardRecord,
+    OutcomeEvaluation,
     OutcomeMaturity,
     OutcomeRecord,
     Rebuttal,
     RunEvent,
 )
+from core.models import DecisionOutcome
+from services.decision_outcomes import OUTCOME_METHOD_VERSION
 from services.decision_runs import stage_states
 from services.evidence import claims_for_run, evidence_for_run, rebuttals_for_run
 
@@ -333,6 +338,10 @@ def outcome_payload(outcome: OutcomeRecord) -> dict:
     else:
         signal_score = None
 
+    basis = diagnostics.get("measurement_basis") if isinstance(diagnostics, dict) else {}
+    if not isinstance(basis, dict):
+        basis = {}
+    reference_at = outcome.reference_at or basis.get("reference_at")
     return {
         "id": str(outcome.id),
         "horizon_days": outcome.horizon_days,
@@ -348,15 +357,43 @@ def outcome_payload(outcome: OutcomeRecord) -> dict:
         # -- audit detail ---------------------------------------------------
         "price_at_decision": _money(outcome.price_at_decision),
         "price_at_horizon": _money(outcome.price_at_horizon),
+        "price_observed_at_decision": utc_iso(outcome.price_observed_at_decision),
         "price_observed_at": utc_iso(outcome.price_observed_at),
         "price_source": outcome.price_source or None,
         "forward_return_pct": _money(outcome.forward_return_pct),
         "decision_return_pct": _money(outcome.decision_return_pct),
         "benchmark_return_pct": _money(outcome.benchmark_return_pct),
+        "benchmark_observed_at_decision": utc_iso(outcome.benchmark_observed_at_decision),
+        "benchmark_price_observed_at": utc_iso(outcome.benchmark_price_observed_at),
+        "benchmark_price_source": outcome.benchmark_price_source or None,
         "signal_diagnostics": diagnostics,
         "unavailable_reason": outcome.unavailable_reason or None,
         "evaluated_at": utc_iso(outcome.evaluated_at),
         "created_at": utc_iso(outcome.created_at),
+        # -- measurement basis ---------------------------------------------
+        # A forward return measured from a proposal close is a signal
+        # diagnostic. The basis is repeated at the row level so a screen cannot
+        # show the number and leave the caveat behind.
+        "measurement_basis": {
+            "basis": outcome.measurement_basis or basis.get("basis"),
+            "method_version": outcome.method_version,
+            "horizon_policy": basis.get("horizon_policy"),
+            "reference_at": utc_iso(reference_at),
+            "fill_id": basis.get("fill_id"),
+            "fill_price": basis.get("fill_price"),
+            "fill_timestamp": basis.get("fill_timestamp"),
+            "start_observation": basis.get("start_observation"),
+            "end_observation": basis.get("end_observation"),
+            "benchmark_start_observation": basis.get("benchmark_start_observation"),
+            "benchmark_end_observation": basis.get("benchmark_end_observation"),
+            "portfolio_performance": False,
+            "note": (
+                "Measured from the executed fill when one exists; otherwise from "
+                "the proposal close with no fill. Not portfolio performance."
+            ),
+        },
+        "revision": outcome.revision,
+        "content_hash": outcome.content_hash or None,
     }
 
 
@@ -545,6 +582,115 @@ def _execution_attempt_payload(run: DecisionRun) -> dict | None:
     }
 
 
+def _current_outcomes(run: DecisionRun):
+    """One current projection per horizon, plus the superseded history.
+
+    A corrected score is a new ``(horizon, method_version)`` row; the older row
+    stays in the database as provenance. The detail view shows one result per
+    horizon (the current method, or the newest revision of a legacy method) and
+    publishes the superseded rows separately instead of double-counting them.
+    """
+    rows = list(
+        OutcomeRecord.objects.filter(decision__run=run).order_by(
+            "horizon_days", "method_version", "revision"
+        )
+    )
+    current: dict[int, OutcomeRecord] = {}
+    for row in rows:
+        incumbent = current.get(row.horizon_days)
+        if incumbent is None:
+            current[row.horizon_days] = row
+            continue
+        if (
+            row.method_version == OUTCOME_METHOD_VERSION
+            and incumbent.method_version != OUTCOME_METHOD_VERSION
+        ) or (
+            row.method_version == incumbent.method_version
+            and (row.revision or 1) > (incumbent.revision or 1)
+        ):
+            current[row.horizon_days] = row
+    superseded = [row for row in rows if current.get(row.horizon_days) is not row]
+    return current, superseded
+
+
+def _outcome_schedule(run: DecisionRun, current) -> dict:
+    """Pending work for the detail view, so a client knows to keep polling.
+
+    The schedule is advisory: the rows remain the authority. It names each
+    horizon, its state (``pending``, ``matured``, ``evaluated`` or
+    ``unavailable``), when the next attempt is due, and the recorded reason. A
+    completed run with a pending later horizon therefore says so instead of
+    looking finished.
+    """
+    try:
+        decision = run.decision
+    except Exception:
+        decision = None
+    reference_at = decision.created_at if decision is not None else run.started_at
+    evaluations = (
+        {
+            row.horizon_days: row
+            for row in OutcomeEvaluation.objects.filter(
+                decision_id=run.legacy_log_id, method_version=OUTCOME_METHOD_VERSION
+            )
+        }
+        if run.legacy_log_id is not None
+        else {}
+    )
+    now = timezone.now()
+    entries = []
+    for horizon in DecisionOutcome.HORIZONS:
+        evaluation = evaluations.get(horizon)
+        projection = current.get(horizon)
+        if evaluation is not None:
+            state = evaluation.state
+            due_at = evaluation.next_attempt_at
+            reason = evaluation.reason or ""
+            evaluation_id = str(evaluation.id)
+            basis = evaluation.reference_basis or None
+        elif projection is not None:
+            state = projection.maturity
+            due_at = None
+            reason = projection.unavailable_reason or ""
+            evaluation_id = None
+            basis = projection.measurement_basis or None
+        elif run.legacy_log_id is not None:
+            target = reference_at + timedelta(days=horizon)
+            state = "pending" if target > now else "matured"
+            due_at = target if target > now else None
+            reason = "No evaluation has run for this horizon yet."
+            evaluation_id = None
+            basis = None
+        else:
+            # A fixture or imported run with no legacy log has no scheduler work
+            # to wait for. It is reported as not_recorded so a client does not
+            # poll forever for a job that will never run.
+            state = "not_recorded"
+            due_at = None
+            reason = "No legacy decision log is linked, so no evaluation is scheduled."
+            evaluation_id = None
+            basis = None
+        entries.append(
+            {
+                "horizon_days": horizon,
+                "state": state,
+                "due_at": utc_iso(due_at),
+                "reason": reason or None,
+                "evaluation_id": evaluation_id,
+                "measurement_basis": basis,
+            }
+        )
+    pending_states = {"pending", "matured"}
+    pending = any(entry["state"] in pending_states for entry in entries)
+    due_values = [entry["due_at"] for entry in entries if entry["due_at"]]
+    return {
+        "method_version": OUTCOME_METHOD_VERSION,
+        "entries": entries,
+        "pending": pending,
+        "next_due_at": min(due_values) if due_values else None,
+    }
+
+
 def build_run_detail(run: DecisionRun, *, events=None) -> dict:
     """The evidence-backed account of one decision."""
     events = list(events) if events is not None else list(run.events.order_by("sequence"))
@@ -557,15 +703,19 @@ def build_run_detail(run: DecisionRun, *, events=None) -> dict:
         cases.setdefault(payload["stance"], []).append(payload)
 
     rebuttals = [rebuttal_payload(rebuttal) for rebuttal in rebuttals_for_run(run)]
-    guards = list(GuardRecord.objects.filter(proposal__run=run).order_by("-created_at", "-id"))
+    # Every guard evaluation, oldest first, each with its stable identifier. The
+    # summary fields below name the most recent one for a finished view; a replay
+    # resolves the evaluation visible at its cursor from this ordered collection.
+    guards = list(GuardRecord.objects.filter(proposal__run=run).order_by("created_at", "id"))
     guard_payloads = [guard_payload(guard) for guard in guards]
-    outcomes = list(
-        OutcomeRecord.objects.filter(decision__run=run).order_by("horizon_days", "method_version")
-    )
+    current_outcomes, superseded_outcomes = _current_outcomes(run)
+    outcomes = [current_outcomes[horizon] for horizon in sorted(current_outcomes)]
     outcome_payloads = [outcome_payload(outcome) for outcome in outcomes]
+    superseded_payloads = [outcome_payload(outcome) for outcome in superseded_outcomes]
+    outcome_schedule = _outcome_schedule(run, current_outcomes)
 
     verdict = _verdict_payload(run, claims_by_id)
-    guard = guard_payloads[0] if guard_payloads else None
+    guard = guard_payloads[-1] if guard_payloads else None
 
     detail = {
         "bundle_schema_version": BUNDLE_SCHEMA_VERSION,
@@ -578,7 +728,10 @@ def build_run_detail(run: DecisionRun, *, events=None) -> dict:
         "rebuttals": rebuttals,
         "evidence": [evidence_payload(item) for item in evidence_for_run(run)],
         "guard": guard,
+        "guard_evaluations": guard_payloads,
         "outcomes": outcome_payloads,
+        "outcome_schedule": outcome_schedule,
+        "superseded_outcomes": superseded_payloads,
         # Only true when a producer actually recorded a rebuttal. A legacy or
         # sequential run has an empty list and the UI removes the section
         # entirely rather than rendering an empty debate.
@@ -682,7 +835,10 @@ def build_export_bundle(run: DecisionRun, *, events=None) -> dict:
         "verdict": detail["verdict"],
         "guard_comparison": detail["guard_comparison"],
         "guards": detail["guards"],
+        "guard_evaluations": detail["guard_evaluations"],
         "outcomes": detail["outcomes"],
+        "outcome_schedule": detail["outcome_schedule"],
+        "superseded_outcomes": detail["superseded_outcomes"],
         "limitations": detail["limitations"],
         "events": [
             {

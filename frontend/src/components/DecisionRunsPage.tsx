@@ -174,14 +174,29 @@ export function DecisionRunView({ runId }: { runId: string }): ReactElement {
   const detail = useDecisionRun(runId, token);
   const run = detail.data?.run ?? null;
   const active = run !== null && isActiveRunStatus(run.status);
+  // A completed run can still be waiting on a later horizon. The detail view
+  // keeps polling for the recorded result until the backend says no measurement
+  // work remains; a completed execution state is not the same thing as a
+  // finished measurement.
+  const schedulePending = detail.data?.outcome_schedule?.pending === true;
+  const pendingOutcome =
+    schedulePending ||
+    (detail.data?.outcomes ?? []).some(
+      (outcome) => outcome?.maturity === 'pending' || outcome?.maturity === 'matured',
+    );
   const events = useDecisionRunEvents(runId, token, {
     enabled: token !== null,
-    pollIntervalMs: active ? 2_000 : 0,
+    pollIntervalMs: active || pendingOutcome ? 2_000 : 0,
   });
   const hasRebuttals = detail.data?.has_rebuttals ?? true;
   const navigation = useReplayNavigation(runId);
 
-  const maxSeq = lastEventSequence(events.events);
+  // While a gap is being recovered, the last *contiguous* event is the known
+  // cursor. Jumping to the highest held sequence would step past events the
+  // client has not received yet.
+  const maxSeq = events.catchingUp
+    ? events.contiguousSequence
+    : lastEventSequence(events.events);
   const replayable =
     events.events.length > 0 && run !== null && isTerminalRunStatus(run.status);
 
@@ -196,7 +211,10 @@ export function DecisionRunView({ runId }: { runId: string }): ReactElement {
     if (!detail.data) return undefined;
     if (!detailInitialised.current) {
       detailInitialised.current = true;
-      lastDetailRefreshSeq.current = lastEventSequence(events.events) ?? 0;
+      // The known cursor is the last contiguous event, not the highest one: a
+      // gap must be recovered and refreshed, not stepped over.
+      lastDetailRefreshSeq.current =
+        events.contiguousSequence ?? lastEventSequence(events.events) ?? 0;
       // One reconciliation refresh covers the race between the initial detail
       // request and the first event page. After that, only new events trigger
       // a refresh, so a completed run is not polled forever.
@@ -206,7 +224,8 @@ export function DecisionRunView({ runId }: { runId: string }): ReactElement {
 
     const fresh = eventsRequiringDetailRefresh(events.events, lastDetailRefreshSeq.current);
     if (fresh.length === 0) return undefined;
-    lastDetailRefreshSeq.current = lastEventSequence(events.events) ?? lastDetailRefreshSeq.current;
+    lastDetailRefreshSeq.current =
+      events.contiguousSequence ?? lastEventSequence(events.events) ?? lastDetailRefreshSeq.current;
     const timer = window.setTimeout(() => detail.refresh(), 120);
     return () => window.clearTimeout(timer);
   }, [detail.data, detail.refresh, events.events]);
@@ -255,6 +274,8 @@ export function DecisionRunView({ runId }: { runId: string }): ReactElement {
         cursorSeq: presentation.cursorSeq,
         verdictVisible: presentation.verdictVisible,
         guardVisible: presentation.guardVisible,
+        executionVisible: presentation.executionVisible,
+        guardPartial: presentation.guardPartial,
         outcomesVisible: presentation.outcomesVisible,
         hiddenClaims: presentation.hidden.claims,
         hiddenEvidence: presentation.hidden.evidence,

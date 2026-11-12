@@ -97,6 +97,7 @@ export function GuardComparison({ guard, className }: GuardComparisonProps): Rea
     );
   }
 
+  const partial = guard.partial === true;
   const status = guardTone(guard.status);
   const statusLabel = guardStatusLabel(guard.status);
   const checks = Array.isArray(guard.checks) ? guard.checks.filter(Boolean) : [];
@@ -110,6 +111,10 @@ export function GuardComparison({ guard, className }: GuardComparisonProps): Rea
     ? guard.reason_codes.filter((code): code is string => typeof code === 'string' && code.trim() !== '')
     : [];
   const bindingRule = presentText(guard.binding_rule);
+  const guardId = presentText(guard.id ?? null);
+  const unavailableFieldList = Array.isArray(guard.unavailable_fields)
+    ? guard.unavailable_fields.filter((field) => presentText(field) !== null).join(', ')
+    : '';
 
   return (
     <div className={cn('min-w-0 space-y-4', className)}>
@@ -127,6 +132,16 @@ export function GuardComparison({ guard, className }: GuardComparisonProps): Rea
           {status ? STATUS_TEXT[status] : 'The guard result is not recognised by this version.'}
         </p>
       </div>
+
+      {partial ? (
+        <p
+          data-state="guard-partial"
+          className="rounded-lg border border-amber-500/30 bg-amber-500/[0.06] px-3 py-2 text-sm leading-relaxed text-amber-200"
+        >
+          This evaluation was recorded by a legacy event. Only the values that event carried are
+          shown; {unavailableFieldList || 'the remaining fields'} are unavailable, not zero.
+        </p>
+      ) : null}
 
       <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <div className="min-w-0 rounded-lg border border-slate-800/70 bg-slate-950/40 px-3 py-2.5">
@@ -150,6 +165,25 @@ export function GuardComparison({ guard, className }: GuardComparisonProps): Rea
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <div className="min-w-0">
           <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+            Quote time
+          </p>
+          <p className="mt-0.5 break-all font-mono text-sm text-slate-200">
+            {presentText(guard.quote_time ?? null) ?? 'Unavailable'}
+          </p>
+        </div>
+        <div className="min-w-0">
+          <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+            Evaluation
+          </p>
+          <p className="mt-0.5 break-all font-mono text-sm text-slate-200">
+            {guardId ?? 'Identifier unavailable'}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <div className="min-w-0">
+          <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
             Binding rule
           </p>
           <p className="mt-0.5 break-all font-mono text-sm text-slate-200">
@@ -161,7 +195,9 @@ export function GuardComparison({ guard, className }: GuardComparisonProps): Rea
             Reason codes
           </p>
           {reasonCodes.length === 0 ? (
-            <p className="mt-0.5 text-sm text-slate-400">No reason codes recorded</p>
+            <p className="mt-0.5 text-sm text-slate-400">
+              {partial ? 'Unavailable in this legacy event' : 'No reason codes recorded'}
+            </p>
           ) : (
             <ul className="mt-1 flex flex-wrap gap-1.5">
               {reasonCodes.map((code) => (
@@ -189,7 +225,9 @@ export function GuardComparison({ guard, className }: GuardComparisonProps): Rea
 
         {checks.length === 0 ? (
           <p className="mt-2 text-sm text-slate-400">
-            No guard checks were recorded, so none are presented as passing.
+            {partial
+              ? 'Check details are unavailable in this legacy event; none are presented as passing.'
+              : 'No guard checks were recorded, so none are presented as passing.'}
           </p>
         ) : (
           <div className="mt-2 overflow-x-auto">
