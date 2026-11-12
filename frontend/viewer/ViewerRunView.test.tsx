@@ -9,6 +9,7 @@ import {
   type ViewerRun,
 } from './bundle';
 import { ViewerRunView } from './ViewerRunView';
+import { guard } from '../src/test/decisionRunFixtures';
 
 /**
  * REP-02 presentation contract.
@@ -140,5 +141,88 @@ describe('ViewerRunView — read-only replay', () => {
     expect(within(dialog).queryAllByRole('link')).toHaveLength(0);
     expect(dialog).toHaveTextContent(/external link disabled/);
     await user.click(screen.getByRole('button', { name: 'Close evidence drawer' }));
+  });
+});
+
+
+describe('ViewerRunView — guard replay', () => {
+  it('shows the preflight approval of 10 until the rejection event is visible', async () => {
+    const user = userEvent.setup();
+    const source = run(0);
+    const offline: ViewerRun = JSON.parse(JSON.stringify(source)) as ViewerRun;
+    const preflight = guard({
+      id: 'guard-preflight',
+      status: 'approved',
+      requested_quantity: '10',
+      allowed_quantity: '10',
+      binding_rule: 'max_trade_allocation_pct',
+    });
+    const final = guard({
+      id: 'guard-final',
+      status: 'rejected',
+      requested_quantity: '10',
+      allowed_quantity: '0',
+      binding_rule: 'approval_terms',
+    });
+    offline.events = [
+      {
+        event_id: 'off-decision',
+        seq: 1,
+        type: 'decision.proposed',
+        stage: 'adjudicating',
+        agent_role: null,
+        occurred_at: '2026-11-10T14:10:00Z',
+        payload: { action: 'BUY' },
+      },
+      {
+        event_id: 'off-guard-preflight',
+        seq: 2,
+        type: 'guard.evaluated',
+        stage: 'validating',
+        agent_role: null,
+        occurred_at: '2026-11-10T14:10:01Z',
+        payload: { guard_id: 'guard-preflight', status: 'approved' },
+      },
+      {
+        event_id: 'off-guard-final',
+        seq: 3,
+        type: 'guard.evaluated',
+        stage: 'validating',
+        agent_role: null,
+        occurred_at: '2026-11-10T14:10:04Z',
+        payload: { guard_id: 'guard-final', status: 'rejected' },
+      },
+      {
+        event_id: 'off-execution',
+        seq: 4,
+        type: 'execution.rejected',
+        stage: 'completed',
+        agent_role: null,
+        occurred_at: '2026-11-10T14:10:05Z',
+        payload: { execution_state: 'rejected' },
+      },
+    ];
+    offline.detail.guard = final;
+    offline.detail.guards = [preflight, final];
+    offline.detail.guard_evaluations = [preflight, final];
+    offline.detail.outcomes = [];
+
+    render(<ViewerRunView run={offline} />);
+    await user.click(screen.getByRole('button', { name: 'Restart replay' }));
+
+    // Before the first check: no guard card at all.
+    expect(screen.queryByTestId('guard-status')).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Next event' }));
+    expect(screen.getByText(/Replay has not reached validation/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Next event' }));
+    expect(screen.getByTestId('guard-status')).toHaveTextContent('Approved');
+    expect(screen.getByText('Requested quantity').nextElementSibling).toHaveTextContent('10');
+    expect(screen.getByText('Allowed quantity').nextElementSibling).toHaveTextContent('10');
+
+    await user.click(screen.getByRole('button', { name: 'Next event' }));
+    expect(screen.getByTestId('guard-status')).toHaveTextContent('Rejected');
+    expect(screen.getByText('Allowed quantity').nextElementSibling).toHaveTextContent('0');
   });
 });

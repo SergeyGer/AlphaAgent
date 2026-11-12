@@ -65,6 +65,8 @@ __all__ = [
     "GuardRecord",
     "GuardStatus",
     "InputSnapshot",
+    "OutcomeEvaluation",
+    "OutcomeEvaluationState",
     "OutcomeMaturity",
     "OutcomeRecord",
     "Rebuttal",
@@ -981,6 +983,25 @@ class OutcomeRecord(models.Model):
     #: is; an empty object means none were computed.
     signal_diagnostics = models.JSONField(default=dict)
     unavailable_reason = models.TextField(blank=True, default="")
+    #: Which quantity scored this row. ``execution_fill`` means the reference
+    #: price is the price the order actually got, and ``proposal_close`` means it
+    #: is the first close at or after the proposal because no fill exists (a
+    #: HOLD, a rejection, or a decision the guard never executed). The basis
+    #: travels with the projection so a replayed scorecard cannot present a
+    #: proposal-based diagnostic as realised performance.
+    measurement_basis = models.CharField(max_length=32, blank=True, default="")
+    #: The instant the horizon is measured from: the fill timestamp for an
+    #: executed decision, the proposal timestamp otherwise.
+    reference_at = models.DateTimeField(null=True, blank=True)
+    #: Monotonic revision of this projection. A scheduler retry of identical
+    #: values keeps the revision; a correction that changes what was measured
+    #: increments it, and the superseded values are preserved in
+    #: ``signal_diagnostics['prior_revisions']``.
+    revision = models.PositiveIntegerField(default=1)
+    #: Canonical hash of the values this revision records. It is the identity a
+    #: repeated evaluation is deduplicated by, and part of the outcome event's
+    #: idempotency key.
+    content_hash = models.CharField(max_length=64, blank=True, default="")
     evaluated_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(default=timezone.now)
 
@@ -1008,6 +1029,108 @@ class OutcomeRecord(models.Model):
     @property
     def is_scored(self) -> bool:
         return self.maturity == OutcomeMaturity.EVALUATED and self.decision_return_pct is not None
+
+
+class OutcomeEvaluationState(models.TextChoices):
+    """Where one ``(decision, horizon, method)`` unit of work stands.
+
+    ``pending`` is time not yet elapsed. ``matured`` is time elapsed but a price
+    was not available on the last attempt; it is retryable until the bounded
+    attempt count is spent. ``unavailable`` is a measured absence after the
+    bound: there is still no price, and the reason says so. ``evaluated`` is a
+    stored result. The distinction matters because "not measured yet" must not
+    be rendered as a zero, and an exhausted retry must be visible rather than
+    silently retried forever on every Beat tick.
+    """
+
+    PENDING = "pending", "Pending maturity"
+    MATURED = "matured", "Matured, awaiting a usable price"
+    EVALUATED = "evaluated", "Evaluated"
+    UNAVAILABLE = "unavailable", "Unavailable"
+
+
+class OutcomeEvaluation(models.Model):
+    """One unit of attribution work: a decision, a horizon and a method.
+
+    Keyed by the triple rather than by the decision so a one-day score cannot
+    hide the later horizons. The row is created when the horizon is first seen
+    (pending) and is the scheduler's idempotency anchor: two overlapping beats
+    contend on the unique key and the second either waits for the first or
+    returns the same result. The retry bound is stored per row so a change to
+    the policy does not retroactively reinterpret rows already written.
+
+    ``fill`` is null for a proposal-based diagnostic. That is deliberate: a HOLD
+    or a rejected proposal has no fill, and writing one to make the row look
+    uniform would be the fabrication this table exists to prevent.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    decision = models.ForeignKey(
+        "core.AgentDecisionLog",
+        on_delete=models.CASCADE,
+        related_name="outcome_evaluations",
+    )
+    horizon_days = models.PositiveSmallIntegerField()
+    method_version = models.CharField(max_length=32)
+    state = models.CharField(
+        max_length=16,
+        choices=OutcomeEvaluationState.choices,
+        default=OutcomeEvaluationState.PENDING,
+        db_index=True,
+    )
+    attempt_count = models.PositiveSmallIntegerField(default=0)
+    max_attempts = models.PositiveSmallIntegerField(default=3)
+    next_attempt_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    last_attempt_at = models.DateTimeField(null=True, blank=True)
+    #: Why the row is pending, retrying or unavailable. Empty for evaluated.
+    reason = models.TextField(blank=True, default="")
+    #: ``execution_fill``, ``proposal_close`` or ``unavailable``. The basis is
+    #: recorded before pricing so an unavailable row still says what it tried.
+    reference_basis = models.CharField(max_length=32, blank=True, default="")
+    reference_at = models.DateTimeField(null=True, blank=True)
+    fill = models.ForeignKey(
+        "core.Transaction",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="outcome_evaluations",
+    )
+    outcome = models.ForeignKey(
+        "core.DecisionOutcome",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="evaluations",
+    )
+    outcome_record = models.ForeignKey(
+        OutcomeRecord,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="evaluations",
+    )
+    created_at = models.DateTimeField(default=timezone.now, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Outcome evaluation"
+        verbose_name_plural = "Outcome evaluations"
+        ordering = ["decision", "horizon_days", "method_version"]
+        indexes = [
+            models.Index(fields=["state", "next_attempt_at"], name="outcome_eval_state_retry_idx"),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["decision", "horizon_days", "method_version"],
+                name="outcome_eval_unique_work",
+            ),
+            models.CheckConstraint(
+                condition=Q(horizon_days__gt=0), name="outcome_eval_horizon_positive"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.decision_id} +{self.horizon_days}d {self.state}"
 
 
 class ExecutionAttempt(models.Model):

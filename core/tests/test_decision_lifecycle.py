@@ -447,6 +447,13 @@ class MaturedOutcomeBridgeTests(TestCase):
         AgentDecisionLog.objects.filter(pk=log.pk).update(
             created_at=timezone.now() - timedelta(days=10)
         )
+        # The basis is now the recorded fill: backdate the fill with the proposal
+        # so the scenario is still "ten days of market history after execution",
+        # not "a fill that happened a moment ago".
+        if log.transaction_id is not None:
+            Transaction.objects.filter(pk=log.transaction_id).update(
+                timestamp=timezone.now() - timedelta(days=10)
+            )
 
         with (
             patch.object(attribution, "_start_price", return_value=D("100")),

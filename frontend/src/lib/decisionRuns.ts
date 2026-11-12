@@ -3,6 +3,7 @@ import type {
   ClaimType,
   DecisionDetailPayload,
   EvidenceItem,
+  GuardComparison,
   OutcomeMaturity,
   RebuttalResponseType,
   RunEvent,
@@ -523,11 +524,18 @@ export function buildTimeline(
   return [...nodes.values()].sort((a, b) => a.firstSeq - b.firstSeq);
 }
 
-/** Filter events for replay. `undefined` means "show everything". */
+/**
+ * Filter events for replay. `undefined` means "show everything".
+ *
+ * The result is sorted. A page can arrive out of order, and every presentation
+ * rule below is defined on sequence, not on array position: sorting here is what
+ * makes seeking backward and forward produce identical scenes from the same
+ * held set.
+ */
 export function eventsUpTo(events: readonly RunEvent[], cursorSeq: number | null | undefined): RunEvent[] {
-  if (cursorSeq === undefined) return [...events];
+  if (cursorSeq === undefined) return sortEvents(events);
   const cutoff = cursorSeq === null ? -1 : cursorSeq;
-  return events.filter((event) => typeof event?.seq === 'number' && event.seq <= cutoff);
+  return sortEvents(events.filter((event) => typeof event?.seq === 'number' && event.seq <= cutoff));
 }
 
 /** The sequence number of the final event, or `null` when there are none. */
@@ -858,7 +866,8 @@ interface SequenceIndex {
   evidence: Map<string, number>;
   outcome: Map<string, number>;
   decision: number | null;
-  guard: number | null;
+  guardEvents: RunEvent[];
+  execution: number | null;
   terminal: number | null;
 }
 
@@ -880,6 +889,13 @@ function earliest(map: Map<string, number>, key: string, seq: number): void {
   if (previous === undefined || seq < previous) map.set(key, seq);
 }
 
+const GUARD_EVENT_PATTERN = /^guard[._](evaluated|recorded)$/i;
+const EXECUTION_EVENT_PATTERN = /^execution[._](recorded|rejected|failed)$/i;
+
+function isGuardEvent(event: RunEvent): boolean {
+  return GUARD_EVENT_PATTERN.test((event?.type ?? '').trim());
+}
+
 function indexEventVisibility(events: readonly RunEvent[]): SequenceIndex {
   const index: SequenceIndex = {
     claim: new Map(),
@@ -887,7 +903,8 @@ function indexEventVisibility(events: readonly RunEvent[]): SequenceIndex {
     evidence: new Map(),
     outcome: new Map(),
     decision: null,
-    guard: null,
+    guardEvents: [],
+    execution: null,
     terminal: null,
   };
 
@@ -918,8 +935,11 @@ function indexEventVisibility(events: readonly RunEvent[]): SequenceIndex {
     if (/^decision\.(proposed|recorded)$/.test(type) || /decision.*(proposed|recorded)/.test(type)) {
       if (index.decision === null || seq < index.decision) index.decision = seq;
     }
-    if (/^guard\.(evaluated|recorded)$/.test(type) || /guard.*(evaluated|recorded)/.test(type)) {
-      if (index.guard === null || seq < index.guard) index.guard = seq;
+    if (isGuardEvent(event)) {
+      index.guardEvents.push(event);
+    }
+    if (EXECUTION_EVENT_PATTERN.test(type)) {
+      if (index.execution === null || seq < index.execution) index.execution = seq;
     }
     const payloadStatus = payloadStringValue(payload, ['status'])?.toLowerCase() ?? null;
     if (
@@ -972,11 +992,134 @@ export function runStatusAtCursor(
   return status;
 }
 
+export interface ResolvedGuard {
+  guard: GuardComparison | null;
+  visible: boolean;
+  guardId: string | null;
+  eventSequence: number | null;
+  /** True when only the guard event's payload could be resolved. */
+  partial: boolean;
+  unavailableFields: string[];
+}
+
 export interface AsOfHiddenCounts {
   claims: number;
   rebuttals: number;
   evidence: number;
   outcomes: number;
+}
+
+function guardCollection(detail: DecisionDetailPayload | null): GuardComparison[] {
+  if (!detail) return [];
+  const collection = detail.guard_evaluations ?? detail.guards;
+  const rows = Array.isArray(collection) ? collection.filter(Boolean) : [];
+  if (rows.length > 0) return rows;
+  return detail.guard ? [detail.guard] : [];
+}
+
+function guardFromEventPayload(
+  event: RunEvent,
+  guardId: string | null,
+): { guard: GuardComparison; unavailableFields: string[] } {
+  const payload = event.payload ?? {};
+  const requested = payloadStringValue(payload, ['requested_quantity', 'requestedQuantity']);
+  const allowed = payloadStringValue(payload, ['allowed_quantity', 'allowedQuantity']);
+  const rule = payloadStringValue(payload, ['binding_rule', 'bindingRule']);
+  const status = payloadStringValue(payload, ['status']) ?? 'unknown';
+  const quoteTime = payloadStringValue(payload, ['quote_time', 'quoteTime']);
+  const policyVersion = payloadStringValue(payload, ['policy_version', 'policyVersion']);
+  const unavailableFields = ['reason_codes', 'checks', 'quote_retrieved_at', 'created_at'];
+  if (requested === null) unavailableFields.push('requested_quantity');
+  if (allowed === null) unavailableFields.push('allowed_quantity');
+  if (rule === null) unavailableFields.push('binding_rule');
+  if (quoteTime === null) unavailableFields.push('quote_time');
+  return {
+    guard: {
+      id: guardId,
+      status,
+      requested_quantity: requested,
+      allowed_quantity: allowed,
+      binding_rule: rule,
+      reason_codes: [],
+      checks: [],
+      quote_time: quoteTime,
+      policy_version: policyVersion,
+      partial: true,
+      unavailable_fields: unavailableFields,
+    },
+    unavailableFields,
+  };
+}
+
+/**
+ * The guard evaluation visible at the replay cursor.
+ *
+ * The latest guard event at or before the cursor identifies which evaluation to
+ * show. Before any guard event there is no card at all - a proposal is not a
+ * check. When the identifier resolves against the API's evaluation collection
+ * the full record (status, quantities, rule, quote time and checks) is shown;
+ * a legacy event with no resolvable identifier is shown only for the fields it
+ * recorded, with the rest named as unavailable. At the tail, a run with no
+ * guard event at all may fall back to the stored summary, which is what a
+ * finished view has always displayed.
+ */
+export function resolveVisibleGuard(
+  detail: DecisionDetailPayload | null,
+  visibleEvents: readonly RunEvent[],
+  atEnd: boolean,
+): ResolvedGuard {
+  const hidden: ResolvedGuard = {
+    guard: null,
+    visible: false,
+    guardId: null,
+    eventSequence: null,
+    partial: false,
+    unavailableFields: [],
+  };
+  if (!detail) return hidden;
+
+  const guardEvents = sortEvents(visibleEvents.filter(isGuardEvent));
+  const latest = guardEvents[guardEvents.length - 1];
+  if (!latest) {
+    if (atEnd && detail.guard) {
+      return {
+        guard: detail.guard,
+        visible: true,
+        guardId: presentText(detail.guard.id ?? null),
+        eventSequence: null,
+        partial: false,
+        unavailableFields: [],
+      };
+    }
+    return hidden;
+  }
+
+  const guardId = payloadStringValue(latest.payload, ['guard_id', 'guardId', 'id']);
+  const byId = new Map<string, GuardComparison>();
+  for (const row of guardCollection(detail)) {
+    const id = presentText(row?.id ?? null);
+    if (id) byId.set(id, row);
+  }
+  if (guardId !== null && byId.has(guardId)) {
+    return {
+      guard: byId.get(guardId) ?? null,
+      visible: true,
+      guardId,
+      eventSequence: latest.seq,
+      partial: false,
+      unavailableFields: [],
+    };
+  }
+
+  const partial = guardFromEventPayload(latest, guardId);
+  return {
+    guard: partial.guard,
+    visible: true,
+    guardId,
+    eventSequence: latest.seq,
+    partial: true,
+    unavailableFields: partial.unavailableFields,
+  };
 }
 
 export interface AsOfPresentation {
@@ -989,6 +1132,12 @@ export interface AsOfPresentation {
   status: RunStatus;
   verdictVisible: boolean;
   guardVisible: boolean;
+  /** The guard evaluation resolved at this cursor, or null before the first check. */
+  guard: GuardComparison | null;
+  guardId: string | null;
+  guardPartial: boolean;
+  /** False until an execution event has been reached (or at the tail). */
+  executionVisible: boolean;
   outcomesVisible: boolean;
   visibleClaimIds: string[];
   visibleRebuttalIds: string[];
@@ -1025,8 +1174,10 @@ export function buildAsOfPresentation(
   const last = lastEventSequence(eventList);
   const atEnd = cursorSeq === undefined ? true : last === null || (cursorSeq ?? -1) >= last;
   const atStart = cursorSeq === null;
-  const visibleEvents = cursorSeq === undefined ? eventList : eventsUpTo(eventList, cursorSeq);
+  const visibleEvents = eventsUpTo(eventList, cursorSeq);
   const index = indexEventVisibility(visibleEvents);
+  const resolvedGuard = resolveVisibleGuard(detail, visibleEvents, atEnd);
+  const executionVisible = atEnd || index.execution !== null;
 
   const claims = Array.isArray(detail.claims) ? detail.claims.filter(Boolean) : [];
   const rebuttals = Array.isArray(detail.rebuttals) ? detail.rebuttals.filter(Boolean) : [];
@@ -1065,7 +1216,7 @@ export function buildAsOfPresentation(
           detail.action !== null ||
           (Array.isArray(detail.decisive_claim_ids) && detail.decisive_claim_ids.length > 0));
 
-  const guardVisible = index.guard !== null || (atEnd && detail.guard !== null);
+  const guardVisible = resolvedGuard.visible;
 
   const visibleOutcomes = atEnd
     ? outcomes
@@ -1089,6 +1240,10 @@ export function buildAsOfPresentation(
       completed_at: terminalStatus ? detail.run.completed_at : null,
       latency_ms: terminalStatus ? detail.run.latency_ms : null,
       error_code: status === detail.run.status ? detail.run.error_code : null,
+      // Execution is an event too. Before the first execution event the final
+      // payload's outcome belongs to the future; it is not shown early.
+      execution_state: executionVisible ? detail.run.execution_state ?? null : null,
+      execution: executionVisible ? detail.run.execution ?? null : null,
     },
     rationale: verdictVisible ? detail.rationale : null,
     decisive_claim_ids: verdictVisible
@@ -1105,7 +1260,7 @@ export function buildAsOfPresentation(
     claims: visibleClaims,
     rebuttals: visibleRebuttals,
     evidence: visibleEvidence,
-    guard: guardVisible ? detail.guard : null,
+    guard: guardVisible ? resolvedGuard.guard : null,
     outcomes: visibleOutcomes,
     has_rebuttals: atEnd ? detail.has_rebuttals : visibleRebuttals.length > 0,
   };
@@ -1118,6 +1273,10 @@ export function buildAsOfPresentation(
     status,
     verdictVisible,
     guardVisible,
+    guard: resolvedGuard.guard,
+    guardId: resolvedGuard.guardId,
+    guardPartial: resolvedGuard.partial,
+    executionVisible,
     outcomesVisible: atEnd || visibleOutcomes.length > 0 || index.outcome.size > 0,
     visibleClaimIds: [...visibleClaimIds],
     visibleRebuttalIds: visibleRebuttals

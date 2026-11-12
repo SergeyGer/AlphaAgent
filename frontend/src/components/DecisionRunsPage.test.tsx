@@ -5,7 +5,7 @@ import { setToken } from '../api/client';
 import { AuthProvider } from '../hooks/useAuth';
 import type { DecisionRunEventsState } from '../hooks/useDecisionRuns';
 import type { AsyncResource } from '../hooks/useAsyncResource';
-import { detail, detailRunEvents, run } from '../test/decisionRunFixtures';
+import { detail, detailRunEvents, guard, run, runEvent } from '../test/decisionRunFixtures';
 import type { DecisionDetailPayload, RunEvent } from '../types';
 import { DecisionRunView } from './DecisionRunsPage';
 
@@ -24,11 +24,19 @@ const control = vi.hoisted(() => ({
   events: null as DecisionRunEventsState | null,
   detailRefresh: vi.fn(),
   eventsRefresh: vi.fn(),
+  eventOptions: null as { enabled?: boolean; pollIntervalMs?: number } | null,
 }));
 
 vi.mock('../hooks/useDecisionRuns', () => ({
   useDecisionRun: () => control.detail,
-  useDecisionRunEvents: () => control.events,
+  useDecisionRunEvents: (
+    _runId: string | null,
+    _token: string | null,
+    options: { enabled?: boolean; pollIntervalMs?: number } = {},
+  ) => {
+    control.eventOptions = options;
+    return control.events;
+  },
   useDecisionRuns: () => ({
     data: [],
     loading: false,
@@ -217,5 +225,200 @@ describe('DecisionRunView — replay scene', () => {
     await user.click(screen.getByRole('button', { name: 'Compressed timing' }));
     expect(window.location.hash).toContain('at=10');
     expect(window.location.hash).toContain('timing=compressed');
+  });
+});
+
+
+describe('DecisionRunView — late outcomes', () => {
+  const pendingSchedule = {
+    method_version: 'attribution.v2',
+    entries: [
+      {
+        horizon_days: 1,
+        state: 'evaluated',
+        due_at: null,
+        reason: null,
+        evaluation_id: 'eval-1',
+        measurement_basis: 'execution_fill',
+      },
+      {
+        horizon_days: 7,
+        state: 'pending',
+        due_at: '2026-11-17T14:10:00Z',
+        reason: 'Horizon +7d has not matured.',
+        evaluation_id: 'eval-2',
+        measurement_basis: 'execution_fill',
+      },
+    ],
+    pending: true,
+    next_due_at: '2026-11-17T14:10:00Z',
+  };
+
+  it('keeps polling a completed run while an outcome is pending, then stops', async () => {
+    const events = detailRunEvents();
+    control.detail = makeDetail({
+      outcomes: [detail().outcomes[0]!],
+      outcome_schedule: pendingSchedule,
+    });
+    control.events = makeEvents(events);
+
+    const { rerender } = renderView();
+    await waitFor(() => expect(control.eventOptions?.pollIntervalMs).toBeGreaterThan(0));
+
+    // The late horizon is now evaluated and the schedule says no work remains.
+    const evaluated = detail().outcomes.map((outcome) => ({
+      ...outcome,
+      maturity: 'evaluated' as const,
+      signal_score: '0.02',
+    }));
+    control.detail = makeDetail({
+      outcomes: evaluated,
+      outcome_schedule: { ...pendingSchedule, pending: false, next_due_at: null },
+    });
+    rerender(
+      <AuthProvider>
+        <DecisionRunView runId="run-20261110-0001" />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => expect(control.eventOptions?.pollIntervalMs).toBe(0));
+  });
+
+  it('refreshes detail when a dropped live notification is recovered on reconnect', async () => {
+    const events = detailRunEvents();
+    control.detail = makeDetail({
+      outcomes: [detail().outcomes[0]!],
+      outcome_schedule: pendingSchedule,
+    });
+    control.events = makeEvents(events);
+    const { rerender } = renderView();
+    await waitFor(() => expect(control.detailRefresh).toHaveBeenCalled());
+
+    const before = control.detailRefresh.mock.calls.length;
+    const lateOutcome = runEvent({
+      event_id: 'late-outcome-1',
+      seq: 16,
+      type: 'outcome.recorded',
+      stage: 'completed',
+      occurred_at: '2026-11-10T14:10:07Z',
+      payload: { outcome_id: 'outcome-late', horizon_days: 7 },
+    });
+    control.events = makeEvents([...events, lateOutcome], 16);
+    // The browser reconnects: the hook resyncs from the contiguous tail and
+    // merges the recovered event by identity. The screen refreshes the detail.
+    window.dispatchEvent(new Event('online'));
+    const evaluated = detail().outcomes.map((outcome) => ({
+      ...outcome,
+      maturity: 'evaluated' as const,
+      signal_score: '0.02',
+    }));
+    control.detail = makeDetail({
+      outcomes: evaluated,
+      outcome_schedule: { ...pendingSchedule, pending: false, next_due_at: null },
+    });
+    rerender(
+      <AuthProvider>
+        <DecisionRunView runId="run-20261110-0001" />
+      </AuthProvider>,
+    );
+
+    await waitFor(() =>
+      expect(control.detailRefresh.mock.calls.length).toBeGreaterThanOrEqual(before),
+    );
+    // The recovered event is held once, and the newly evaluated horizon renders
+    // once without a manual reload.
+    expect(control.events.events.filter((event) => event.event_id === 'late-outcome-1')).toHaveLength(1);
+    expect(screen.getAllByRole('article', { name: '7-day horizon outcome' })).toHaveLength(1);
+  });
+});
+
+
+describe('DecisionRunView — authenticated guard replay', () => {
+  function twoGuardEvents() {
+    return [
+      runEvent({
+        event_id: 'ag-decision',
+        seq: 1,
+        type: 'decision.proposed',
+        stage: 'adjudicating',
+        occurred_at: '2026-11-10T14:10:00Z',
+        payload: { action: 'BUY' },
+      }),
+      runEvent({
+        event_id: 'ag-preflight',
+        seq: 2,
+        type: 'guard.evaluated',
+        stage: 'validating',
+        occurred_at: '2026-11-10T14:10:01Z',
+        payload: { guard_id: 'guard-preflight', status: 'approved' },
+      }),
+      runEvent({
+        event_id: 'ag-final',
+        seq: 3,
+        type: 'guard.evaluated',
+        stage: 'validating',
+        occurred_at: '2026-11-10T14:10:04Z',
+        payload: { guard_id: 'guard-final', status: 'rejected' },
+      }),
+      runEvent({
+        event_id: 'ag-execution',
+        seq: 4,
+        type: 'execution.rejected',
+        stage: 'completed',
+        occurred_at: '2026-11-10T14:10:05Z',
+        payload: { execution_state: 'rejected' },
+      }),
+    ];
+  }
+
+  function twoGuardDetail() {
+    const preflight = guard({
+      id: 'guard-preflight',
+      status: 'approved',
+      requested_quantity: '10',
+      allowed_quantity: '10',
+      binding_rule: 'max_trade_allocation_pct',
+    });
+    const final = guard({
+      id: 'guard-final',
+      status: 'rejected',
+      requested_quantity: '10',
+      allowed_quantity: '0',
+      binding_rule: 'approval_terms',
+    });
+    return makeDetail({
+      guard: final,
+      guards: [preflight, final],
+      guard_evaluations: [preflight, final],
+      outcomes: [],
+    });
+  }
+
+  it('shows the approval of 10 at the approval step and the rejection only when visible', async () => {
+    window.history.replaceState(null, '', '#/runs/run-20261110-0001?at=2&timing=compressed');
+    control.detail = twoGuardDetail();
+    control.events = makeEvents(twoGuardEvents());
+    renderView();
+    const user = userEvent.setup();
+
+    expect(screen.getByTestId('guard-status')).toHaveTextContent('Approved');
+    expect(screen.getByText('Requested quantity').nextElementSibling).toHaveTextContent('10');
+    expect(screen.getByText('Allowed quantity').nextElementSibling).toHaveTextContent('10');
+    expect(screen.queryByText('approval_terms')).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Next event' }));
+    expect(screen.getByTestId('guard-status')).toHaveTextContent('Rejected');
+    expect(screen.getByText('Allowed quantity').nextElementSibling).toHaveTextContent('0');
+    expect(screen.getByText('approval_terms')).toBeInTheDocument();
+  });
+
+  it('hides the guard card before the first check', () => {
+    window.history.replaceState(null, '', '#/runs/run-20261110-0001?at=1&timing=compressed');
+    control.detail = twoGuardDetail();
+    control.events = makeEvents(twoGuardEvents());
+    renderView();
+
+    expect(screen.queryByTestId('guard-status')).toBeNull();
+    expect(screen.getByText(/Replay has not reached validation/)).toBeInTheDocument();
   });
 });

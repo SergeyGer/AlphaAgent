@@ -105,11 +105,15 @@ export function guardCheck(overrides: Partial<GuardCheck> = {}): GuardCheck {
 
 export function guard(overrides: Partial<GuardComparison> = {}): GuardComparison {
   return {
+    id: 'guard-1',
     status: 'clamped',
     requested_quantity: '100',
     allowed_quantity: '40',
     binding_rule: 'MAX_POSITION_PCT',
     reason_codes: ['POSITION_LIMIT'],
+    quote_time: '2026-11-10T14:10:02Z',
+    quote_source: 'test_market_data',
+    policy_version: 'guard.v1',
     checks: [
       guardCheck(),
       guardCheck({ rule_code: 'DAILY_LOSS_LIMIT', outcome: 'fail', threshold: '500', actual: '620', unit: 'USD' }),

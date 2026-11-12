@@ -465,6 +465,15 @@ export interface RunSummary {
   source?: string;
   legacy_log_id?: number | string | null;
   fixture_id?: string | null;
+  /** Present on the detail/metadata payload; null when the cursor hides it. */
+  execution_state?: string | null;
+  execution?: {
+    state: string | null;
+    executed: boolean;
+    awaiting_approval: boolean;
+    no_trade: boolean;
+    attempt?: Record<string, unknown> | null;
+  } | null;
 }
 
 export type AgentRole = 'bull' | 'bear';
@@ -526,20 +535,39 @@ export interface GuardCheck {
   unit: string | null;
 }
 
-/** The deterministic risk guard's comparison of a requested vs allowed order. */
+/**
+ * The deterministic risk guard's comparison of a requested vs allowed order.
+ *
+ * `id` is the stable identifier of one evaluation. A run can contain several
+ * (a preflight check and a final check, for example); replay resolves the one
+ * visible at its cursor rather than always showing the summary. A legacy guard
+ * event with no resolvable identifier produces a partial object: the fields the
+ * event recorded are shown and `unavailable_fields` names the rest.
+ */
 export interface GuardComparison {
-  status: 'approved' | 'clamped' | 'rejected';
-  requested_quantity: string;
-  allowed_quantity: string;
+  id?: string | null;
+  status: string;
+  requested_quantity: string | null;
+  allowed_quantity: string | null;
   binding_rule: string | null;
   reason_codes: string[];
   checks: GuardCheck[];
+  quote_time?: string | null;
+  quote_source?: string | null;
+  quote_retrieved_at?: string | null;
+  policy_version?: string | null;
+  created_at?: string | null;
+  /** True when only the event payload could be resolved, not the full record. */
+  partial?: boolean;
+  /** Field names the legacy event did not record. Rendered as "Unavailable". */
+  unavailable_fields?: string[];
 }
 
 export type OutcomeMaturity = 'pending' | 'matured' | 'evaluated' | 'unavailable';
 
 /** One horizon's measured (or explicitly unmeasured) outcome. */
 export interface OutcomeView {
+  id?: string;
   horizon_days: number;
   maturity: OutcomeMaturity;
   signal_score: string | null;
@@ -547,6 +575,24 @@ export interface OutcomeView {
   /** Often null in Phase 1 — that is rendered as "Not available", never zero. */
   portfolio_impact: string | null;
   method_version: string;
+}
+
+/** One horizon's scheduler state, used to decide whether to keep polling. */
+export interface OutcomeScheduleEntry {
+  horizon_days: number;
+  state: OutcomeMaturity | string;
+  due_at: string | null;
+  reason: string | null;
+  evaluation_id: string | null;
+  measurement_basis: string | null;
+}
+
+export interface OutcomeSchedule {
+  method_version: string;
+  entries: OutcomeScheduleEntry[];
+  /** True while a later horizon is pending, matured or awaiting evaluation. */
+  pending: boolean;
+  next_due_at: string | null;
 }
 
 /**
@@ -569,8 +615,17 @@ export interface DecisionDetailPayload {
   claims: Claim[];
   rebuttals: Rebuttal[];
   evidence: EvidenceItem[];
+  /** Summary: the most recent guard evaluation (for a finished view). */
   guard: GuardComparison | null;
+  /** Every guard evaluation, each with a stable identifier. */
+  guards?: GuardComparison[];
+  /** Explicit alias for the same ordered collection (newer producers). */
+  guard_evaluations?: GuardComparison[];
   outcomes: OutcomeView[];
+  /** Superseded outcome revisions, kept visible rather than double-counted. */
+  superseded_outcomes?: OutcomeView[];
+  /** Pending measurement work, used to keep a completed detail view polling. */
+  outcome_schedule?: OutcomeSchedule | null;
   /** False for legacy/sequential runs that never had a rebuttal stage. */
   has_rebuttals: boolean;
 }
