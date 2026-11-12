@@ -44,6 +44,10 @@ class EventType:
     PORTFOLIO_SNAPSHOT = "portfolio.snapshot"
     TRADE_EXECUTED = "trade.executed"
     DECISION_CREATED = "decision.created"
+    #: A decision's execution state became terminal. The durable
+    #: ``ExecutionAttempt``/``RunEvent`` rows are the authority; this frame is a
+    #: notification hint and is queued in the same transaction as the fill.
+    DECISION_EXECUTION = "decision.execution"
     AGENT_THINKING = "agent.thinking"
     RECOMMENDATION_CREATED = "recommendation.created"
     RECOMMENDATION_UPDATED = "recommendation.updated"

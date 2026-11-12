@@ -26,7 +26,6 @@ from datetime import UTC, datetime
 from decimal import ROUND_DOWN, Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Any
 
-from django.conf import settings
 from django.db import DatabaseError, transaction
 from django.utils import timezone
 
@@ -37,6 +36,12 @@ from core.models import (
     InstrumentClassification,
     Portfolio,
     Transaction,
+)
+from services.quote_policy import (
+    ESTIMATION_MODES,
+    ExecutionFreshnessPolicy,
+    is_estimate_source,
+    validate_mark,
 )
 
 if TYPE_CHECKING:  # pragma: no cover - typing only, avoids importing CrewAI
@@ -100,11 +105,30 @@ class GuardError(ExecutionError):
 
 
 class ExecutionRejected(ExecutionError):
-    """The policy refused the trade. Nothing was written."""
+    """The policy refused the trade. Nothing was written.
 
-    def __init__(self, reason: str, *, decision: GuardDecision | None = None) -> None:
+    ``code`` is the stable machine-readable reason the review asked for:
+    ``missing_quote``, ``stale_quote``, ``future_quote``, ``untimed_quote``,
+    ``fallback_quote_disallowed``, ``autonomy_disabled``, ``material_change``,
+    ``approval_expired`` or ``legacy_unknown_provenance``. The human message
+    stays in ``reason`` and is never parsed by a caller.
+    """
+
+    code = "execution_rejected"
+
+    def __init__(
+        self,
+        reason: str,
+        *,
+        decision: GuardDecision | None = None,
+        code: str | None = None,
+        revised_terms: dict | None = None,
+    ) -> None:
         self.reason = reason
         self.decision = decision
+        if code:
+            self.code = code
+        self.revised_terms = revised_terms or {}
         super().__init__(reason)
 
 
@@ -116,9 +140,28 @@ class MaterialChangeError(ExecutionRejected):
     to require a new approval, not to execute the new decision under the old one.
     """
 
+    code = "material_change"
+
+    def __init__(
+        self,
+        reason: str,
+        *,
+        decision: GuardDecision | None = None,
+        code: str | None = None,
+        revised_terms: dict | None = None,
+    ) -> None:
+        super().__init__(
+            reason,
+            decision=decision,
+            code=code or self.code,
+            revised_terms=revised_terms,
+        )
+
 
 class PolicyChangedError(MaterialChangeError):
     """The portfolio's policy changed after the decision was approved."""
+
+    code = "policy_changed"
 
 
 class ValuationUnavailableError(ExecutionRejected):
@@ -129,9 +172,28 @@ class ValuationUnavailableError(ExecutionRejected):
     portfolio cannot be valued; a risk-reducing sale may still be evaluated.
     """
 
+    code = "missing_quote"
+
+    def __init__(
+        self,
+        reason: str,
+        *,
+        code: str | None = None,
+        decision: GuardDecision | None = None,
+        revised_terms: dict | None = None,
+    ) -> None:
+        super().__init__(
+            reason,
+            decision=decision,
+            code=code or self.code,
+            revised_terms=revised_terms,
+        )
+
 
 class ExecutionConflict(ExecutionRejected):
     """An execution key was reused with a different request."""
+
+    code = "execution_key_conflict"
 
 
 # ---------------------------------------------------------------------------
@@ -190,9 +252,44 @@ class GuardDecision:
     policy_version: str = ""
     evaluated_portfolio_version: str = ""
     quote_time: datetime | None = None
+    quote_source: str = ""
+    quote_retrieved_at: datetime | None = None
+    approved_price: Decimal | None = None
+    approved_quantity: Decimal | None = None
+    price_tolerance_pct: Decimal | None = None
+    quantity_tolerance: Decimal | None = None
+    approval_ref: str = ""
     binding_rule: str = ""
     reason_codes: list[str] = field(default_factory=list)
     checks: list[dict] = field(default_factory=list)
+    revised_terms: dict = field(default_factory=dict)
+    risk_exception: dict = field(default_factory=dict)
+    material_marks: dict = field(default_factory=dict)
+
+    def reference_terms(self) -> dict:
+        """The approval terms and observations each check was run against."""
+        return {
+            "approval_ref": self.approval_ref or None,
+            "approved_price": (
+                str(self.approved_price) if self.approved_price is not None else None
+            ),
+            "approved_quantity": (
+                str(self.approved_quantity) if self.approved_quantity is not None else None
+            ),
+            "price_tolerance_pct": (
+                str(self.price_tolerance_pct) if self.price_tolerance_pct is not None else None
+            ),
+            "quantity_tolerance": (
+                str(self.quantity_tolerance) if self.quantity_tolerance is not None else None
+            ),
+            "quote_observed_at": self.quote_time.isoformat() if self.quote_time else None,
+            "quote_retrieved_at": (
+                self.quote_retrieved_at.isoformat() if self.quote_retrieved_at else None
+            ),
+            "quote_source": self.quote_source or None,
+            "risk_exception": dict(self.risk_exception or {}),
+            "material_marks": dict(self.material_marks or {}),
+        }
 
 
 def _portfolio_headroom(
@@ -466,15 +563,37 @@ def _as_decimal(value: Any) -> Decimal | None:
 
 @dataclass(frozen=True)
 class Mark:
-    """One current price observation, with the time it was observed."""
+    """One price observation and its provenance.
+
+    ``as_of`` is the market observation instant (UTC), ``retrieved_at`` when this
+    process obtained it, and ``source`` names the producer. ``as_of=None`` is a
+    real, explicit state: the value exists but nobody recorded when it was
+    observed. The freshness policy decides whether that is acceptable for the
+    mode in which it is used.
+    """
 
     price: Decimal
     as_of: datetime | None = None
     source: str = "caller_supplied"
+    ticker: str = ""
+    currency: str = "USD"
+    retrieved_at: datetime | None = None
+    is_estimate: bool = False
 
     @property
     def observed_at(self) -> datetime | None:
         return self.as_of
+
+    def as_dict(self) -> dict:
+        return {
+            "price": str(self.price),
+            "source": self.source,
+            "as_of": self.as_of.isoformat() if self.as_of else None,
+            "retrieved_at": self.retrieved_at.isoformat() if self.retrieved_at else None,
+            "currency": self.currency,
+            "ticker": self.ticker,
+            "is_estimate": self.is_estimate,
+        }
 
 
 def normalise_marks(
@@ -482,14 +601,14 @@ def normalise_marks(
     *,
     now: datetime | None = None,
 ) -> dict[str, Mark]:
-    """Parse a quote map into strictly positive, finite marks.
+    """Parse a quote map into strictly positive, finite marks with provenance.
 
-    Accepted shapes: a :class:`Mark`, a market-data ``PriceQuote`` (``price`` and
-    ``as_of``), a mapping with ``price``/``as_of``, or a bare decimal value. A
-    bare value carries no observation time; it is recorded as supplied at call
-    time and labelled ``caller_supplied_untimed``. The labelling is the point:
-    the service never invents a market observation and never calls a number
-    stale or fresh without saying which claim it is making.
+    Accepted shapes: a :class:`Mark`, a market-data ``PriceQuote``, a mapping
+    with ``price``/``as_of``/``source``/``retrieved_at``/``currency``, or a bare
+    decimal value. A bare value carries no observation time; it is labelled
+    ``caller_supplied_untimed`` and is *not* given a fabricated timestamp. A
+    future-dated mark is refused here; a stale or untimed one is refused by the
+    freshness policy where current valuation is required.
     """
     moment = now or timezone.now()
     parsed: dict[str, Mark] = {}
@@ -499,41 +618,76 @@ def normalise_marks(
             raise ValuationUnavailableError("A quote was supplied for an empty ticker.")
         raw_price: Any
         as_of: datetime | None
+        retrieved_at: datetime | None
         source: str
+        currency: str = "USD"
+        explicit_estimate = False
         if isinstance(value, Mark):
             raw_price, as_of, source = value.price, value.as_of, value.source
+            retrieved_at = value.retrieved_at
+            currency = value.currency
+            explicit_estimate = value.is_estimate
         elif isinstance(value, Mapping):
             raw_price = value.get("price")
             as_of = value.get("as_of") or value.get("quote_time")
+            retrieved_at = value.get("retrieved_at")
             source = str(value.get("source") or "caller_supplied")
+            currency = str(value.get("currency") or "USD")
+            explicit_estimate = bool(value.get("is_estimate") or value.get("estimated"))
         elif hasattr(value, "price"):
             raw_price = getattr(value, "price", None)
             as_of = getattr(value, "as_of", None)
+            retrieved_at = getattr(value, "retrieved_at", None)
             source = str(getattr(value, "source", "") or "caller_supplied")
+            currency = str(getattr(value, "currency", "") or "USD")
         else:
-            raw_price, as_of, source = value, None, "caller_supplied_untimed"
+            raw_price, as_of, retrieved_at = value, None, moment
+            source = "caller_supplied_untimed"
         price = _as_decimal(raw_price)
         if price is None or price <= ZERO:
             raise ValuationUnavailableError(
-                f"Quote for {symbol} is not a finite, positive price: {raw_price!r}."
+                f"Quote for {symbol} is not a finite, positive price: {raw_price!r}.",
+                code="invalid_quote",
             )
-        if isinstance(as_of, str):
-            try:
-                as_of = datetime.fromisoformat(as_of.replace("Z", "+00:00"))
-            except ValueError:
-                raise ValuationUnavailableError(
-                    f"Quote timestamp for {symbol} is not ISO-8601: {as_of!r}."
-                ) from None
-        if as_of is not None:
-            if as_of.tzinfo is None:
-                as_of = as_of.replace(tzinfo=UTC)
-            as_of = as_of.astimezone(UTC)
-            if as_of > moment:
-                raise ValuationUnavailableError(
-                    f"Quote for {symbol} is timestamped in the future ({as_of.isoformat()})."
-                )
-        parsed[symbol] = Mark(price=price, as_of=as_of, source=source)
+        as_of = _parse_timestamp(as_of, symbol, "as_of")
+        retrieved_at = _parse_timestamp(retrieved_at, symbol, "retrieved_at")
+        if as_of is not None and as_of > moment:
+            raise ValuationUnavailableError(
+                f"Quote for {symbol} is timestamped in the future ({as_of.isoformat()}).",
+                code="future_quote",
+            )
+        parsed[symbol] = Mark(
+            price=price,
+            as_of=as_of,
+            source=source,
+            ticker=symbol,
+            currency=currency,
+            retrieved_at=retrieved_at or moment,
+            is_estimate=explicit_estimate or is_estimate_source(source),
+        )
     return parsed
+
+
+def _parse_timestamp(value: Any, symbol: str, field: str) -> datetime | None:
+    """Parse a UTC timestamp; a missing value stays missing."""
+    if value in (None, ""):
+        return None
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            raise ValuationUnavailableError(
+                f"Quote {field} for {symbol} is not ISO-8601: {value!r}.",
+                code="invalid_quote",
+            ) from None
+    if not isinstance(value, datetime):
+        raise ValuationUnavailableError(
+            f"Quote {field} for {symbol} is not a timestamp: {value!r}.",
+            code="invalid_quote",
+        )
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 def _quote_age_seconds(mark: Mark, *, now: datetime) -> Decimal | None:
@@ -545,18 +699,39 @@ def _quote_age_seconds(mark: Mark, *, now: datetime) -> Decimal | None:
 def _max_quote_age_seconds(requested: int | None = None) -> int:
     if requested is not None:
         return max(int(requested), 0)
-    return max(
-        int(getattr(settings, "EXECUTION_MAX_QUOTE_AGE_SECONDS", DEFAULT_MAX_QUOTE_AGE_SECONDS)),
-        0,
-    )
+    return ExecutionFreshnessPolicy.from_settings().default_max_age_seconds
 
 
 def _max_price_drift_pct(requested: Decimal | None = None) -> Decimal:
-    if requested is not None:
-        return requested
-    return Decimal(
-        str(getattr(settings, "EXECUTION_MAX_PRICE_DRIFT_PCT", str(DEFAULT_MAX_PRICE_DRIFT_PCT)))
+    return ExecutionFreshnessPolicy.from_settings().drift_tolerance(requested)
+
+
+def _validate_required_mark(
+    mark: Mark,
+    ticker: str,
+    *,
+    now: datetime,
+    mode: str,
+    require_current: bool,
+    risk_reducing: bool = False,
+    policy: ExecutionFreshnessPolicy | None = None,
+) -> Any:
+    """Apply the shared freshness policy and raise with a stable code."""
+    result = validate_mark(
+        ticker=ticker,
+        price=mark.price,
+        as_of=mark.as_of,
+        retrieved_at=mark.retrieved_at,
+        source=mark.source,
+        now=now,
+        mode=mode,
+        require_current=require_current,
+        risk_reducing=risk_reducing,
+        policy=policy,
     )
+    if not result.ok:
+        raise ValuationUnavailableError(result.detail, code=result.code)
+    return result
 
 
 @dataclass
@@ -870,7 +1045,10 @@ class ExecutionRequest:
     approved_policy_version: str | None = None
     approved_portfolio_version: str | None = None
     approved_price: Decimal | None = None
+    approved_quantity: Decimal | None = None
     quote_time: datetime | None = None
+    quote_source: str = ""
+    quote_retrieved_at: datetime | None = None
     mode: str = "live"
     max_quote_age_seconds: int | None = None
     require_full_valuation: bool = True
@@ -889,6 +1067,8 @@ class ExecutionRequest:
         self.quantity = _as_decimal(self.quantity) or ZERO
         self.requested_quantity = _as_decimal(self.requested_quantity)
         self.approved_price = _as_decimal(self.approved_price)
+        self.approved_quantity = _as_decimal(self.approved_quantity)
+        self.mode = (self.mode or "live").strip().lower()
 
     def fingerprint(self) -> str:
         """Canonical hash of the intent. Quote values are environment, not intent."""
@@ -919,6 +1099,12 @@ class ExecutionResult:
     policy_version: str = ""
     evaluated_portfolio_version: str = ""
     quote_time: datetime | None = None
+    #: The durable attempt record when one was written. Direct callers get one
+    #: too; it is what makes a repeated execution key explainable.
+    execution_attempt: Any = None
+    run_id: str | None = None
+    terminal_event_id: int | None = None
+    already_completed: bool = False
 
     @property
     def executed(self) -> bool:
@@ -931,12 +1117,24 @@ def _existing_execution(key: str) -> Transaction | None:
     return Transaction.objects.filter(execution_key=key).first()
 
 
-def _reject_duplicate_key(existing: Transaction, request: ExecutionRequest) -> ExecutionResult:
+def _reject_duplicate_key(
+    existing: Transaction,
+    request: ExecutionRequest,
+    *,
+    audit: Any = None,
+) -> ExecutionResult:
     current_hash = request.fingerprint()
     if existing.execution_request_hash and existing.execution_request_hash != current_hash:
         raise ExecutionConflict(
             f"Execution key {request.execution_key!r} was already used for a different request."
         )
+    from services.execution_audit import LegacyExecutionProvenance, resume_execution_audit
+
+    try:
+        attempt = resume_execution_audit(transaction_row=existing, request=request, audit=audit)
+    except LegacyExecutionProvenance as exc:
+        raise ExecutionRejected(str(exc), code=exc.code) from exc
+    run = getattr(attempt, "decision_run", None) if attempt is not None else None
     decision = GuardDecision(
         approved=True,
         reason="Already executed; returning the existing ledger row.",
@@ -952,6 +1150,10 @@ def _reject_duplicate_key(existing: Transaction, request: ExecutionRequest) -> E
         transaction=existing,
         already_executed=True,
         reason=decision.reason,
+        execution_attempt=attempt,
+        run_id=str(run.id) if run is not None else None,
+        terminal_event_id=getattr(attempt, "terminal_event_id", None),
+        already_completed=attempt is not None and attempt.terminal_event_id is not None,
     )
 
 
@@ -963,25 +1165,92 @@ class _Proposal:
         self.amount = amount
 
 
-def execute_trade(request: ExecutionRequest) -> ExecutionResult:
+def _annotate_checks(
+    decision: GuardDecision,
+    *,
+    mark: Mark,
+    price_tolerance_pct: Decimal,
+    approved_price: Decimal | None,
+    approved_quantity: Decimal | None,
+    quantity_tolerance: Decimal,
+    approval_ref: str,
+) -> None:
+    """Show the observation and reference term each check was run against."""
+    observed = mark.as_of.isoformat() if mark.as_of else None
+    retrieved = mark.retrieved_at.isoformat() if mark.retrieved_at else None
+    for check in decision.checks:
+        check["observed_at"] = observed
+        check["retrieved_at"] = retrieved
+        check["quote_source"] = mark.source
+        check["reference_price"] = str(approved_price) if approved_price is not None else None
+        check["reference_quantity"] = (
+            str(approved_quantity) if approved_quantity is not None else None
+        )
+        check["price_tolerance_pct"] = str(price_tolerance_pct)
+        check["quantity_tolerance"] = str(quantity_tolerance)
+        check["approval_ref"] = approval_ref or None
+
+
+def _revised_terms(
+    *,
+    request: ExecutionRequest,
+    price: Decimal,
+    mark: Mark,
+    tolerance: Decimal,
+    reason_code: str,
+    drift_pct: Decimal | None = None,
+    policy_version: str = "",
+) -> dict:
+    return {
+        "reason_code": reason_code,
+        "ticker": request.ticker,
+        "side": request.side,
+        "quantity": str(request.quantity),
+        "reference_price": str(price),
+        "approved_price": (
+            str(request.approved_price) if request.approved_price is not None else None
+        ),
+        "price_tolerance_pct": str(tolerance),
+        "price_drift_pct": str(drift_pct) if drift_pct is not None else None,
+        "quantity_tolerance": str(request.quantity_tolerance),
+        "quote_observed_at": mark.as_of.isoformat() if mark.as_of else None,
+        "quote_retrieved_at": mark.retrieved_at.isoformat() if mark.retrieved_at else None,
+        "quote_source": mark.source,
+        "policy_version": policy_version or request.approved_policy_version or None,
+        "message": "A new approval is required for these refreshed terms.",
+    }
+
+
+def execute_trade(
+    request: ExecutionRequest,
+    *,
+    audit: Any = None,
+) -> ExecutionResult:
     """Validate and execute one trade under a lock, transactionally.
 
     The order of operations is the safety property: lock the portfolio and every
     position row, rebuild holdings and exposure, re-run the current policy and
     daily-loss checks against current marks, verify the result is still the
-    decision that was approved, then write the ledger in the same transaction.
+    decision that was approved, then write the ledger and its audit in the same
+    transaction.
+
+    When ``audit`` carries a decision run, the fill, the exact final guard
+    evaluation, the run's terminal execution state and the durable event are all
+    committed here. A repeated execution key repairs a missing attempt before it
+    is reported as complete.
     """
     if request.side not in {"BUY", "SELL"}:
         raise ExecutionRejected(f"Unsupported side {request.side!r}.")
     if request.quantity <= ZERO:
         raise ExecutionRejected("An execution requires a positive quantity.")
     from services.ledger import PositionState, realised_pnl_today
+    from services.quote_policy import validate_mark
 
     had_key = bool(request.execution_key)
     fingerprint = request.fingerprint()
     existing = _existing_execution(request.execution_key)
     if existing is not None:
-        return _reject_duplicate_key(existing, request)
+        return _reject_duplicate_key(existing, request, audit=audit)
 
     with transaction.atomic():
         try:
@@ -995,7 +1264,14 @@ def execute_trade(request: ExecutionRequest) -> ExecutionResult:
 
         existing = _existing_execution(request.execution_key)
         if existing is not None:
-            return _reject_duplicate_key(existing, request)
+            return _reject_duplicate_key(existing, request, audit=audit)
+
+        if request.source == "autonomous" and not portfolio.is_autonomous:
+            raise ExecutionRejected(
+                "Autonomous execution is disabled for this portfolio. The proposal "
+                "requires a fresh human approval before any fill can be written.",
+                code="autonomy_disabled",
+            )
 
         now = timezone.now()
         current_policy_version = portfolio_policy_version(portfolio)
@@ -1006,7 +1282,13 @@ def execute_trade(request: ExecutionRequest) -> ExecutionResult:
             raise PolicyChangedError(
                 "The portfolio policy changed after this decision was approved "
                 f"({request.approved_policy_version} -> {current_policy_version}). "
-                "A new approval is required."
+                "A new approval is required.",
+                revised_terms={
+                    "reason_code": "policy_changed",
+                    "approved_policy_version": request.approved_policy_version,
+                    "current_policy_version": current_policy_version,
+                    "message": "A new approval is required for the current policy.",
+                },
             )
 
         if request.approved_portfolio_version:
@@ -1017,36 +1299,117 @@ def execute_trade(request: ExecutionRequest) -> ExecutionResult:
                 raise MaterialChangeError(
                     "The portfolio changed after this decision was approved "
                     f"({request.approved_portfolio_version} -> {current_version}). "
-                    "A new approval is required."
+                    "A new approval is required.",
+                    code="portfolio_changed",
+                    revised_terms={
+                        "reason_code": "portfolio_changed",
+                        "approved_portfolio_version": request.approved_portfolio_version,
+                        "current_portfolio_version": current_version,
+                        "message": "A new approval is required for the current portfolio.",
+                    },
                 )
 
+        policy = ExecutionFreshnessPolicy.from_settings()
+        paper_mode = request.mode in ESTIMATION_MODES
         marks = normalise_marks(request.quotes, now=now)
         traded_mark = marks.get(request.ticker)
         if traded_mark is None:
             raise ValuationUnavailableError(
-                f"No current quote for {request.ticker}; refusing to execute."
+                f"No current quote for {request.ticker}; refusing to execute.",
+                code="missing_quote",
             )
-        max_age = _max_quote_age_seconds(request.max_quote_age_seconds)
-        aged = _quote_age_seconds(traded_mark, now=now)
-        if aged is not None and aged > max_age:
+        max_age = policy.max_age_seconds(request.ticker, traded_mark.source)
+        if request.max_quote_age_seconds is not None:
+            max_age = min(max_age, max(int(request.max_quote_age_seconds), 0))
+        traded_validation = validate_mark(
+            ticker=request.ticker,
+            price=traded_mark.price,
+            as_of=traded_mark.as_of,
+            retrieved_at=traded_mark.retrieved_at,
+            source=traded_mark.source,
+            now=now,
+            mode=request.mode,
+            require_current=not paper_mode,
+            risk_reducing=False,
+            policy=policy,
+        )
+        if not traded_validation.ok:
+            raise ValuationUnavailableError(traded_validation.detail, code=traded_validation.code)
+
+        risk_exception: dict = {}
+        valuation_marks = dict(marks)
+        for asset in Asset.objects.filter(portfolio=portfolio, amount__gt=ZERO):
+            symbol = asset.ticker.upper()
+            if symbol == request.ticker:
+                continue
+            mark = valuation_marks.get(symbol)
+            if mark is None:
+                continue
+            material_validation = validate_mark(
+                ticker=symbol,
+                price=mark.price,
+                as_of=mark.as_of,
+                retrieved_at=mark.retrieved_at,
+                source=mark.source,
+                now=now,
+                mode=request.mode,
+                require_current=not paper_mode,
+                risk_reducing=(request.side == "SELL" and policy.allow_risk_reducing_exception),
+                policy=policy,
+            )
+            if material_validation.ok:
+                if material_validation.rule.startswith("risk_reducing_"):
+                    risk_exception = material_validation.as_dict()
+                continue
+            if request.side == "SELL" and policy.allow_risk_reducing_exception and not paper_mode:
+                # The sale reduces risk; an untimed/stale mark here values the
+                # remainder, not the price being traded. Excluding it records the
+                # exception and leaves the portfolio-level limits unevaluated
+                # rather than silently valuing it at a stale number.
+                risk_exception = {
+                    **material_validation.as_dict(),
+                    "excluded_from_valuation": True,
+                    "rule": "risk_reducing_valuation_exception",
+                }
+                valuation_marks.pop(symbol, None)
+                continue
             raise ValuationUnavailableError(
-                f"Quote for {request.ticker} is {aged}s old; the ceiling is {max_age}s."
+                material_validation.detail, code=material_validation.code
             )
 
         state = _lock_portfolio_state(
             portfolio,
-            marks,
+            valuation_marks,
             require_full_valuation=request.require_full_valuation and request.side == "BUY",
         )
+        if request.require_full_valuation and request.side == "BUY" and state.unpriced_tickers:
+            raise ValuationUnavailableError(
+                "No current quote for material holding(s) "
+                + ", ".join(state.unpriced_tickers)
+                + "; authoritative exposure cannot be computed.",
+                code="missing_quote",
+            )
+
         price = traded_mark.price
-        tolerance = _max_price_drift_pct(request.price_tolerance_pct)
+        tolerance = policy.drift_tolerance(request.price_tolerance_pct)
         if request.approved_price and request.approved_price > ZERO:
             drift = (abs(price - request.approved_price) / request.approved_price) * HUNDRED
             if drift > tolerance:
                 raise MaterialChangeError(
                     f"The price moved {drift.quantize(CENT)}% between approval and execution "
                     f"(${request.approved_price} -> ${price}); the approved quantity is no "
-                    "longer the same decision."
+                    "longer the same decision. A new approval is required for the refreshed "
+                    "terms.",
+                    code="price_drift_requires_approval",
+                    revised_terms=_revised_terms(
+                        request=request,
+                        price=price,
+                        mark=traded_mark,
+                        tolerance=tolerance,
+                        reason_code="price_drift_requires_approval",
+                        drift_pct=drift.quantize(CENT),
+                        policy_version=current_policy_version,
+                    ),
                 )
 
         asset = state.assets.get(request.ticker)
@@ -1071,7 +1434,26 @@ def execute_trade(request: ExecutionRequest) -> ExecutionResult:
         decision.requested_amount = request.requested_quantity or request.quantity
         decision.policy_version = current_policy_version
         decision.evaluated_portfolio_version = evaluated_version
-        decision.quote_time = traded_mark.as_of or now
+        decision.quote_time = traded_mark.as_of
+        decision.quote_source = traded_mark.source
+        decision.quote_retrieved_at = traded_mark.retrieved_at
+        decision.approved_price = request.approved_price
+        decision.approved_quantity = request.approved_quantity or request.quantity
+        decision.price_tolerance_pct = tolerance
+        decision.quantity_tolerance = request.quantity_tolerance
+        decision.approval_ref = request.approval_ref
+        decision.risk_exception = risk_exception
+        decision.material_marks = {
+            symbol: mark.as_dict()
+            if hasattr(mark, "as_dict")
+            else {
+                "price": str(mark.price),
+                "source": mark.source,
+                "as_of": mark.as_of.isoformat() if mark.as_of else None,
+                "retrieved_at": mark.retrieved_at.isoformat() if mark.retrieved_at else None,
+            }
+            for symbol, mark in marks.items()
+        }
         decision.binding_rule = _binding_rule(portfolio, decision, exposure, price)
         decision.checks = build_guard_checks(
             portfolio,
@@ -1082,9 +1464,38 @@ def execute_trade(request: ExecutionRequest) -> ExecutionResult:
             position_amount=position.amount,
             requested_quantity=request.quantity,
         )
+        _annotate_checks(
+            decision,
+            mark=traded_mark,
+            price_tolerance_pct=tolerance,
+            approved_price=request.approved_price,
+            approved_quantity=request.approved_quantity,
+            quantity_tolerance=request.quantity_tolerance,
+            approval_ref=request.approval_ref,
+        )
 
         if not decision.approved:
             decision.reason_codes = ["guard_rejected"]
+            decision.revised_terms = _revised_terms(
+                request=request,
+                price=price,
+                mark=traded_mark,
+                tolerance=tolerance,
+                reason_code="guard_rejected",
+                policy_version=current_policy_version,
+            )
+            if audit is not None and getattr(audit, "run", None) is not None:
+                from services.execution_audit import record_terminal_outcome
+
+                record_terminal_outcome(
+                    run=audit.run,
+                    outcome="blocked",
+                    recommendation=getattr(audit, "recommendation", None),
+                    guard_decision=decision,
+                    reason=decision.reason,
+                    via=getattr(audit, "via", ""),
+                    user_id=getattr(audit, "user_id", None),
+                )
             return ExecutionResult(
                 approved=False,
                 decision=decision,
@@ -1097,18 +1508,34 @@ def execute_trade(request: ExecutionRequest) -> ExecutionResult:
         difference = request.quantity - decision.amount
         if difference > request.quantity_tolerance:
             decision.reason_codes = ["material_quantity_change"]
+            decision.revised_terms = {
+                **_revised_terms(
+                    request=request,
+                    price=price,
+                    mark=traded_mark,
+                    tolerance=tolerance,
+                    reason_code="material_quantity_change",
+                    policy_version=current_policy_version,
+                ),
+                "approved_quantity": str(request.quantity),
+                "permitted_quantity": str(decision.amount),
+            }
             raise MaterialChangeError(
                 f"The guard now permits {decision.amount} of the approved "
                 f"{request.quantity} {request.ticker}. A different decision requires a "
                 "new approval.",
                 decision=decision,
+                code="material_quantity_change",
+                revised_terms=decision.revised_terms,
             )
 
         notional = decision.notional
         if decision.action == "BUY":
             if notional > portfolio.balance_usd:
                 raise ExecutionRejected(
-                    f"Cash changed under lock: need ${notional}, have ${portfolio.balance_usd}."
+                    f"Cash changed under lock: need ${notional}, have ${portfolio.balance_usd}.",
+                    decision=decision,
+                    code="cash_changed",
                 )
             new_amount = position.amount + decision.amount
             avg_price = asset.avg_purchase_price if asset is not None else ZERO
@@ -1123,10 +1550,16 @@ def execute_trade(request: ExecutionRequest) -> ExecutionResult:
             if decision.amount > position.amount:
                 raise ExecutionRejected(
                     f"Position changed under lock: selling {decision.amount}, "
-                    f"holding {position.amount}."
+                    f"holding {position.amount}.",
+                    decision=decision,
+                    code="position_changed",
                 )
             if asset is None:
-                raise ExecutionRejected(f"No open position in {request.ticker} to sell.")
+                raise ExecutionRejected(
+                    f"No open position in {request.ticker} to sell.",
+                    decision=decision,
+                    code="position_missing",
+                )
             asset.amount = asset.amount - decision.amount
             if asset.amount == ZERO:
                 asset.avg_purchase_price = ZERO.quantize(CENT)
@@ -1143,8 +1576,37 @@ def execute_trade(request: ExecutionRequest) -> ExecutionResult:
             executed_by=ExecutedBy.AI,
             execution_key=request.execution_key or None,
             execution_request_hash=fingerprint if had_key else "",
+            price_observed_at=traded_mark.as_of,
+            price_retrieved_at=traded_mark.retrieved_at,
+            price_source=traded_mark.source,
+            price_currency=traded_mark.currency,
         )
 
+        attempt = None
+        if audit is not None and getattr(audit, "run", None) is not None:
+            from services.execution_audit import record_fill_outcome
+
+            attempt = record_fill_outcome(
+                run=audit.run,
+                transaction_row=row,
+                decision=decision,
+                request=request,
+                recommendation=getattr(audit, "recommendation", None),
+                reason=decision.reason,
+                via=getattr(audit, "via", ""),
+                user_id=getattr(audit, "user_id", None),
+            )
+        else:
+            from services.execution_audit import ensure_fill_attempt
+
+            attempt = ensure_fill_attempt(
+                transaction_row=row,
+                decision=decision,
+                request=request,
+                audit=audit,
+            )
+
+    run = getattr(attempt, "decision_run", None) if attempt is not None else None
     return ExecutionResult(
         approved=True,
         decision=decision,
@@ -1153,6 +1615,10 @@ def execute_trade(request: ExecutionRequest) -> ExecutionResult:
         reason=decision.reason,
         policy_version=current_policy_version,
         quote_time=decision.quote_time,
+        execution_attempt=attempt,
+        run_id=str(run.id) if run is not None else None,
+        terminal_event_id=getattr(attempt, "terminal_event_id", None),
+        already_completed=attempt is not None and attempt.terminal_event_id is not None,
     )
 
 
@@ -1163,6 +1629,7 @@ def apply_trade(
     *,
     request: ExecutionRequest | None = None,
     quotes: Mapping[str, Any] | None = None,
+    audit: Any = None,
 ) -> ExecutionResult:
     """Execute an approved decision through the authoritative path.
 
@@ -1191,12 +1658,17 @@ def apply_trade(
             quantity=decision.amount,
             quotes=quote_map,
             approved_price=decision.price,
+            approved_quantity=decision.amount,
             requested_quantity=decision.requested_amount or decision.amount,
             source="direct",
             approved_policy_version=decision.policy_version or None,
             require_full_valuation=decision.action == "BUY",
+            quote_time=decision.quote_time,
+            quote_source=getattr(decision, "quote_source", ""),
+            quote_retrieved_at=getattr(decision, "quote_retrieved_at", None),
+            price_tolerance_pct=getattr(decision, "price_tolerance_pct", None),
         )
-    result = execute_trade(request)
+    result = execute_trade(request, audit=audit)
     if not result.approved:
         raise ExecutionRejected(result.reason, decision=result.decision)
     return result

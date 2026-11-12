@@ -52,6 +52,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import ROUND_DOWN, Decimal
 from typing import Any, Protocol
+from uuid import uuid4
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
@@ -60,6 +61,7 @@ from django.utils import timezone
 from core.allocation_models import (
     EXECUTION_MODE_LIVE,
     EXECUTION_MODE_PAPER,
+    PlanExecutionAttempt,
     PlanLegStatus,
     PlanSide,
     PlanStatus,
@@ -68,6 +70,8 @@ from core.allocation_models import (
 )
 from core.decision_json import content_hash, decimal_string, json_safe, utc_iso
 from core.models import Asset, Portfolio, Transaction
+from services.event_outbox import deliver_now, enqueue_event
+from services.events import EventType
 from services.execution import (
     ExecutionRequest,
     Mark,
@@ -261,9 +265,16 @@ class PlanReapprovalRequired(PlanError):
     that ``revalidate_plan`` can re-project and a human can approve again.
     """
 
-    def __init__(self, reason: str, *, code: str = "reapproval_required") -> None:
+    def __init__(
+        self,
+        reason: str,
+        *,
+        code: str = "reapproval_required",
+        revised_terms: dict | None = None,
+    ) -> None:
         self.code = code
         self.detail = reason
+        self.revised_terms = revised_terms or {}
         super().__init__(reason)
 
 
@@ -286,6 +297,7 @@ class PlanLegFailed(PlanError):
         self.ticker = ticker
         self.code = code
         self.detail = detail
+        self.revised_terms: dict = {}
         super().__init__(f"leg {leg_sequence} ({ticker}) failed: {code}: {detail}")
 
 
@@ -760,6 +772,7 @@ def create_plan(
     policy: AllocationPolicy | None = None,
     cost_model: CostModel | None = None,
     execution_mode: str = EXECUTION_MODE_LIVE,
+    quote_observations: Mapping[str, Any] | None = None,
 ) -> tuple[PortfolioPlan, bool]:
     """Validate the deterministic projection and persist a plan and its legs.
 
@@ -882,6 +895,7 @@ def create_plan(
                 brief=json_safe(payload),
                 brief_hash=content_hash(payload),
                 cost_model=json_safe(cost_model.as_dict()),
+                quote_observations=json_safe(dict(quote_observations or {})),
                 model_metadata=json_safe(proposal.model_metadata),
                 approval_binding=json_safe(binding),
                 approval_hash=content_hash(binding),
@@ -1009,16 +1023,27 @@ def plan_as_dict(plan: PortfolioPlan, *, include_brief: bool = False) -> dict:
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class ApprovalReference:
-    """The exact plan version and permission hash an execution is approved under.
+    """The exact plan version, permission hash and terms an execution is approved under.
 
     Passed into :func:`apply_plan` so the check happens *under the plan's lock*,
     not in a caller-side window where a revalidation could slip in between.
+    ``approved_legs``/``terms_hash``/tolerances are the terms the reviewer saw;
+    execution compares the refreshed plan with them rather than with whatever
+    the plan currently says.
     """
 
     plan_version: int
     approval_hash: str
     approval_version: int
     expires_at: datetime
+    approval_id: int | None = None
+    terms_hash: str = ""
+    approved_legs: tuple[dict, ...] = ()
+    price_tolerance_pct: Decimal | None = None
+    quantity_tolerance: Decimal | None = None
+    max_quote_age_seconds: int | None = None
+    policy_version: str = ""
+    classification_version: str = ""
 
 
 @dataclass
@@ -1029,37 +1054,109 @@ class PlanApplication:
     already_applied: bool = False
 
 
-def _record_plan_failure(plan_id, failure: PlanLegFailed) -> None:
-    """Persist a failure after the application transaction rolled back."""
+def _record_plan_failure(
+    plan_id,
+    failure: PlanLegFailed,
+    *,
+    attempt_id=None,
+    attempt_number: int | None = None,
+    mode: str = "",
+    expected_plan_version: int | None = None,
+    expected_portfolio_version: str = "",
+) -> bool:
+    """Record a failed attempt without overwriting a plan another attempt applied.
+
+    The conditional update names the attempt token written before the application
+    transaction. If another attempt has since written a newer token, or the plan
+    is already applied/no-change, the update matches zero rows. This is the lock
+    the delayed-failure race needs: the unsuccessful attempt is still recorded as
+    a ``PlanExecutionAttempt``, but it cannot change the successful plan or its
+    filled legs.
+    """
     try:
-        PortfolioPlan.objects.filter(pk=plan_id).update(
+        filters: dict[str, Any] = {
+            "pk": plan_id,
+            "status": PlanStatus.PROPOSED,
+            "applied_at__isnull": True,
+        }
+        if attempt_id is not None:
+            filters["execution_attempt_id"] = attempt_id
+        if expected_plan_version is not None:
+            filters["plan_version"] = expected_plan_version
+        updated = PortfolioPlan.objects.filter(**filters).update(
             status=PlanStatus.FAILED,
             failure_code=failure.code,
             failure_detail=failure.detail,
             revalidation_required=False,
         )
-        if failure.leg_sequence > 0:
-            PortfolioPlanLeg.objects.filter(plan_id=plan_id, sequence=failure.leg_sequence).update(
-                status=PlanLegStatus.FAILED, reason=failure.detail
-            )
+        if updated:
+            if failure.leg_sequence > 0:
+                PortfolioPlanLeg.objects.filter(
+                    plan_id=plan_id, sequence=failure.leg_sequence
+                ).update(status=PlanLegStatus.FAILED, reason=failure.detail)
+                PortfolioPlanLeg.objects.filter(
+                    plan_id=plan_id, sequence__gt=failure.leg_sequence
+                ).update(
+                    status=PlanLegStatus.SKIPPED,
+                    reason="Not attempted: the plan halted on an earlier leg.",
+                )
+            # Earlier legs were rolled back with the transaction and hold no fill.
             PortfolioPlanLeg.objects.filter(
-                plan_id=plan_id, sequence__gt=failure.leg_sequence
-            ).update(
-                status=PlanLegStatus.SKIPPED,
-                reason="Not attempted: the plan halted on an earlier leg.",
+                plan_id=plan_id, sequence__lt=max(failure.leg_sequence, 0)
+            ).update(status=PlanLegStatus.PLANNED)
+        if attempt_id is not None:
+            plan = PortfolioPlan.objects.filter(pk=plan_id).only("portfolio_id").first()
+            if plan is not None:
+                PlanExecutionAttempt.objects.update_or_create(
+                    attempt_id=attempt_id,
+                    defaults={
+                        "plan_id": plan_id,
+                        "attempt_number": attempt_number or 1,
+                        "status": "failed" if updated else "superseded",
+                        "mode": mode,
+                        "expected_plan_version": expected_plan_version or 1,
+                        "expected_portfolio_version": expected_portfolio_version,
+                        "failure_code": failure.code,
+                        "failure_detail": failure.detail,
+                        "finished_at": timezone.now(),
+                    },
+                )
+        if not updated:
+            logger.warning(
+                "Ignoring stale failure for plan %s attempt %s; a newer attempt owns it",
+                plan_id,
+                attempt_id,
             )
-        # Earlier legs were rolled back with the transaction and hold no fill.
-        PortfolioPlanLeg.objects.filter(
-            plan_id=plan_id, sequence__lt=max(failure.leg_sequence, 0)
-        ).update(status=PlanLegStatus.PLANNED)
+        return bool(updated)
     except Exception:  # pragma: no cover - failure recording must never mask the cause
         logger.exception("Could not record allocation plan failure for %s", plan_id)
+        return False
 
 
-def _mark_plan_for_reapproval(plan_id, reason: str) -> None:
-    """Leave a materially changed plan proposed, but requiring explicit review."""
+def _mark_plan_for_reapproval(
+    plan_id,
+    reason: str,
+    *,
+    attempt_id=None,
+    expected_plan_version: int | None = None,
+) -> None:
+    """Leave a materially changed plan proposed, but requiring explicit review.
+
+    The update is conditional on the attempt that produced the change. A
+    delayed handler from an older attempt cannot clear the approval that a newer
+    attempt is executing under.
+    """
     try:
-        PortfolioPlan.objects.filter(pk=plan_id).update(
+        filters: dict[str, Any] = {
+            "pk": plan_id,
+            "status": PlanStatus.PROPOSED,
+            "applied_at__isnull": True,
+        }
+        if attempt_id is not None:
+            filters["execution_attempt_id"] = attempt_id
+        if expected_plan_version is not None:
+            filters["plan_version"] = expected_plan_version
+        PortfolioPlan.objects.filter(**filters).update(
             revalidation_required=True,
             status=PlanStatus.PROPOSED,
             failure_code="reapproval_required",
@@ -1122,21 +1219,35 @@ def _require_marks(
     *,
     max_quote_age_seconds: int,
     now,
-) -> None:
+    execution_mode: str = EXECUTION_MODE_LIVE,
+) -> list[dict]:
     """Demand a current, timestamped mark for every material holding and leg.
 
-    No acquisition-cost substitution is allowed here. A missing or stale mark
-    stops the plan before the first ledger write; the plan is not resized against
-    an accounting figure and presented as a market decision.
+    No acquisition-cost substitution is allowed here. A missing, future-dated,
+    stale or untimed mark stops the plan before the first ledger write, unless
+    the declared risk-reducing exception covers a *non-traded* holding in a
+    sale-only plan. That exception is returned so it can be recorded; it is
+    never silent and it never covers the price of the instrument being traded.
+
+    ``max_quote_age_seconds`` is retained as the caller's ceiling; the
+    per-source/per-instrument policy may only narrow it.
     """
+    from services.quote_policy import ExecutionFreshnessPolicy, validate_mark
+
+    policy = ExecutionFreshnessPolicy.from_settings()
     required = _material_tickers(plan, legs)
     leg_tickers = {leg.ticker.upper() for leg in legs}
+    selling_only = bool(legs) and all(leg.side == PlanSide.SELL for leg in legs)
+    paper = (execution_mode or "").strip().lower() in {"paper", "estimate", "estimation"}
+    exemptions: list[dict] = []
     for ticker in required:
         mark = marks.get(ticker)
+        first = next((leg for leg in legs if leg.ticker.upper() == ticker), None)
+        sequence = first.sequence if first is not None else 0
+        traded = ticker in leg_tickers
         if mark is None:
-            first = next((leg for leg in legs if leg.ticker.upper() == ticker), None)
             raise PlanLegFailed(
-                leg_sequence=first.sequence if first is not None else 0,
+                leg_sequence=sequence,
                 ticker=ticker,
                 code="price_unavailable",
                 detail=(
@@ -1144,20 +1255,41 @@ def _require_marks(
                     "plan from a purchase cost or a stale mark."
                 ),
             )
-        if mark.as_of is not None:
-            age = int(max((now - mark.as_of).total_seconds(), 0))
-            if age > max_quote_age_seconds:
-                first = next((leg for leg in legs if leg.ticker.upper() == ticker), None)
-                raise PlanLegFailed(
-                    leg_sequence=first.sequence if first is not None else 0,
-                    ticker=ticker,
-                    code="stale_quote",
-                    detail=(
-                        f"Quote for {ticker} is {age}s old; the policy ceiling is "
-                        f"{max_quote_age_seconds}s."
-                    ),
-                )
-    _ = leg_tickers
+        effective_max = min(
+            max_quote_age_seconds,
+            policy.max_age_seconds(ticker, mark.source),
+        )
+        result = validate_mark(
+            ticker=ticker,
+            price=mark.price,
+            as_of=mark.as_of,
+            retrieved_at=mark.retrieved_at,
+            source=mark.source,
+            now=now,
+            mode=execution_mode,
+            require_current=not paper,
+            risk_reducing=selling_only and not traded,
+            policy=policy,
+        )
+        _ = effective_max
+        if not result.ok:
+            raise PlanLegFailed(
+                leg_sequence=sequence,
+                ticker=ticker,
+                code=result.code,
+                detail=result.detail,
+            )
+        if result.rule.startswith("risk_reducing_"):
+            exemptions.append(
+                {
+                    "ticker": ticker,
+                    "rule": result.rule,
+                    "reason": result.reason,
+                    "observed_at": result.observed_at.isoformat() if result.observed_at else None,
+                    "max_age_seconds": result.max_age_seconds,
+                }
+            )
+    return exemptions
 
 
 def _check_permission_binding(
@@ -1344,6 +1476,80 @@ def _mark_prices(marks: Mapping[str, Any]) -> dict[str, Decimal]:
     return {ticker: mark.price for ticker, mark in marks.items()}
 
 
+def _record_plan_attempt(
+    *,
+    plan: PortfolioPlan,
+    attempt_id,
+    attempt_number: int,
+    status: str,
+    mode: str,
+    expected_plan_version: int,
+    expected_portfolio_version: str,
+    price_tolerance_pct: Decimal | None,
+    transaction_ids: list[int],
+    detail: dict | None = None,
+) -> PlanExecutionAttempt:
+    attempt, _created = PlanExecutionAttempt.objects.update_or_create(
+        attempt_id=attempt_id,
+        defaults={
+            "plan": plan,
+            "attempt_number": attempt_number,
+            "status": status,
+            "mode": mode,
+            "expected_plan_version": expected_plan_version,
+            "expected_portfolio_version": expected_portfolio_version,
+            "price_tolerance_pct": price_tolerance_pct,
+            "transaction_ids": transaction_ids,
+            "detail": json_safe(detail or {}),
+            "finished_at": timezone.now(),
+        },
+    )
+    return attempt
+
+
+def _enqueue_plan_event(
+    plan: PortfolioPlan, event_type: str, payload: dict, dedupe_key: str
+) -> None:
+    """Queue the durable plan event in the caller's transaction.
+
+    Delivery is attempted only after commit; a notification outage cannot fail a
+    plan that has already decided. The outbox row is the durable record.
+    """
+    row = enqueue_event(
+        plan.portfolio.user_id,
+        "portfolio",
+        event_type,
+        json_safe(payload),
+        dedupe_key=dedupe_key,
+    )
+    if row is not None:
+        transaction.on_commit(lambda row_id=row.id: deliver_now(row_id))
+
+
+def _revised_plan_terms(plan: PortfolioPlan, constrained, sized, *, reason_code: str) -> dict:
+    return {
+        "reason_code": reason_code,
+        "plan_id": str(plan.id),
+        "plan_version": plan.plan_version,
+        "target_weights": {
+            str(ticker).upper(): decimal_string(weight)
+            for ticker, weight in constrained.weights.items()
+        },
+        "legs": [
+            {
+                "sequence": leg.sequence,
+                "ticker": leg.ticker,
+                "side": leg.side,
+                "quantity": str(leg.quantity),
+                "reference_price": str(leg.price),
+            }
+            for leg in sized.legs
+        ],
+        "requires_new_approval": True,
+        "message": "Revalidate the current terms and approve them before applying.",
+    }
+
+
 def _require_approval_reference(
     plan: PortfolioPlan,
     approval: ApprovalReference,
@@ -1399,6 +1605,55 @@ def _require_approval_reference(
             "The plan is marked for revalidation; it cannot execute under the old approval.",
             code="revalidation_required",
         )
+    if not approval.approved_legs and plan.legs.exists():
+        raise PlanReapprovalRequired(
+            "This approval has no recorded side, quantity or reference-price terms. Its "
+            "terms cannot be validated; approve the current plan version again.",
+            code="approval_terms_unknown",
+        )
+    stored_legs = {int(leg.sequence): leg for leg in plan.legs.order_by("sequence")}
+    approved_legs = {int(row.get("sequence") or 0): row for row in approval.approved_legs}
+    if set(stored_legs) != set(approved_legs):
+        raise PlanReapprovalRequired(
+            "The approved terms name a different set of legs than the current plan. "
+            "A new approval is required.",
+            code="approval_terms_changed",
+        )
+    for sequence, leg in stored_legs.items():
+        row = approved_legs[sequence]
+        try:
+            approved_quantity = Decimal(str(row.get("quantity")))
+            approved_price = Decimal(str(row.get("reference_price")))
+        except Exception:
+            raise PlanReapprovalRequired(
+                "The approval's leg terms are not decimal values; a new approval is required.",
+                code="approval_terms_unknown",
+            ) from None
+        if (
+            str(row.get("ticker") or "").upper() != leg.ticker.upper()
+            or str(row.get("side") or "").upper() != leg.side.upper()
+            or approved_quantity != leg.quantity
+            or approved_price != leg.price
+        ):
+            raise PlanReapprovalRequired(
+                (
+                    f"Approved leg {sequence} is {row.get('side')} {row.get('quantity')} "
+                    f"{row.get('ticker')}@{row.get('reference_price')}, but the plan now "
+                    f"holds {leg.side} {leg.quantity} {leg.ticker}@{leg.price}. A new "
+                    "approval is required."
+                ),
+                code="approval_terms_changed",
+            )
+    if approval.policy_version:
+        from services.execution import portfolio_policy_version
+
+        current_policy = portfolio_policy_version(plan.portfolio)
+        if current_policy != approval.policy_version:
+            raise PlanReapprovalRequired(
+                "The portfolio policy changed after this plan was approved. A new "
+                "approval is required for the current policy.",
+                code="policy_changed",
+            )
 
 
 def apply_plan(
@@ -1426,6 +1681,46 @@ def apply_plan(
     """
     plan: PortfolioPlan | None = None
     applications: list[PlanApplication] = []
+    attempt_id = uuid4()
+    attempt_number = 1
+    expected_plan_version: int | None = None
+    expected_portfolio_version = ""
+    execution_mode_value = (mode or EXECUTION_MODE_LIVE).lower()
+    # Record the attempt identity before the application transaction. A failure
+    # handler runs after a rollback, so an identity written only inside that
+    # transaction would vanish and the delayed handler would have nothing to
+    # condition on.
+    with transaction.atomic():
+        try:
+            pre = (
+                PortfolioPlan.objects.select_for_update()
+                .select_related("portfolio")
+                .get(pk=plan_id)
+            )
+        except PortfolioPlan.DoesNotExist:
+            raise PlanNotFoundError(f"Portfolio plan {plan_id} does not exist.") from None
+        if pre.status == PlanStatus.APPLIED:
+            existing_legs = list(pre.legs.order_by("sequence"))
+            return PlanApplication(
+                plan=pre,
+                legs=existing_legs,
+                transactions=[
+                    leg.transaction for leg in existing_legs if leg.transaction_id is not None
+                ],
+                already_applied=True,
+            )
+        if pre.status == PlanStatus.NO_CHANGE:
+            return PlanApplication(plan=pre, legs=[], transactions=[], already_applied=True)
+        if pre.status != PlanStatus.PROPOSED:
+            raise PlanNotApplicableError(f"Plan {pre.id} is {pre.status!r} and cannot be applied.")
+        attempt_number = int(pre.execution_attempt_number or 0) + 1
+        expected_plan_version = int(pre.plan_version)
+        expected_portfolio_version = pre.evaluated_portfolio_version
+        execution_mode_value = (mode or pre.execution_mode or EXECUTION_MODE_LIVE).lower()
+        PortfolioPlan.objects.filter(pk=pre.id).update(
+            execution_attempt_id=attempt_id,
+            execution_attempt_number=attempt_number,
+        )
     try:
         with transaction.atomic():
             try:
@@ -1504,25 +1799,30 @@ def apply_plan(
                 except ValuationUnavailableError as exc:
                     raise PlanQuoteUnavailable(str(exc)) from exc
                 quotes = {
-                    ticker: Mark(price=price, as_of=now, source="paper_plan_mark")
+                    # Explicit paper marks have no market observation instant.
+                    # Recording "now" here would fabricate a fresh market quote.
+                    ticker: Mark(price=price, as_of=None, source="paper_plan_mark")
                     for ticker, price in paper_marks.items()
                 }
+            if approval is not None and approval.max_quote_age_seconds is not None:
+                max_age = min(max_age, int(approval.max_quote_age_seconds))
             try:
                 marks = normalise_marks(quotes, now=now)
             except ValuationUnavailableError as exc:
                 raise PlanLegFailed(
                     leg_sequence=0,
                     ticker="",
-                    code="price_unavailable",
+                    code=getattr(exc, "code", "price_unavailable"),
                     detail=str(exc),
                 ) from exc
 
-            _require_marks(
+            exemptions = _require_marks(
                 plan,
                 legs,
                 marks,
                 max_quote_age_seconds=max_age,
                 now=now,
+                execution_mode=execution_mode,
             )
 
             material = _material_tickers(plan, legs)
@@ -1546,6 +1846,8 @@ def apply_plan(
                 )
                 if approval is not None:
                     plan.applied_approval_version = int(approval.approval_version)
+                plan.execution_attempt_id = attempt_id
+                plan.execution_attempt_number = attempt_number
                 plan.save(
                     update_fields=[
                         "status",
@@ -1554,8 +1856,37 @@ def apply_plan(
                         "executed_target_weights",
                         "execution_reasons",
                         "applied_approval_version",
+                        "execution_attempt_id",
+                        "execution_attempt_number",
                         "updated_at",
                     ]
+                )
+                _record_plan_attempt(
+                    plan=plan,
+                    attempt_id=attempt_id,
+                    attempt_number=attempt_number,
+                    status="no_change",
+                    mode=execution_mode,
+                    expected_plan_version=int(expected_plan_version or plan.plan_version),
+                    expected_portfolio_version=expected_portfolio_version,
+                    price_tolerance_pct=(
+                        approval.price_tolerance_pct if approval is not None else None
+                    ),
+                    transaction_ids=[],
+                    detail={"exemptions": exemptions, "no_leg": True},
+                )
+                _enqueue_plan_event(
+                    plan,
+                    EventType.PORTFOLIO_PLAN_APPLIED,
+                    {
+                        "plan_id": str(plan.id),
+                        "status": plan.status,
+                        "mode": execution_mode,
+                        "already_applied": False,
+                        "transaction_ids": [],
+                        "no_change": True,
+                    },
+                    dedupe_key=f"plan-applied:{plan.id}:{plan.applied_approval_version}",
                 )
                 return PlanApplication(plan=plan, legs=[], transactions=[])
 
@@ -1587,6 +1918,9 @@ def apply_plan(
                     "The plan projected against current marks and policy no longer "
                     "matches the approved decision: " + "; ".join(changes[:6]),
                     code="plan_changed",
+                    revised_terms=_revised_plan_terms(
+                        plan, constrained, sized, reason_code="plan_changed"
+                    ),
                 )
 
             min_cash = (policy.min_cash_weight * (state.equity_usd or ZERO)).quantize(CENT)
@@ -1601,7 +1935,13 @@ def apply_plan(
             transactions: list[Transaction] = []
             reasons: list[dict] = []
             stored_legs = {leg.sequence: leg for leg in legs}
+            approval_tolerance = approval.price_tolerance_pct if approval is not None else ZERO
+            approval_quantity_tolerance = (
+                approval.quantity_tolerance if approval is not None else Decimal("0.00000001")
+            )
             for leg in sized.legs:
+                reference = stored_legs[leg.sequence]
+                traded_mark = marks.get(leg.ticker.upper())
                 request = ExecutionRequest(
                     portfolio_id=portfolio.id,
                     ticker=leg.ticker,
@@ -1613,7 +1953,15 @@ def apply_plan(
                     source="plan_leg",
                     approval_ref=f"plan:{plan.id}",
                     approved_policy_version=current_policy_version,
-                    approved_price=leg.price,
+                    approved_price=reference.price,
+                    approved_quantity=reference.quantity,
+                    price_tolerance_pct=approval_tolerance,
+                    quantity_tolerance=approval_quantity_tolerance,
+                    quote_time=traded_mark.as_of if traded_mark is not None else None,
+                    quote_source=traded_mark.source if traded_mark is not None else "",
+                    quote_retrieved_at=(
+                        traded_mark.retrieved_at if traded_mark is not None else None
+                    ),
                     mode=execution_mode,
                     max_quote_age_seconds=max_age,
                     require_full_valuation=leg.side == PlanSide.BUY,
@@ -1624,7 +1972,7 @@ def apply_plan(
                     raise PlanLegFailed(
                         leg_sequence=leg.sequence,
                         ticker=leg.ticker,
-                        code="guard_clamped",
+                        code=getattr(exc, "code", "guard_clamped"),
                         detail=(
                             f"{exc}. The plan's funding arithmetic would no longer hold; "
                             "revalidate before applying."
@@ -1634,7 +1982,7 @@ def apply_plan(
                     raise PlanLegFailed(
                         leg_sequence=leg.sequence,
                         ticker=leg.ticker,
-                        code="price_unavailable",
+                        code=getattr(exc, "code", "price_unavailable"),
                         detail=str(exc),
                     ) from exc
                 if not execution.approved or execution.transaction is None:
@@ -1679,7 +2027,14 @@ def apply_plan(
             plan.failure_code = ""
             plan.failure_detail = ""
             plan.executed_target_weights = _weights_json(state_after)
-            plan.execution_reasons = json_safe(reasons)
+            plan.execution_reasons = json_safe(
+                [
+                    *reasons,
+                    *([{"risk_reducing_exception": exemptions}] if exemptions else []),
+                ]
+            )
+            plan.execution_attempt_id = attempt_id
+            plan.execution_attempt_number = attempt_number
             if approval is not None:
                 plan.applied_approval_version = int(approval.approval_version)
             plan.save(
@@ -1692,18 +2047,63 @@ def apply_plan(
                     "executed_target_weights",
                     "execution_reasons",
                     "applied_approval_version",
+                    "execution_attempt_id",
+                    "execution_attempt_number",
                     "updated_at",
                 ]
             )
+            _record_plan_attempt(
+                plan=plan,
+                attempt_id=attempt_id,
+                attempt_number=attempt_number,
+                status="applied",
+                mode=execution_mode,
+                expected_plan_version=int(expected_plan_version or plan.plan_version),
+                expected_portfolio_version=expected_portfolio_version,
+                price_tolerance_pct=approval_tolerance,
+                transaction_ids=[row.id for row in transactions],
+                detail={"exemptions": exemptions},
+            )
+            _enqueue_plan_event(
+                plan,
+                EventType.PORTFOLIO_PLAN_APPLIED,
+                {
+                    "plan_id": str(plan.id),
+                    "status": plan.status,
+                    "mode": execution_mode,
+                    "already_applied": False,
+                    "transaction_ids": [row.id for row in transactions],
+                    "applied_approval_version": plan.applied_approval_version,
+                    "execution_attempt_id": str(attempt_id),
+                },
+                dedupe_key=f"plan-applied:{plan.id}:{plan.applied_approval_version}",
+            )
             applications.append(PlanApplication(plan=plan, legs=legs, transactions=transactions))
     except PlanReapprovalRequired as exc:
-        _mark_plan_for_reapproval(plan_id, str(exc))
+        _mark_plan_for_reapproval(
+            plan_id,
+            str(exc),
+            attempt_id=attempt_id,
+            expected_plan_version=expected_plan_version,
+        )
         raise
     except PlanStaleError:
-        PortfolioPlan.objects.filter(pk=plan_id).update(revalidation_required=True)
+        PortfolioPlan.objects.filter(
+            pk=plan_id,
+            status=PlanStatus.PROPOSED,
+            execution_attempt_id=attempt_id,
+        ).update(revalidation_required=True)
         raise
     except PlanLegFailed as failure:
-        _record_plan_failure(plan_id, failure)
+        _record_plan_failure(
+            plan_id,
+            failure,
+            attempt_id=attempt_id,
+            attempt_number=attempt_number,
+            mode=execution_mode_value,
+            expected_plan_version=expected_plan_version,
+            expected_portfolio_version=expected_portfolio_version,
+        )
         raise
     except (PlanNotFoundError, PlanNotApplicableError):
         raise
@@ -1714,7 +2114,15 @@ def apply_plan(
             code="execution_failed",
             detail=f"Execution failed and was rolled back: {exc}",
         )
-        _record_plan_failure(plan_id, wrapped)
+        _record_plan_failure(
+            plan_id,
+            wrapped,
+            attempt_id=attempt_id,
+            attempt_number=attempt_number,
+            mode=execution_mode_value,
+            expected_plan_version=expected_plan_version,
+            expected_portfolio_version=expected_portfolio_version,
+        )
         raise wrapped from exc
 
     application = applications[0]
@@ -1804,7 +2212,7 @@ def revalidate_plan(
             except ValuationUnavailableError as exc:
                 raise PlanQuoteUnavailable(str(exc)) from exc
             quotes = {
-                ticker: Mark(price=price, as_of=now, source="paper_plan_mark")
+                ticker: Mark(price=price, as_of=None, source="paper_plan_mark")
                 for ticker, price in paper_marks.items()
             }
         try:
@@ -1812,29 +2220,29 @@ def revalidate_plan(
         except ValuationUnavailableError as exc:
             raise PlanQuoteUnavailable(str(exc)) from exc
         legs = list(plan.legs.order_by("sequence"))
-        max_age = (
-            int(max_quote_age_seconds)
-            if max_quote_age_seconds is not None
-            else int(
-                getattr(
-                    settings,
-                    "EXECUTION_MAX_QUOTE_AGE_SECONDS",
-                    policy.max_snapshot_age_seconds,
-                )
-            )
-        )
+        from services.quote_policy import ExecutionFreshnessPolicy, validate_mark
+
+        freshness = ExecutionFreshnessPolicy.from_settings()
+        paper_mode = execution_mode == EXECUTION_MODE_PAPER
         for ticker in _material_tickers(plan, legs):
             mark = marks.get(ticker)
             if mark is None:
                 raise PlanQuoteUnavailable(
                     f"No current quote for {ticker}; revalidation needs a full valuation."
                 )
-            if mark.as_of is not None:
-                age = int(max((now - mark.as_of).total_seconds(), 0))
-                if age > max_age:
-                    raise PlanQuoteUnavailable(
-                        f"Quote for {ticker} is {age}s old; the ceiling is {max_age}s."
-                    )
+            result = validate_mark(
+                ticker=ticker,
+                price=mark.price,
+                as_of=mark.as_of,
+                retrieved_at=mark.retrieved_at,
+                source=mark.source,
+                now=now,
+                mode=execution_mode,
+                require_current=not paper_mode,
+                policy=freshness,
+            )
+            if not result.ok:
+                raise PlanQuoteUnavailable(result.detail)
         state = build_portfolio_state(portfolio, quotes=_mark_prices(marks))
         if state.equity_usd is None or state.equity_usd <= ZERO:
             raise BriefIncompleteError(
@@ -1938,6 +2346,19 @@ def revalidate_plan(
         plan.estimated_turnover_pct = sized.estimated_turnover_pct
         plan.failure_code = ""
         plan.failure_detail = ""
+        plan.quote_observations = json_safe(
+            {
+                ticker: {
+                    "price": str(mark.price),
+                    "source": mark.source,
+                    "as_of": mark.as_of.isoformat() if mark.as_of else None,
+                    "retrieved_at": mark.retrieved_at.isoformat() if mark.retrieved_at else None,
+                    "currency": mark.currency,
+                }
+                for ticker, mark in marks.items()
+            }
+        )
+        plan.execution_attempt_id = None
         plan.save()
     return plan
 

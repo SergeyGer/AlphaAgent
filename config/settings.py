@@ -495,6 +495,32 @@ ALLOCATION_CONFIG = {
     #: permission over a plan the portfolio has since outgrown.
     "APPROVAL_TTL_SECONDS": env_int("AI_ALLOCATION_APPROVAL_TTL_SECONDS", 86_400),
     "MAX_APPROVAL_TTL_SECONDS": env_int("AI_ALLOCATION_MAX_APPROVAL_TTL_SECONDS", 604_800),
+    #: A plan leg's quantity was sized at its reference price, so a changed
+    #: price is a changed order. Zero is the deliberate default: the plan
+    #: re-projection must match exactly, and a drift requires a new approval.
+    "PLAN_PRICE_DRIFT_PCT": str(env_decimal("AI_ALLOCATION_PLAN_PRICE_DRIFT_PCT", "0")),
+    "PLAN_QUANTITY_TOLERANCE": str(
+        env_decimal("AI_ALLOCATION_PLAN_QUANTITY_TOLERANCE", "0.00000001")
+    ),
+}
+
+# ---------------------------------------------------------------------------
+# Execution freshness policy (FIX-11)
+#
+# A price without an observation time is missing data, not a current mark. The
+# default ceiling is the one the execution guard already used; the optional
+# per-source and per-instrument maps may only tighten it. The risk-reducing
+# exception is an explicit policy choice, recorded with its rule and reason on
+# every decision that uses it; it never covers the instrument being traded.
+# ---------------------------------------------------------------------------
+EXECUTION_MAX_QUOTE_AGE_SECONDS = env_int("EXECUTION_MAX_QUOTE_AGE_SECONDS", 900)
+EXECUTION_MAX_PRICE_DRIFT_PCT = str(env_decimal("EXECUTION_MAX_PRICE_DRIFT_PCT", "2.0"))
+EXECUTION_FRESHNESS_POLICY = {
+    "by_source": {},
+    "by_instrument": {},
+    "allow_risk_reducing_exception": env_bool(
+        "EXECUTION_ALLOW_RISK_REDUCING_QUOTE_EXCEPTION", True
+    ),
 }
 
 # USD per 1M tokens, used to populate AgentDecisionLog.api_cost_usd.

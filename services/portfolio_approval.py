@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta
+from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
 from django.db import transaction
@@ -37,8 +38,10 @@ from core.allocation_models import (
     PlanStatus,
     PortfolioPlan,
 )
-from core.decision_json import utc_iso
+from core.decision_json import content_hash, utc_iso
+from core.models import InstrumentClassification
 from services.events import EventType, emit_portfolio_plan
+from services.execution import portfolio_policy_version
 from services.portfolio_allocation import (
     ApprovalReference,
     PlanApplication,
@@ -65,6 +68,8 @@ __all__ = [
 MIN_APPROVAL_TTL_SECONDS = 60
 DEFAULT_APPROVAL_TTL_SECONDS = 86_400
 MAX_APPROVAL_TTL_SECONDS = 604_800
+DEFAULT_PLAN_PRICE_DRIFT_PCT = Decimal("0")
+DEFAULT_PLAN_QUANTITY_TOLERANCE = Decimal("0.00000001")
 
 
 class PlanApprovalError(Exception):
@@ -177,6 +182,99 @@ def _latest_approval(plan: PortfolioPlan, decision: str | None = None) -> PlanAp
     return queryset.order_by("-decided_at", "-id").first()
 
 
+def _decimal_setting(key: str, default: Decimal) -> Decimal:
+    try:
+        value = Decimal(str(getattr(settings, "ALLOCATION_CONFIG", {}).get(key, default)))
+    except (InvalidOperation, TypeError, ValueError):
+        return default
+    return value if value >= 0 else default
+
+
+def plan_price_tolerance_pct() -> Decimal:
+    """The plan-level drift tolerance.
+
+    It defaults to zero: a plan leg's quantity was sized at its reference price,
+    so a changed price is a changed order unless an operator declares otherwise.
+    A recommendation uses the separate, narrower execution tolerance.
+    """
+    return _decimal_setting("PLAN_PRICE_DRIFT_PCT", DEFAULT_PLAN_PRICE_DRIFT_PCT)
+
+
+def plan_quantity_tolerance() -> Decimal:
+    return _decimal_setting("PLAN_QUANTITY_TOLERANCE", DEFAULT_PLAN_QUANTITY_TOLERANCE)
+
+
+def classification_version(portfolio, tickers) -> str:
+    """Stable version of the explicit classifications that decide risk."""
+    symbols = sorted({str(ticker).upper() for ticker in tickers})
+    rows = (
+        InstrumentClassification.objects.filter(portfolio=portfolio, ticker__in=symbols)
+        .order_by("ticker")
+        .values_list("ticker", "sector", "asset_class", "source")
+    )
+    payload = [
+        [str(ticker).upper(), sector, asset_class, source]
+        for ticker, sector, asset_class, source in rows
+    ]
+    return f"classifications-{content_hash(payload)[:24]}" if payload else ""
+
+
+def plan_approval_terms(plan: PortfolioPlan) -> dict:
+    """The exact side, quantity, reference price and observation provenance.
+
+    The terms are built from the plan that was reviewed. A missing observation
+    time is preserved as null with the source label; it is never replaced by the
+    approval's own clock.
+    """
+    from services.portfolio_allocation import _material_tickers
+
+    legs = list(plan.legs.order_by("sequence"))
+    observations = plan.quote_observations if isinstance(plan.quote_observations, dict) else {}
+    material = _material_tickers(plan, legs)
+    approved_legs = []
+    for leg in legs:
+        observation = observations.get(leg.ticker.upper()) or {}
+        approved_legs.append(
+            {
+                "sequence": int(leg.sequence),
+                "ticker": leg.ticker.upper(),
+                "side": leg.side,
+                "quantity": str(leg.quantity),
+                "reference_price": str(leg.price),
+                "notional_usd": str(leg.notional_usd),
+                "quote_observed_at": observation.get("as_of") or None,
+                "quote_retrieved_at": observation.get("retrieved_at") or None,
+                "quote_source": observation.get("source") or "",
+                "quote_currency": observation.get("currency") or "USD",
+            }
+        )
+    tolerance = plan_price_tolerance_pct()
+    quantity_tolerance = plan_quantity_tolerance()
+    max_age = int(
+        getattr(
+            settings,
+            "EXECUTION_MAX_QUOTE_AGE_SECONDS",
+            900,
+        )
+    )
+    terms = {
+        "schema": "plan_approval_terms.v1",
+        "plan_id": str(plan.id),
+        "plan_version": int(plan.plan_version),
+        "approval_hash": plan.approval_hash,
+        "execution_mode": plan.execution_mode,
+        "legs": approved_legs,
+        "price_tolerance_pct": str(tolerance),
+        "quantity_tolerance": str(quantity_tolerance),
+        "max_quote_age_seconds": max_age,
+        "policy_version": portfolio_policy_version(plan.portfolio),
+        "classification_version": classification_version(plan.portfolio, material),
+        "allocation_policy_version": plan.policy_version,
+    }
+    terms["terms_hash"] = f"terms-{content_hash(terms)[:24]}"
+    return terms
+
+
 def approval_state(plan: PortfolioPlan, *, now: datetime | None = None) -> dict:
     """The current permission, as a review surface should display it.
 
@@ -223,6 +321,19 @@ def approval_state(plan: PortfolioPlan, *, now: datetime | None = None) -> dict:
         "plan_version": plan.plan_version,
         "approved_version": plan.approval_version or None,
         "approval_hash": plan.approval_hash or None,
+        "terms_hash": (getattr(latest, "terms_hash", None) if latest is not None else None),
+        "approved_legs": (
+            list(getattr(latest, "approved_legs", []) or []) if latest is not None else []
+        ),
+        "price_tolerance_pct": (
+            str(latest.price_tolerance_pct)
+            if latest is not None and latest.price_tolerance_pct is not None
+            else None
+        ),
+        "policy_version": getattr(latest, "policy_version", None) if latest else None,
+        "classification_version": (
+            getattr(latest, "classification_version", None) if latest else None
+        ),
         "approved_at": utc_iso(plan.approved_at),
         "approved_by": plan.approved_by.username if plan.approved_by_id else None,
         "approved_by_id": plan.approved_by_id,
@@ -271,11 +382,44 @@ def require_valid_approval(
             "The plan's approval has no expiry and is not executable.",
             code="approval_missing_expiry",
         )
+    approved_row = (
+        plan.approvals.filter(
+            decision=PlanApprovalDecision.APPROVED,
+            plan_version=int(plan.approval_version),
+        )
+        .order_by("-decided_at", "-id")
+        .first()
+    )
+    if approved_row is None or not approved_row.terms_hash:
+        raise PlanApprovalRequired(
+            "This plan's approval has no recorded leg terms or risk versions. It cannot "
+            "be used to execute; approve the current plan version again.",
+            code="approval_terms_unknown",
+        )
+    if approved_row.expires_at is not None and approved_row.expires_at != plan.approval_expires_at:
+        raise PlanApprovalRequired(
+            "The stored approval's expiry does not match the plan's current permission; "
+            "approve the current plan version again.",
+            code="approval_expiry_changed",
+        )
+    if approved_row.expires_at is not None and approved_row.expires_at <= timezone.now():
+        raise PlanApprovalExpired(
+            "The approval has expired; approve the current plan version again before applying it.",
+            code="approval_expired",
+        )
     return ApprovalReference(
         plan_version=int(plan.plan_version),
         approval_hash=str(plan.approval_hash),
         approval_version=int(plan.approval_version),
         expires_at=plan.approval_expires_at,
+        approval_id=approved_row.id,
+        terms_hash=approved_row.terms_hash,
+        approved_legs=tuple(approved_row.approved_legs or ()),
+        price_tolerance_pct=approved_row.price_tolerance_pct,
+        quantity_tolerance=approved_row.quantity_tolerance,
+        max_quote_age_seconds=approved_row.max_quote_age_seconds,
+        policy_version=approved_row.policy_version,
+        classification_version=approved_row.classification_version,
     )
 
 
@@ -373,6 +517,7 @@ def approve_plan(
                 code="plan_stale",
             )
         expiry = _resolve_expiry(expires_at=expires_at, ttl_seconds=ttl_seconds, now=now)
+        terms = plan_approval_terms(plan)
         existing = approval_state(plan, now=now)
         if existing["state"] == "approved":
             raise PlanApprovalError(
@@ -392,6 +537,14 @@ def approve_plan(
             expires_at=expiry,
             note=str(note or "")[:4000],
             evaluated_portfolio_version=plan.evaluated_portfolio_version,
+            approved_legs=terms["legs"],
+            terms_hash=terms["terms_hash"],
+            price_tolerance_pct=Decimal(terms["price_tolerance_pct"]),
+            quantity_tolerance=Decimal(terms["quantity_tolerance"]),
+            max_quote_age_seconds=int(terms["max_quote_age_seconds"]),
+            policy_version=terms["policy_version"],
+            classification_version=terms["classification_version"],
+            allocation_policy_version=terms["allocation_policy_version"],
         )
         plan.approval_version = int(plan.plan_version)
         plan.approved_by = user if getattr(user, "pk", None) else None

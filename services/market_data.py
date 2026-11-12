@@ -55,7 +55,17 @@ class MarketDataError(RuntimeError):
 
 @dataclass(frozen=True)
 class PriceQuote:
-    """Normalised price observation."""
+    """Normalised price observation.
+
+    ``as_of`` is the instant the market observation was made. It is deliberately
+    nullable: a provider or an old cache row that does not say when the price
+    was observed has *unknown* provenance, and the execution policy treats that
+    as missing data. Filling it with ``now`` would turn a cache hit into a fresh
+    observation that never happened.
+
+    ``retrieved_at`` is when this process read the value. It is a different fact
+    from the observation time and is carried separately for exactly that reason.
+    """
 
     ticker: str
     symbol: str
@@ -63,7 +73,8 @@ class PriceQuote:
     previous_close: Decimal | None = None
     currency: str = "USD"
     source: str = "yfinance"  # yfinance | cache | fallback
-    as_of: datetime = field(default_factory=lambda: datetime.now(UTC))
+    as_of: datetime | None = None
+    retrieved_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     @property
     def change_pct(self) -> Decimal | None:
@@ -81,7 +92,8 @@ class PriceQuote:
             "change_pct": str(self.change_pct) if self.change_pct is not None else None,
             "currency": self.currency,
             "source": self.source,
-            "as_of": self.as_of.isoformat(),
+            "as_of": self.as_of.isoformat() if self.as_of else None,
+            "retrieved_at": self.retrieved_at.isoformat(),
         }
 
 
@@ -112,12 +124,23 @@ def _to_decimal(value: Any) -> Decimal | None:
 
 
 def _fetch_from_yfinance(symbol: str) -> PriceQuote | None:
-    """Blocking upstream fetch. Imported lazily to keep Django boot fast."""
+    """Blocking upstream fetch. Imported lazily to keep Django boot fast.
+
+    The daily history is consulted for its timestamp even when ``fast_info``
+    supplied the price. A daily close is a session, not an instant, so the
+    observation time is the session close in UTC; if the source supplied no
+    usable date, ``as_of`` stays ``None`` rather than being set to "now".
+    """
     import yfinance as yf  # local import: heavy, optional at import time
+
+    from services.quote_policy import session_close_utc
 
     ticker_obj = yf.Ticker(symbol)
     price: Decimal | None = None
     previous_close: Decimal | None = None
+    as_of: datetime | None = None
+    source = "yfinance"
+    history = None
 
     try:
         fast = ticker_obj.fast_info
@@ -126,25 +149,42 @@ def _fetch_from_yfinance(symbol: str) -> PriceQuote | None:
     except Exception as exc:
         logger.warning("yfinance fast_info failed for %s: %s", symbol, exc)
 
-    if price is None:
-        # Fallback: 5-day daily candles, last non-null close.
+    try:
         history = ticker_obj.history(period="5d", interval="1d", auto_adjust=False)
-        if history is not None and not history.empty:
-            closes = history["Close"].dropna()
-            if len(closes) >= 1:
+    except Exception as exc:
+        logger.warning("yfinance history failed for %s: %s", symbol, exc)
+        history = None
+
+    if history is not None and not history.empty:
+        closes = history["Close"].dropna()
+        if len(closes) >= 1:
+            if price is None:
                 price = _to_decimal(closes.iloc[-1])
+                source = "yfinance_daily_close"
+            last_index = closes.index[-1]
+            as_of = session_close_utc(last_index)
+            if as_of is not None and price is not None and source == "yfinance":
+                # The fast price belongs to the session whose close we recorded.
+                source = "yfinance_session_close"
             if len(closes) >= 2:
                 previous_close = _to_decimal(closes.iloc[-2])
 
     if price is None:
         return None
 
+    if as_of is None:
+        # No usable session timestamp. This is an observation with unknown time;
+        # callers must not treat it as fresh.
+        source = "yfinance_untimed"
+
     return PriceQuote(
         ticker=symbol,
         symbol=symbol,
         price=price,
         previous_close=previous_close,
-        source="yfinance",
+        source=source,
+        as_of=as_of,
+        retrieved_at=datetime.now(UTC),
     )
 
 
@@ -189,10 +229,9 @@ def get_latest_quote(
                     currency=cached.get("currency", "USD"),
                     source="cache",
                     as_of=(
-                        datetime.fromisoformat(cached["as_of"])
-                        if cached.get("as_of")
-                        else datetime.now(UTC)
+                        datetime.fromisoformat(cached["as_of"]) if cached.get("as_of") else None
                     ),
+                    retrieved_at=datetime.now(UTC),
                 )
             except (InvalidOperation, ValueError, TypeError):
                 logger.warning("Discarding malformed cached quote for %s", symbol)
@@ -219,7 +258,8 @@ def get_latest_quote(
                     "price": str(quote.price),
                     "previous_close": (str(quote.previous_close) if quote.previous_close else None),
                     "currency": quote.currency,
-                    "as_of": quote.as_of.isoformat(),
+                    "source": quote.source,
+                    "as_of": quote.as_of.isoformat() if quote.as_of else None,
                 },
                 ttl,
             )
@@ -233,6 +273,7 @@ def get_latest_quote(
             currency=quote.currency,
             source=quote.source,
             as_of=quote.as_of,
+            retrieved_at=quote.retrieved_at,
         )
 
     if fallback_price is not None and fallback_price > 0:
@@ -243,6 +284,10 @@ def get_latest_quote(
             price=Decimal(fallback_price).quantize(Decimal("0.01")),
             previous_close=None,
             source="fallback",
+            # A stored price has no market observation instant. Recording "now"
+            # here would make a planning crutch indistinguishable from a quote.
+            as_of=None,
+            retrieved_at=datetime.now(UTC),
         )
 
     logger.error("No market data available for %s", symbol)

@@ -33,8 +33,14 @@ from services.recommendations import (
 )
 
 
-def quote(price: str) -> PriceQuote:
-    return PriceQuote(ticker="AAPL", symbol="AAPL", price=Decimal(price))
+def quote(price: str, ticker: str = "AAPL") -> PriceQuote:
+    return PriceQuote(
+        ticker=ticker,
+        symbol=ticker,
+        price=Decimal(price),
+        source="test_market_data",
+        as_of=timezone.now(),
+    )
 
 
 def proposal(action: str = "BUY", amount: float = 2.0, sentiment: str = "BULLISH"):
@@ -138,33 +144,33 @@ class ApproveRecommendationTests(TestCase):
         self.assertIn("APPROVED by operator", log.action_taken)
 
     # -- the important ones: approval must NOT bypass the guard ------------
-    def test_price_spike_is_clamped_at_approval_time(self):
-        """A stale proposal must not slip past the allocation ceiling.
+    def test_a_price_move_beyond_tolerance_requires_a_new_approval(self):
+        """The $100 price the reviewer saw is the reference, not the new quote.
 
-        $2 x $100 = $200 fitted the 5% ($500) budget when the AI proposed it.
-        After a spike to $400 the same order is worth $800, so the guard clamps
-        it back down to the ceiling instead of executing the original size.
+        A move to $400 is far outside the default 2% tolerance: the new terms are
+        returned for a fresh approval and no fill is written under the old one.
         """
         with patch("services.recommendations.get_latest_quote", return_value=quote("400.00")):
             outcome = approve_recommendation(self.reco.id, via=DecidedVia.WEB)
 
-        self.assertTrue(outcome.executed)
-        tx = Transaction.objects.get()
-        self.assertLessEqual(tx.gross_value_usd, Decimal("500.00"))
-        self.assertLess(tx.amount, Decimal("2"))
-        # The stored recommendation reflects what actually executed.
+        self.assertFalse(outcome.executed)
+        self.assertTrue(outcome.requires_new_approval)
+        self.assertEqual(outcome.reason_code, "price_drift_requires_approval")
+        self.assertEqual(Transaction.objects.count(), 0)
         self.reco.refresh_from_db()
-        self.assertEqual(self.reco.notional_usd, tx.gross_value_usd)
+        self.assertEqual(self.reco.status, RecommendationStatus.PENDING)
+        self.assertEqual(self.reco.price, Decimal("400.00"))
+        self.assertEqual(self.reco.terms_version, 2)
 
     def test_a_tiny_budget_clamps_down_rather_than_rejecting(self):
         """The guard prefers a smaller valid trade over no trade at all."""
         self.portfolio.balance_usd = Decimal("10.00")
         self.portfolio.save(update_fields=["balance_usd"])
 
-        with patch("services.recommendations.get_latest_quote", return_value=quote("400.00")):
+        with patch("services.recommendations.get_latest_quote", return_value=quote("100.00")):
             outcome = approve_recommendation(self.reco.id, via=DecidedVia.WEB)
 
-        # 5% of $10 = a $0.50 ceiling, so the $800 order is clamped to fit it.
+        # 5% of $10 = a $0.50 ceiling; $200 at $100 is clamped to fit it.
         self.assertTrue(outcome.executed)
         tx = Transaction.objects.get()
         self.assertLessEqual(tx.gross_value_usd, Decimal("0.50"))
@@ -234,11 +240,14 @@ class ApproveRecommendationTests(TestCase):
 
     def test_double_approval_is_rejected(self):
         with patch("services.recommendations.get_latest_quote", return_value=quote("100.00")):
-            approve_recommendation(self.reco.id, via=DecidedVia.WEB)
+            first = approve_recommendation(self.reco.id, via=DecidedVia.WEB)
             second = approve_recommendation(self.reco.id, via=DecidedVia.WEB)
 
-        self.assertFalse(second.executed)
-        self.assertIn("already decided", second.message)
+        # A replay returns the original fill and run link; it never executes
+        # a second time or leaves the audit half-written.
+        self.assertTrue(second.executed)
+        self.assertEqual(second.reason_code, "already_executed")
+        self.assertEqual(second.transaction_id, first.transaction_id)
         self.assertEqual(Transaction.objects.count(), 1)
 
     def test_no_price_at_all_blocks_execution(self):
@@ -248,21 +257,22 @@ class ApproveRecommendationTests(TestCase):
 
         self.assertFalse(outcome.executed)
         self.assertEqual(outcome.recommendation.status, RecommendationStatus.BLOCKED)
-        self.assertIn("no reliable market price", outcome.guard_reason)
+        self.assertIn("No current quote", outcome.guard_reason)
+        self.assertEqual(outcome.reason_code, "missing_quote")
         self.assertEqual(Transaction.objects.count(), 0)
 
-    def test_provider_outage_falls_back_to_the_proposed_price(self):
-        """A market-data outage degrades to the proposal's own price, not a crash.
+    def test_provider_outage_does_not_promote_a_fallback_price_to_a_fill(self):
+        """A market-data outage must not turn the stored proposal into a quote.
 
-        This exercises the real fallback chain in ``services.market_data`` rather
-        than stubbing the public accessor.
+        The fallback is a planning estimate; a live approval refuses it and
+        records the blocked reason instead of executing at a guessed price.
         """
         with patch("services.market_data._fetch_from_yfinance", return_value=None):
             outcome = approve_recommendation(self.reco.id, via=DecidedVia.WEB)
 
-        self.assertTrue(outcome.executed)
-        tx = Transaction.objects.get()
-        self.assertEqual(tx.price, Decimal("100.00"))
+        self.assertFalse(outcome.executed)
+        self.assertIn("No current quote", outcome.guard_reason)
+        self.assertEqual(Transaction.objects.count(), 0)
 
 
 @override_settings(CACHES=TEST_CACHES)

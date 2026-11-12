@@ -242,6 +242,11 @@ class DecisionExecutionState(models.TextChoices):
     HELD = "held", "Hold, no trade"
     BLOCKED = "blocked", "Blocked by the guard"
     FAILED = "failed", "Execution failed"
+    #: A duplicate advisory proposal was suppressed because an actionable
+    #: recommendation already exists. This is a terminal no-trade outcome, not
+    #: a second approval request: leaving the new run ``awaiting_approval``
+    #: would wait for a decision that can never arrive.
+    SUPPRESSED = "suppressed", "Suppressed as a duplicate"
 
 
 class EvidenceSourceType(models.TextChoices):
@@ -418,6 +423,17 @@ class DecisionRun(models.Model):
         null=True,
         blank=True,
         related_name="decision_runs",
+    )
+
+    #: The actionable recommendation a suppressed duplicate run was linked to
+    #: for context. The recommendation's own lifecycle is never rewritten by a
+    #: suppressed sweep.
+    duplicate_recommendation = models.ForeignKey(
+        "core.TradeRecommendation",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="suppressed_duplicate_runs",
     )
 
     #: Set only by the fixture loader. It is what makes ``load_decision_fixtures``
@@ -848,7 +864,11 @@ class GuardRecord(models.Model):
     #: The portfolio state the guard evaluated. A clamp only means anything
     #: relative to the limits and balance in force at that moment.
     evaluated_portfolio_version = models.CharField(max_length=64)
-    quote_time = models.DateTimeField()
+    #: The market observation instant. Null is an explicit "unknown": a guard
+    #: evaluation of an untimed estimate must not be presented as a current mark.
+    quote_time = models.DateTimeField(null=True, blank=True)
+    quote_source = models.CharField(max_length=64, blank=True, default="")
+    quote_retrieved_at = models.DateTimeField(null=True, blank=True)
 
     status = models.CharField(max_length=10, choices=GuardStatus.choices, db_index=True)
     requested_quantity = models.DecimalField(max_digits=20, decimal_places=8)
@@ -988,3 +1008,93 @@ class OutcomeRecord(models.Model):
     @property
     def is_scored(self) -> bool:
         return self.maturity == OutcomeMaturity.EVALUATED and self.decision_return_pct is not None
+
+
+class ExecutionAttempt(models.Model):
+    """One durable attempt to resolve a decision, keyed by execution identity.
+
+    A ``Transaction`` answers "what fill exists?". This row answers the other
+    half: which run and recommendation that fill belongs to, which final guard
+    evaluation authorised it, which terminal event records the outcome, and
+    what terms the approval named. It is written in the same transaction as the
+    ledger row, so a crash cannot leave a fill whose audit was never recorded.
+
+    For a no-trade decision the row exists too, keyed by a stable terminal
+    identity. A replayed request therefore returns the original resolution
+    instead of inventing a second one.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    #: The stable identity of the execution request. Empty is not allowed: an
+    #: attempt with no key cannot be replayed and cannot be repaired by key.
+    execution_key = models.CharField(max_length=200, unique=True)
+    request_hash = models.CharField(max_length=64, blank=True, default="")
+    source = models.CharField(max_length=32, blank=True, default="")
+    approval_ref = models.CharField(max_length=200, blank=True, default="")
+    state = models.CharField(
+        max_length=24,
+        choices=DecisionExecutionState.choices,
+        db_index=True,
+        default=DecisionExecutionState.VALIDATING,
+    )
+    transaction = models.OneToOneField(
+        "core.Transaction",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="execution_attempt",
+    )
+    decision_run = models.ForeignKey(
+        DecisionRun,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="execution_attempts",
+    )
+    recommendation = models.ForeignKey(
+        "core.TradeRecommendation",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="execution_attempts",
+    )
+    guard_record = models.ForeignKey(
+        GuardRecord,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="execution_attempts",
+    )
+    terminal_event = models.OneToOneField(
+        "core.RunEvent",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="execution_attempt",
+    )
+    #: The exact terms the check was run under (approved side/quantity/reference
+    #: price/tolerance and observation provenance), as JSON-safe strings.
+    approved_terms = models.JSONField(default=dict, blank=True)
+    #: The final numerical checks, including the observation time each one used.
+    decision_detail = models.JSONField(default=dict, blank=True)
+    quote_observed_at = models.DateTimeField(null=True, blank=True)
+    quote_retrieved_at = models.DateTimeField(null=True, blank=True)
+    quote_source = models.CharField(max_length=64, blank=True, default="")
+    #: True when this attempt was created by a repair, so a reader never mistakes
+    #: a reconstructed row for one written by the original worker.
+    recovered = models.BooleanField(default=False)
+    detail = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Execution attempt"
+        verbose_name_plural = "Execution attempts"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["decision_run", "state"], name="attempt_run_state_idx"),
+            models.Index(fields=["recommendation", "state"], name="attempt_reco_state_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.execution_key} [{self.state}]"

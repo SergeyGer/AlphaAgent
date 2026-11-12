@@ -117,7 +117,9 @@ def record_guard_evaluation(
         "evaluated_portfolio_version": (
             evaluated_portfolio_version or guard_decision.evaluated_portfolio_version or "unknown"
         ),
-        "quote_time": quote_time or guard_decision.quote_time or timezone.now(),
+        "quote_time": quote_time or guard_decision.quote_time,
+        "quote_source": getattr(guard_decision, "quote_source", "") or "",
+        "quote_retrieved_at": getattr(guard_decision, "quote_retrieved_at", None),
         "status": _guard_status(guard_decision),
         "requested_quantity": requested,
         "allowed_quantity": allowed,
@@ -129,6 +131,13 @@ def record_guard_evaluation(
                 "reason": guard_decision.reason,
                 "notes": list(guard_decision.notes or []),
                 "quote_price": str(decision_price) if decision_price is not None else None,
+                "quote_source": getattr(guard_decision, "quote_source", "") or None,
+                "quote_retrieved_at": utc_iso(getattr(guard_decision, "quote_retrieved_at", None)),
+                "reference_terms": (
+                    guard_decision.reference_terms()
+                    if hasattr(guard_decision, "reference_terms")
+                    else {}
+                ),
             }
         ),
     }

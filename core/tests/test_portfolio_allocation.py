@@ -24,6 +24,7 @@ from core.allocation_models import PlanLegStatus, PlanStatus, PortfolioPlan, Por
 from core.decision_json import decimal_string
 from core.models import Asset, InstrumentClassification, Portfolio, Transaction
 from core.tests.helpers import TEST_CACHES, make_user
+from services.market_data import PriceQuote
 from services.portfolio_allocation import (
     PlanLegFailed,
     PlanStaleError,
@@ -58,6 +59,20 @@ D = Decimal
 CENT = D("0.01")
 ZERO = D("0")
 QUOTES = {"AAPL": D("100"), "MSFT": D("320"), "JPM": D("160"), "XYZ": D("90")}
+
+
+def timed_quotes(prices=None):
+    as_of = timezone.now()
+    return {
+        ticker: PriceQuote(
+            ticker=ticker,
+            symbol=ticker,
+            price=price,
+            source="test_market_data",
+            as_of=as_of,
+        )
+        for ticker, price in (prices or QUOTES).items()
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -1131,11 +1146,11 @@ class PlanLifecycleTests(AllocationFixture):
             proposal=self._proposal(),
             submission_key="apply-idempotent",
         )
-        application = apply_plan(plan.id, quotes=QUOTES)
+        application = apply_plan(plan.id, quotes=timed_quotes())
         self.assertFalse(application.already_applied)
         self.assertEqual(len(application.transactions), plan.legs.count())
         ledger_after_first = Transaction.objects.filter(portfolio=self.portfolio).count()
-        again = apply_plan(plan.id, quotes=QUOTES)
+        again = apply_plan(plan.id, quotes=timed_quotes())
         self.assertTrue(again.already_applied)
         self.assertEqual(
             Transaction.objects.filter(portfolio=self.portfolio).count(), ledger_after_first
@@ -1152,14 +1167,14 @@ class PlanLifecycleTests(AllocationFixture):
         self.portfolio.balance_usd = D("10100.00")
         self.portfolio.save(update_fields=["balance_usd"])
         with self.assertRaises(PlanStaleError):
-            apply_plan(plan.id, quotes=QUOTES)
+            apply_plan(plan.id, quotes=timed_quotes())
         plan.refresh_from_db()
         self.assertTrue(plan.revalidation_required)
         self.assertEqual(plan.status, PlanStatus.PROPOSED)
-        revalidated = revalidate_plan(plan.id, quotes=QUOTES)
+        revalidated = revalidate_plan(plan.id, quotes=timed_quotes())
         self.assertFalse(revalidated.revalidation_required)
         self.assertEqual(revalidated.revalidation_count, 1)
-        application = apply_plan(plan.id, quotes=QUOTES)
+        application = apply_plan(plan.id, quotes=timed_quotes())
         self.assertEqual(application.plan.status, PlanStatus.APPLIED)
 
     def test_a_plan_built_from_a_stale_snapshot_requires_revalidation(self):
@@ -1180,7 +1195,7 @@ class PlanLifecycleTests(AllocationFixture):
         )
         self.assertTrue(plan.revalidation_required)
         with self.assertRaises(PlanStaleError):
-            apply_plan(plan.id, quotes=QUOTES)
+            apply_plan(plan.id, quotes=timed_quotes())
         self.assertEqual(Transaction.objects.filter(portfolio=self.portfolio).count(), 0)
 
     def test_a_failed_leg_halts_the_plan_and_writes_no_ledger_row(self):
@@ -1191,7 +1206,7 @@ class PlanLifecycleTests(AllocationFixture):
             submission_key="failed-leg",
         )
         with self.assertRaises(PlanLegFailed) as caught:
-            apply_plan(plan.id, quotes={"MSFT": D("320"), "JPM": D("160")})
+            apply_plan(plan.id, quotes=timed_quotes({"MSFT": D("320"), "JPM": D("160")}))
         self.assertEqual(caught.exception.code, "price_unavailable")
         self.assertEqual(Transaction.objects.filter(portfolio=self.portfolio).count(), 0)
         plan.refresh_from_db()
@@ -1220,7 +1235,7 @@ class PlanLifecycleTests(AllocationFixture):
             proposal=proposal,
             submission_key="no-change",
         )
-        application = apply_plan(plan.id, quotes={"AAPL": D("100")})
+        application = apply_plan(plan.id, quotes=timed_quotes({"AAPL": D("100")}))
         self.assertEqual(application.plan.status, PlanStatus.NO_CHANGE)
         self.assertEqual(application.transactions, [])
         self.assertEqual(Transaction.objects.filter(portfolio=portfolio).count(), 0)
@@ -1290,6 +1305,7 @@ class ConcurrencyTests(TransactionTestCase):
             ),
         ]
         self.quotes = {"MSFT": D("100"), "JPM": D("100")}
+        self.apply_quotes = timed_quotes(self.quotes)
         snapshot = capture_allocation_snapshot(self.portfolio, quotes=self.quotes)
         self.brief = build_allocation_brief(
             self.portfolio,
@@ -1323,7 +1339,7 @@ class ConcurrencyTests(TransactionTestCase):
         threads = [
             threading.Thread(
                 target=_concurrent_apply,
-                args=(plan.id, self.quotes, barrier, results),
+                args=(plan.id, self.apply_quotes, barrier, results),
             )
             for plan in (plan_a, plan_b)
         ]
@@ -1359,7 +1375,7 @@ class ConcurrencyTests(TransactionTestCase):
         threads = [
             threading.Thread(
                 target=_concurrent_apply,
-                args=(plan.id, self.quotes, barrier, results),
+                args=(plan.id, self.apply_quotes, barrier, results),
             )
             for _ in range(2)
         ]
@@ -1391,14 +1407,14 @@ class ConcurrencyTests(TransactionTestCase):
         plan_b, _ = create_plan(
             self.portfolio, brief=self.brief, proposal=second, submission_key="cumulative-b"
         )
-        apply_plan(plan_a.id, quotes=self.quotes)
+        apply_plan(plan_a.id, quotes=self.apply_quotes)
         with self.assertRaises(PlanStaleError):
-            apply_plan(plan_b.id, quotes=self.quotes)
-        revalidated = revalidate_plan(plan_b.id, quotes=self.quotes)
+            apply_plan(plan_b.id, quotes=self.apply_quotes)
+        revalidated = revalidate_plan(plan_b.id, quotes=self.apply_quotes)
         # The second plan is re-derived against the post-first-plan state; it
         # cannot add the original 29% on top of what the first plan already bought.
         if revalidated.legs.exists():
-            apply_plan(plan_b.id, quotes=self.quotes)
+            apply_plan(plan_b.id, quotes=self.apply_quotes)
         portfolio = Portfolio.objects.get(pk=self.portfolio.pk)
         policy = AllocationPolicy.from_portfolio(portfolio)
         total_equity = portfolio.balance_usd + sum(

@@ -119,7 +119,13 @@ def fake_quote(ticker: str, *, fallback_price=None, use_cache=True):
     price = QUOTES.get(ticker.upper())
     if price is None:
         return None
-    return PriceQuote(ticker=ticker.upper(), symbol=ticker.upper(), price=price, source="test")
+    return PriceQuote(
+        ticker=ticker.upper(),
+        symbol=ticker.upper(),
+        price=price,
+        source="test_market_data",
+        as_of=timezone.now(),
+    )
 
 
 def stub_payload() -> dict:
@@ -585,7 +591,19 @@ class ReviewAndApprovalTests(AllocationWorkflowFixture):
         )
         self.assertEqual(approve.status_code, status.HTTP_200_OK, approve.data)
         original_approval = PlanApproval.objects.get(plan=plan)
-        revalidated = revalidate_plan(plan.id, quotes=QUOTES)
+        revalidated = revalidate_plan(
+            plan.id,
+            quotes={
+                ticker: PriceQuote(
+                    ticker=ticker,
+                    symbol=ticker,
+                    price=price,
+                    source="test_market_data",
+                    as_of=timezone.now(),
+                )
+                for ticker, price in QUOTES.items()
+            },
+        )
         revalidated.refresh_from_db()
         self.assertEqual(revalidated.plan_version, plan.plan_version + 1)
         self.assertEqual(revalidated.approval_version, 0)

@@ -46,6 +46,7 @@ def quote(price: str, *, as_of=None) -> PriceQuote:
 
 
 def make_portfolio_with(**kwargs) -> Portfolio:
+    kwargs.setdefault("autonomous", True)
     return make_portfolio(**kwargs)
 
 
@@ -469,7 +470,7 @@ class ChangedInputBetweenApprovalAndExecutionTests(TransactionTestCase):
                 "notes": [],
                 "reason": "hand-built",
                 "policy_version": "",
-                "quote_time": None,
+                "quote_time": timezone.now(),
                 "requested_amount": D("100"),
             },
         )()

@@ -146,11 +146,31 @@ def _execution_error_response(exc: Exception) -> Response:
         "The plan could not be executed. "
         f"The cause was logged on the server with correlation id {correlation}."
     )
+    code = getattr(exc, "code", None)
+    revised_terms = getattr(exc, "revised_terms", None)
+    payload_detail = detail
+    if revised_terms:
+        payload_detail = {
+            "detail": detail,
+            "revised_terms": revised_terms,
+            "requires_new_approval": True,
+        }
     if isinstance(exc, ExecutionRejected):
-        return error_response(status.HTTP_409_CONFLICT, detail)
+        return error_response(status.HTTP_409_CONFLICT, payload_detail, code=code)
     if isinstance(exc, ExecutionError):
-        return error_response(status.HTTP_422_UNPROCESSABLE_ENTITY, detail)
-    return error_response(status.HTTP_400_BAD_REQUEST, detail)
+        return error_response(status.HTTP_422_UNPROCESSABLE_ENTITY, payload_detail, code=code)
+    # PlanLegFailed / PlanReapprovalRequired / PlanStaleError carry a stable code
+    # and an operator-facing message. Returning the code is what lets a client
+    # tell a stale mark from a missing one without parsing prose.
+    if isinstance(
+        exc, (PlanLegFailed, PlanReapprovalRequired, PlanStaleError, PlanQuoteUnavailable)
+    ):
+        return error_response(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            str(exc),
+            code=getattr(exc, "code", None),
+        )
+    return error_response(status.HTTP_400_BAD_REQUEST, detail, code=code)
 
 
 def _plan_tickers(plan: PortfolioPlan) -> list[str]:
@@ -285,6 +305,15 @@ class PlanApproveView(APIView):
                     "decision": approval.decision,
                     "plan_version": approval.plan_version,
                     "approval_hash": approval.approval_hash,
+                    "terms_hash": approval.terms_hash,
+                    "approved_legs": approval.approved_legs,
+                    "price_tolerance_pct": (
+                        str(approval.price_tolerance_pct)
+                        if approval.price_tolerance_pct is not None
+                        else None
+                    ),
+                    "policy_version": approval.policy_version,
+                    "classification_version": approval.classification_version,
                     "decided_at": approval.decided_at,
                     "expires_at": approval.expires_at,
                     "note": approval.note,
@@ -379,7 +408,7 @@ class PlanRevalidateView(APIView):
         plan = _plan_for(request, plan_id)
         tickers = _plan_tickers(plan)
         collection = collect_quotes(plan.portfolio, tickers, allow_cost_fallback=False)
-        quotes = collection.quotes
+        quotes = collection.observations
         try:
             plan = revalidate_plan(plan.id, quotes=quotes)
         except (PlanStaleError, PlanReapprovalRequired, PlanNotApplicableError) as exc:
@@ -440,7 +469,7 @@ class PlanApplyView(APIView):
             }
         else:
             collection = collect_quotes(plan.portfolio, tickers, allow_cost_fallback=False)
-            quotes = collection.quotes
+            quotes = collection.observations
             input_info = collection.as_dict()
 
         # Validate the approval before the service so a missing approval is a
