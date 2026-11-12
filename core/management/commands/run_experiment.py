@@ -70,6 +70,15 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument(
+            "--force",
+            action="store_true",
+            help=(
+                "Re-run an (arm, opportunity) that already has a recorded run. Without "
+                "this the command is idempotent and reuses the existing row, which makes "
+                "a second execution look like it did work it did not do."
+            ),
+        )
+        parser.add_argument(
             "--output",
             default="",
             help="Write the comparison JSON here instead of stdout.",
@@ -100,6 +109,7 @@ class Command(BaseCommand):
                 opportunity_set=opportunity_set,
                 portfolio=portfolio,
                 provider_mode=options["provider"],
+                force=options["force"],
             )
         except ExecutionError as exc:
             raise CommandError(str(exc)) from exc

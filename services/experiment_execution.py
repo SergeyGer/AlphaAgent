@@ -617,6 +617,13 @@ def _cost_of_run(run: DecisionRun | None) -> dict:
     cost = metadata.get("cost_accounting") or {}
     usage = metadata.get("usage") or {}
     measured = cost.get("measured_tokens") or usage.get("measured_tokens") or {}
+    # The protocol writes the provider-reported counts to the run row as well as into
+    # metadata. When the usage-summary call fails, the metadata block records zeros
+    # while `input_tokens`/`output_tokens` still hold what the provider actually
+    # charged for - so prefer the row, and say which source was used.
+    row_in, row_out = getattr(run, "input_tokens", None), getattr(run, "output_tokens", None)
+    if not (measured.get("input") or measured.get("output")) and (row_in or row_out):
+        measured = {"input": row_in or 0, "output": row_out or 0, "source": "run_row"}
     estimated = cost.get("estimated_tokens") or usage.get("estimated_tokens") or {}
     billed = cost.get("billed_cost_usd", usage.get("billed_cost_usd"))
     price_table = cost.get("price_table_cost_usd", usage.get("price_table_cost_usd"))
@@ -689,6 +696,7 @@ def _run_arm_once(
     client,
     provider_mode: str,
     budget: ProtocolBudget | None = None,
+    force: bool = False,
 ) -> ArmRun:
     from services.debate_protocol import DebateProtocol
 
@@ -699,6 +707,11 @@ def _run_arm_once(
         fixture_id=fixture_id,
         protocol_version=ARM_PROTOCOLS[arm],
     )
+    if force:
+        # Delete only this arm's recorded row. The decision, guard and event rows
+        # cascade with it, which is the intent: this is a re-run, not an edit.
+        _existing_run(fixture_id) and DecisionRun.objects.filter(fixture_id=fixture_id).delete()
+
     existing = _existing_run(fixture_id)
     if existing is not None:
         result.run = existing
@@ -1685,6 +1698,7 @@ def execute_opportunity_set(
     portfolio: Portfolio,
     client=None,
     provider_mode: str = "auto",
+    force: bool = False,
     budget: ProtocolBudget | None = None,
     now: datetime | None = None,
 ) -> dict:
@@ -1749,6 +1763,7 @@ def execute_opportunity_set(
                     client=arm_client,
                     provider_mode=arm_mode[arm],
                     budget=budget,
+                    force=force,
                 )
             )
     arm_runs["V4"] = [
