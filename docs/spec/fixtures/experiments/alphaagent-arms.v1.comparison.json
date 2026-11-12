@@ -1,9 +1,21 @@
 {
-  "report_schema_version": "1.0",
-  "generated_at": "2026-11-11T15:47:38.996687Z",
+  "report_schema_version": "2.0",
+  "archive_format": "experiment_comparison.v2",
+  "generated_at": "2026-02-12T00:00:00Z",
   "opportunity_set_id": "alphaagent-arms.v1",
   "label": "V0-V3 protocol execution on one frozen opportunity set (engineering validation)",
   "provider_mode": "stub",
+  "synthetic": true,
+  "methods": {
+    "report_schema_version": "2.0",
+    "archive_format": "experiment_comparison.v2",
+    "simulation": "monotonic_event_clock.v1",
+    "fill_timing": "fill_applied_at_first_available_mark.v1",
+    "fill_rule": "first_executable_mark_at_or_after_decision.v1",
+    "accounting": "portfolio_accounting.v1",
+    "metric": "registered_signal_metric.v1",
+    "registered_metric_id": "mean_action_score_pct"
+  },
   "pre_registration": {
     "registered_at": "2026-02-02T10:00:00Z",
     "registered_by": "engineering",
@@ -27,27 +39,1237 @@
       "opportunities": true,
       "completed_arms": true,
       "primary_metric": {
-        "computed": false,
-        "reason": "The pre-registered primary metric is a forward-return signal metric. It needs matured OutcomeRecord rows, and this execution produced none: the opportunities are scheduled inside a historical window whose outcomes were not evaluated. The registration is published as written and the metric is null with this reason rather than replaced by a different number."
+        "computed": true,
+        "status": "computed",
+        "value": "0.4729",
+        "denominator": {
+          "definition": "decisions_with_a_matured_registered_horizon",
+          "scheduled": 12,
+          "usable": 8,
+          "excluded": 4,
+          "excluded_by_reason": {
+            "no_session_at_or_after_target": 4
+          },
+          "by_arm": {
+            "V0": {
+              "scheduled": 3,
+              "usable": 2,
+              "excluded": 1,
+              "value": "1.5556"
+            },
+            "V1": {
+              "scheduled": 3,
+              "usable": 2,
+              "excluded": 1,
+              "value": "0.0000"
+            },
+            "V2": {
+              "scheduled": 3,
+              "usable": 2,
+              "excluded": 1,
+              "value": "0.3360"
+            },
+            "V3": {
+              "scheduled": 3,
+              "usable": 2,
+              "excluded": 1,
+              "value": "0.0000"
+            }
+          },
+          "v4_excluded": true
+        },
+        "reason": null,
+        "missing_input": null
       }
     },
     "sample_gate": {
       "minimum_opportunities": 3,
       "minimum_completed_arms": 4,
+      "minimum_observations": 3,
       "opportunities": 3,
       "completed_arms": 4,
+      "observations": 8,
+      "observations_met": true,
       "met": true
     },
     "primary_metric_result": {
       "id": "mean_action_score_pct",
-      "value": null,
+      "family": "signal_diagnostics",
+      "horizon_days": 7,
+      "direction": "higher_is_better",
+      "description": "Mean signed action score at the 7-day horizon (BUY=forward, SELL=-forward, HOLD=0 by convention). Pre-registered before any arm ran; it needs matured outcomes and is null with that reason when they do not exist.",
       "unit": "percent",
-      "status": "not_computable",
-      "reason": "no_matured_outcomes",
-      "observations": 0
+      "method_version": "registered_signal_metric.v1",
+      "pre_registered": true,
+      "profitability_threshold": null,
+      "status": "computed",
+      "value": "0.4729",
+      "reason": null,
+      "missing_input": null,
+      "denominator": {
+        "definition": "decisions_with_a_matured_registered_horizon",
+        "scheduled": 12,
+        "usable": 8,
+        "excluded": 4,
+        "excluded_by_reason": {
+          "no_session_at_or_after_target": 4
+        },
+        "by_arm": {
+          "V0": {
+            "scheduled": 3,
+            "usable": 2,
+            "excluded": 1,
+            "value": "1.5556"
+          },
+          "V1": {
+            "scheduled": 3,
+            "usable": 2,
+            "excluded": 1,
+            "value": "0.0000"
+          },
+          "V2": {
+            "scheduled": 3,
+            "usable": 2,
+            "excluded": 1,
+            "value": "0.3360"
+          },
+          "V3": {
+            "scheduled": 3,
+            "usable": 2,
+            "excluded": 1,
+            "value": "0.0000"
+          }
+        },
+        "v4_excluded": true
+      },
+      "observations": 8,
+      "contributing_runs": 8,
+      "contributing_run_ids": [
+        "8b7f4ee4-ae1d-43cb-b9e2-c99ba4ab0155",
+        "d5e5f7a9-8c05-44de-a202-797ddd3203db",
+        "10cecf53-c19d-4126-ae0d-c16c8f12e73c",
+        "2c9124b5-521f-4846-98e7-5964917c57c1",
+        "2d491200-e31b-45d7-8ad3-76107cd98c2c",
+        "0a481591-0d52-4a69-a03d-5dc1c486ca45",
+        "978ad783-f825-402f-b5e2-6c43737905c3",
+        "06e77f19-4dd6-4efc-bc34-492892b620d0"
+      ],
+      "dispersion": {
+        "metric": "sample_standard_deviation_pct",
+        "std_dev_pct": "1.8329",
+        "min_pct": "-2.4390",
+        "max_pct": "3.1111",
+        "range_pct": "5.5501",
+        "observations": 8,
+        "reason": null
+      },
+      "interval": {
+        "method": "time_block_bootstrap",
+        "statistic": "mean",
+        "lower": "-0.6098",
+        "upper": "1.6396",
+        "confidence": "0.95",
+        "block_size": 1,
+        "resamples": 1000,
+        "seed": 0,
+        "observations": 8,
+        "reason": null
+      },
+      "by_arm": {
+        "V0": {
+          "arm": "V0",
+          "status": "computed",
+          "value": "1.5556",
+          "unit": "percent",
+          "observations": 2,
+          "scheduled_observations": 3,
+          "excluded_observations": 1,
+          "excluded_by_reason": {
+            "no_session_at_or_after_target": 1
+          },
+          "contributing_runs": [
+            "8b7f4ee4-ae1d-43cb-b9e2-c99ba4ab0155",
+            "d5e5f7a9-8c05-44de-a202-797ddd3203db"
+          ],
+          "observations_detail": [
+            {
+              "run_id": "8b7f4ee4-ae1d-43cb-b9e2-c99ba4ab0155",
+              "opportunity": "aapl-2026-02-03",
+              "ticker": "AAPL",
+              "action": "BUY",
+              "maturity": "evaluated",
+              "reason": null,
+              "price_at_decision": "225.0000",
+              "price_source": "snapshot_quote",
+              "target_at": "2026-02-10T14:30:00Z",
+              "price_at_horizon": "232.0000",
+              "price_observed_at": "2026-02-11T20:00:00Z",
+              "session_shift_days": 1,
+              "forward_return_pct": "3.1111",
+              "action_score_pct": "3.1111",
+              "directional_hit": true,
+              "hold_zero_convention": false
+            },
+            {
+              "run_id": "d5e5f7a9-8c05-44de-a202-797ddd3203db",
+              "opportunity": "msft-2026-02-04",
+              "ticker": "MSFT",
+              "action": "HOLD",
+              "maturity": "evaluated",
+              "reason": null,
+              "price_at_decision": "410.0000",
+              "price_source": "snapshot_quote",
+              "target_at": "2026-02-11T14:30:00Z",
+              "price_at_horizon": "400.0000",
+              "price_observed_at": "2026-02-11T20:00:00Z",
+              "session_shift_days": 0,
+              "forward_return_pct": "-2.4390",
+              "action_score_pct": "0.0000",
+              "directional_hit": null,
+              "hold_zero_convention": true
+            },
+            {
+              "run_id": "f4d38715-5d09-4ef1-b6c5-1eecd6d31572",
+              "opportunity": "tsla-2026-02-05",
+              "ticker": "TSLA",
+              "action": "HOLD",
+              "maturity": "unavailable",
+              "reason": "no_session_at_or_after_target",
+              "price_at_decision": "250.0000",
+              "price_source": "snapshot_quote"
+            }
+          ],
+          "dispersion": {
+            "metric": "sample_standard_deviation_pct",
+            "std_dev_pct": "2.1999",
+            "min_pct": "0.0000",
+            "max_pct": "3.1111",
+            "range_pct": "3.1111",
+            "observations": 2,
+            "reason": null
+          },
+          "interval": {
+            "method": "time_block_bootstrap",
+            "statistic": "mean",
+            "lower": "0.0000",
+            "upper": "3.1111",
+            "confidence": "0.95",
+            "block_size": 1,
+            "resamples": 1000,
+            "seed": 0,
+            "observations": 2,
+            "reason": null
+          },
+          "reason": null
+        },
+        "V1": {
+          "arm": "V1",
+          "status": "computed",
+          "value": "0.0000",
+          "unit": "percent",
+          "observations": 2,
+          "scheduled_observations": 3,
+          "excluded_observations": 1,
+          "excluded_by_reason": {
+            "no_session_at_or_after_target": 1
+          },
+          "contributing_runs": [
+            "10cecf53-c19d-4126-ae0d-c16c8f12e73c",
+            "2c9124b5-521f-4846-98e7-5964917c57c1"
+          ],
+          "observations_detail": [
+            {
+              "run_id": "10cecf53-c19d-4126-ae0d-c16c8f12e73c",
+              "opportunity": "aapl-2026-02-03",
+              "ticker": "AAPL",
+              "action": "HOLD",
+              "maturity": "evaluated",
+              "reason": null,
+              "price_at_decision": "225.0000",
+              "price_source": "snapshot_quote",
+              "target_at": "2026-02-10T14:30:00Z",
+              "price_at_horizon": "232.0000",
+              "price_observed_at": "2026-02-11T20:00:00Z",
+              "session_shift_days": 1,
+              "forward_return_pct": "3.1111",
+              "action_score_pct": "0.0000",
+              "directional_hit": null,
+              "hold_zero_convention": true
+            },
+            {
+              "run_id": "2c9124b5-521f-4846-98e7-5964917c57c1",
+              "opportunity": "msft-2026-02-04",
+              "ticker": "MSFT",
+              "action": "HOLD",
+              "maturity": "evaluated",
+              "reason": null,
+              "price_at_decision": "410.0000",
+              "price_source": "snapshot_quote",
+              "target_at": "2026-02-11T14:30:00Z",
+              "price_at_horizon": "400.0000",
+              "price_observed_at": "2026-02-11T20:00:00Z",
+              "session_shift_days": 0,
+              "forward_return_pct": "-2.4390",
+              "action_score_pct": "0.0000",
+              "directional_hit": null,
+              "hold_zero_convention": true
+            },
+            {
+              "run_id": "365be93d-e06f-4a3a-b196-d4510379378a",
+              "opportunity": "tsla-2026-02-05",
+              "ticker": "TSLA",
+              "action": "HOLD",
+              "maturity": "unavailable",
+              "reason": "no_session_at_or_after_target",
+              "price_at_decision": "250.0000",
+              "price_source": "snapshot_quote"
+            }
+          ],
+          "dispersion": {
+            "metric": "sample_standard_deviation_pct",
+            "std_dev_pct": "0.0000",
+            "min_pct": "0.0000",
+            "max_pct": "0.0000",
+            "range_pct": "0.0000",
+            "observations": 2,
+            "reason": null
+          },
+          "interval": {
+            "method": "time_block_bootstrap",
+            "statistic": "mean",
+            "lower": "0.0000",
+            "upper": "0.0000",
+            "confidence": "0.95",
+            "block_size": 1,
+            "resamples": 1000,
+            "seed": 0,
+            "observations": 2,
+            "reason": null
+          },
+          "reason": null
+        },
+        "V2": {
+          "arm": "V2",
+          "status": "computed",
+          "value": "0.3360",
+          "unit": "percent",
+          "observations": 2,
+          "scheduled_observations": 3,
+          "excluded_observations": 1,
+          "excluded_by_reason": {
+            "no_session_at_or_after_target": 1
+          },
+          "contributing_runs": [
+            "2d491200-e31b-45d7-8ad3-76107cd98c2c",
+            "0a481591-0d52-4a69-a03d-5dc1c486ca45"
+          ],
+          "observations_detail": [
+            {
+              "run_id": "2d491200-e31b-45d7-8ad3-76107cd98c2c",
+              "opportunity": "aapl-2026-02-03",
+              "ticker": "AAPL",
+              "action": "BUY",
+              "maturity": "evaluated",
+              "reason": null,
+              "price_at_decision": "225.0000",
+              "price_source": "snapshot_quote",
+              "target_at": "2026-02-10T14:30:00Z",
+              "price_at_horizon": "232.0000",
+              "price_observed_at": "2026-02-11T20:00:00Z",
+              "session_shift_days": 1,
+              "forward_return_pct": "3.1111",
+              "action_score_pct": "3.1111",
+              "directional_hit": true,
+              "hold_zero_convention": false
+            },
+            {
+              "run_id": "0a481591-0d52-4a69-a03d-5dc1c486ca45",
+              "opportunity": "msft-2026-02-04",
+              "ticker": "MSFT",
+              "action": "BUY",
+              "maturity": "evaluated",
+              "reason": null,
+              "price_at_decision": "410.0000",
+              "price_source": "snapshot_quote",
+              "target_at": "2026-02-11T14:30:00Z",
+              "price_at_horizon": "400.0000",
+              "price_observed_at": "2026-02-11T20:00:00Z",
+              "session_shift_days": 0,
+              "forward_return_pct": "-2.4390",
+              "action_score_pct": "-2.4390",
+              "directional_hit": false,
+              "hold_zero_convention": false
+            },
+            {
+              "run_id": "87d66c97-ff88-4aff-bbaa-e01966d97cd2",
+              "opportunity": "tsla-2026-02-05",
+              "ticker": "TSLA",
+              "action": "BUY",
+              "maturity": "unavailable",
+              "reason": "no_session_at_or_after_target",
+              "price_at_decision": "250.0000",
+              "price_source": "snapshot_quote"
+            }
+          ],
+          "dispersion": {
+            "metric": "sample_standard_deviation_pct",
+            "std_dev_pct": "3.9245",
+            "min_pct": "-2.4390",
+            "max_pct": "3.1111",
+            "range_pct": "5.5501",
+            "observations": 2,
+            "reason": null
+          },
+          "interval": {
+            "method": "time_block_bootstrap",
+            "statistic": "mean",
+            "lower": "-2.4390",
+            "upper": "3.1111",
+            "confidence": "0.95",
+            "block_size": 1,
+            "resamples": 1000,
+            "seed": 0,
+            "observations": 2,
+            "reason": null
+          },
+          "reason": null
+        },
+        "V3": {
+          "arm": "V3",
+          "status": "computed",
+          "value": "0.0000",
+          "unit": "percent",
+          "observations": 2,
+          "scheduled_observations": 3,
+          "excluded_observations": 1,
+          "excluded_by_reason": {
+            "no_session_at_or_after_target": 1
+          },
+          "contributing_runs": [
+            "978ad783-f825-402f-b5e2-6c43737905c3",
+            "06e77f19-4dd6-4efc-bc34-492892b620d0"
+          ],
+          "observations_detail": [
+            {
+              "run_id": "978ad783-f825-402f-b5e2-6c43737905c3",
+              "opportunity": "aapl-2026-02-03",
+              "ticker": "AAPL",
+              "action": "HOLD",
+              "maturity": "evaluated",
+              "reason": null,
+              "price_at_decision": "225.0000",
+              "price_source": "snapshot_quote",
+              "target_at": "2026-02-10T14:30:00Z",
+              "price_at_horizon": "232.0000",
+              "price_observed_at": "2026-02-11T20:00:00Z",
+              "session_shift_days": 1,
+              "forward_return_pct": "3.1111",
+              "action_score_pct": "0.0000",
+              "directional_hit": null,
+              "hold_zero_convention": true
+            },
+            {
+              "run_id": "06e77f19-4dd6-4efc-bc34-492892b620d0",
+              "opportunity": "msft-2026-02-04",
+              "ticker": "MSFT",
+              "action": "HOLD",
+              "maturity": "evaluated",
+              "reason": null,
+              "price_at_decision": "410.0000",
+              "price_source": "snapshot_quote",
+              "target_at": "2026-02-11T14:30:00Z",
+              "price_at_horizon": "400.0000",
+              "price_observed_at": "2026-02-11T20:00:00Z",
+              "session_shift_days": 0,
+              "forward_return_pct": "-2.4390",
+              "action_score_pct": "0.0000",
+              "directional_hit": null,
+              "hold_zero_convention": true
+            },
+            {
+              "run_id": "36754aef-58a3-4809-a0e1-6707ad4a744c",
+              "opportunity": "tsla-2026-02-05",
+              "ticker": "TSLA",
+              "action": "HOLD",
+              "maturity": "unavailable",
+              "reason": "no_session_at_or_after_target",
+              "price_at_decision": "250.0000",
+              "price_source": "snapshot_quote"
+            }
+          ],
+          "dispersion": {
+            "metric": "sample_standard_deviation_pct",
+            "std_dev_pct": "0.0000",
+            "min_pct": "0.0000",
+            "max_pct": "0.0000",
+            "range_pct": "0.0000",
+            "observations": 2,
+            "reason": null
+          },
+          "interval": {
+            "method": "time_block_bootstrap",
+            "statistic": "mean",
+            "lower": "0.0000",
+            "upper": "0.0000",
+            "confidence": "0.95",
+            "block_size": 1,
+            "resamples": 1000,
+            "seed": 0,
+            "observations": 2,
+            "reason": null
+          },
+          "reason": null
+        }
+      }
+    }
+  },
+  "primary_metric_result": {
+    "id": "mean_action_score_pct",
+    "family": "signal_diagnostics",
+    "horizon_days": 7,
+    "direction": "higher_is_better",
+    "description": "Mean signed action score at the 7-day horizon (BUY=forward, SELL=-forward, HOLD=0 by convention). Pre-registered before any arm ran; it needs matured outcomes and is null with that reason when they do not exist.",
+    "unit": "percent",
+    "method_version": "registered_signal_metric.v1",
+    "pre_registered": true,
+    "profitability_threshold": null,
+    "status": "computed",
+    "value": "0.4729",
+    "reason": null,
+    "missing_input": null,
+    "denominator": {
+      "definition": "decisions_with_a_matured_registered_horizon",
+      "scheduled": 12,
+      "usable": 8,
+      "excluded": 4,
+      "excluded_by_reason": {
+        "no_session_at_or_after_target": 4
+      },
+      "by_arm": {
+        "V0": {
+          "scheduled": 3,
+          "usable": 2,
+          "excluded": 1,
+          "value": "1.5556"
+        },
+        "V1": {
+          "scheduled": 3,
+          "usable": 2,
+          "excluded": 1,
+          "value": "0.0000"
+        },
+        "V2": {
+          "scheduled": 3,
+          "usable": 2,
+          "excluded": 1,
+          "value": "0.3360"
+        },
+        "V3": {
+          "scheduled": 3,
+          "usable": 2,
+          "excluded": 1,
+          "value": "0.0000"
+        }
+      },
+      "v4_excluded": true
+    },
+    "observations": 8,
+    "contributing_runs": 8,
+    "contributing_run_ids": [
+      "8b7f4ee4-ae1d-43cb-b9e2-c99ba4ab0155",
+      "d5e5f7a9-8c05-44de-a202-797ddd3203db",
+      "10cecf53-c19d-4126-ae0d-c16c8f12e73c",
+      "2c9124b5-521f-4846-98e7-5964917c57c1",
+      "2d491200-e31b-45d7-8ad3-76107cd98c2c",
+      "0a481591-0d52-4a69-a03d-5dc1c486ca45",
+      "978ad783-f825-402f-b5e2-6c43737905c3",
+      "06e77f19-4dd6-4efc-bc34-492892b620d0"
+    ],
+    "dispersion": {
+      "metric": "sample_standard_deviation_pct",
+      "std_dev_pct": "1.8329",
+      "min_pct": "-2.4390",
+      "max_pct": "3.1111",
+      "range_pct": "5.5501",
+      "observations": 8,
+      "reason": null
+    },
+    "interval": {
+      "method": "time_block_bootstrap",
+      "statistic": "mean",
+      "lower": "-0.6098",
+      "upper": "1.6396",
+      "confidence": "0.95",
+      "block_size": 1,
+      "resamples": 1000,
+      "seed": 0,
+      "observations": 8,
+      "reason": null
+    },
+    "by_arm": {
+      "V0": {
+        "arm": "V0",
+        "status": "computed",
+        "value": "1.5556",
+        "unit": "percent",
+        "observations": 2,
+        "scheduled_observations": 3,
+        "excluded_observations": 1,
+        "excluded_by_reason": {
+          "no_session_at_or_after_target": 1
+        },
+        "contributing_runs": [
+          "8b7f4ee4-ae1d-43cb-b9e2-c99ba4ab0155",
+          "d5e5f7a9-8c05-44de-a202-797ddd3203db"
+        ],
+        "observations_detail": [
+          {
+            "run_id": "8b7f4ee4-ae1d-43cb-b9e2-c99ba4ab0155",
+            "opportunity": "aapl-2026-02-03",
+            "ticker": "AAPL",
+            "action": "BUY",
+            "maturity": "evaluated",
+            "reason": null,
+            "price_at_decision": "225.0000",
+            "price_source": "snapshot_quote",
+            "target_at": "2026-02-10T14:30:00Z",
+            "price_at_horizon": "232.0000",
+            "price_observed_at": "2026-02-11T20:00:00Z",
+            "session_shift_days": 1,
+            "forward_return_pct": "3.1111",
+            "action_score_pct": "3.1111",
+            "directional_hit": true,
+            "hold_zero_convention": false
+          },
+          {
+            "run_id": "d5e5f7a9-8c05-44de-a202-797ddd3203db",
+            "opportunity": "msft-2026-02-04",
+            "ticker": "MSFT",
+            "action": "HOLD",
+            "maturity": "evaluated",
+            "reason": null,
+            "price_at_decision": "410.0000",
+            "price_source": "snapshot_quote",
+            "target_at": "2026-02-11T14:30:00Z",
+            "price_at_horizon": "400.0000",
+            "price_observed_at": "2026-02-11T20:00:00Z",
+            "session_shift_days": 0,
+            "forward_return_pct": "-2.4390",
+            "action_score_pct": "0.0000",
+            "directional_hit": null,
+            "hold_zero_convention": true
+          },
+          {
+            "run_id": "f4d38715-5d09-4ef1-b6c5-1eecd6d31572",
+            "opportunity": "tsla-2026-02-05",
+            "ticker": "TSLA",
+            "action": "HOLD",
+            "maturity": "unavailable",
+            "reason": "no_session_at_or_after_target",
+            "price_at_decision": "250.0000",
+            "price_source": "snapshot_quote"
+          }
+        ],
+        "dispersion": {
+          "metric": "sample_standard_deviation_pct",
+          "std_dev_pct": "2.1999",
+          "min_pct": "0.0000",
+          "max_pct": "3.1111",
+          "range_pct": "3.1111",
+          "observations": 2,
+          "reason": null
+        },
+        "interval": {
+          "method": "time_block_bootstrap",
+          "statistic": "mean",
+          "lower": "0.0000",
+          "upper": "3.1111",
+          "confidence": "0.95",
+          "block_size": 1,
+          "resamples": 1000,
+          "seed": 0,
+          "observations": 2,
+          "reason": null
+        },
+        "reason": null
+      },
+      "V1": {
+        "arm": "V1",
+        "status": "computed",
+        "value": "0.0000",
+        "unit": "percent",
+        "observations": 2,
+        "scheduled_observations": 3,
+        "excluded_observations": 1,
+        "excluded_by_reason": {
+          "no_session_at_or_after_target": 1
+        },
+        "contributing_runs": [
+          "10cecf53-c19d-4126-ae0d-c16c8f12e73c",
+          "2c9124b5-521f-4846-98e7-5964917c57c1"
+        ],
+        "observations_detail": [
+          {
+            "run_id": "10cecf53-c19d-4126-ae0d-c16c8f12e73c",
+            "opportunity": "aapl-2026-02-03",
+            "ticker": "AAPL",
+            "action": "HOLD",
+            "maturity": "evaluated",
+            "reason": null,
+            "price_at_decision": "225.0000",
+            "price_source": "snapshot_quote",
+            "target_at": "2026-02-10T14:30:00Z",
+            "price_at_horizon": "232.0000",
+            "price_observed_at": "2026-02-11T20:00:00Z",
+            "session_shift_days": 1,
+            "forward_return_pct": "3.1111",
+            "action_score_pct": "0.0000",
+            "directional_hit": null,
+            "hold_zero_convention": true
+          },
+          {
+            "run_id": "2c9124b5-521f-4846-98e7-5964917c57c1",
+            "opportunity": "msft-2026-02-04",
+            "ticker": "MSFT",
+            "action": "HOLD",
+            "maturity": "evaluated",
+            "reason": null,
+            "price_at_decision": "410.0000",
+            "price_source": "snapshot_quote",
+            "target_at": "2026-02-11T14:30:00Z",
+            "price_at_horizon": "400.0000",
+            "price_observed_at": "2026-02-11T20:00:00Z",
+            "session_shift_days": 0,
+            "forward_return_pct": "-2.4390",
+            "action_score_pct": "0.0000",
+            "directional_hit": null,
+            "hold_zero_convention": true
+          },
+          {
+            "run_id": "365be93d-e06f-4a3a-b196-d4510379378a",
+            "opportunity": "tsla-2026-02-05",
+            "ticker": "TSLA",
+            "action": "HOLD",
+            "maturity": "unavailable",
+            "reason": "no_session_at_or_after_target",
+            "price_at_decision": "250.0000",
+            "price_source": "snapshot_quote"
+          }
+        ],
+        "dispersion": {
+          "metric": "sample_standard_deviation_pct",
+          "std_dev_pct": "0.0000",
+          "min_pct": "0.0000",
+          "max_pct": "0.0000",
+          "range_pct": "0.0000",
+          "observations": 2,
+          "reason": null
+        },
+        "interval": {
+          "method": "time_block_bootstrap",
+          "statistic": "mean",
+          "lower": "0.0000",
+          "upper": "0.0000",
+          "confidence": "0.95",
+          "block_size": 1,
+          "resamples": 1000,
+          "seed": 0,
+          "observations": 2,
+          "reason": null
+        },
+        "reason": null
+      },
+      "V2": {
+        "arm": "V2",
+        "status": "computed",
+        "value": "0.3360",
+        "unit": "percent",
+        "observations": 2,
+        "scheduled_observations": 3,
+        "excluded_observations": 1,
+        "excluded_by_reason": {
+          "no_session_at_or_after_target": 1
+        },
+        "contributing_runs": [
+          "2d491200-e31b-45d7-8ad3-76107cd98c2c",
+          "0a481591-0d52-4a69-a03d-5dc1c486ca45"
+        ],
+        "observations_detail": [
+          {
+            "run_id": "2d491200-e31b-45d7-8ad3-76107cd98c2c",
+            "opportunity": "aapl-2026-02-03",
+            "ticker": "AAPL",
+            "action": "BUY",
+            "maturity": "evaluated",
+            "reason": null,
+            "price_at_decision": "225.0000",
+            "price_source": "snapshot_quote",
+            "target_at": "2026-02-10T14:30:00Z",
+            "price_at_horizon": "232.0000",
+            "price_observed_at": "2026-02-11T20:00:00Z",
+            "session_shift_days": 1,
+            "forward_return_pct": "3.1111",
+            "action_score_pct": "3.1111",
+            "directional_hit": true,
+            "hold_zero_convention": false
+          },
+          {
+            "run_id": "0a481591-0d52-4a69-a03d-5dc1c486ca45",
+            "opportunity": "msft-2026-02-04",
+            "ticker": "MSFT",
+            "action": "BUY",
+            "maturity": "evaluated",
+            "reason": null,
+            "price_at_decision": "410.0000",
+            "price_source": "snapshot_quote",
+            "target_at": "2026-02-11T14:30:00Z",
+            "price_at_horizon": "400.0000",
+            "price_observed_at": "2026-02-11T20:00:00Z",
+            "session_shift_days": 0,
+            "forward_return_pct": "-2.4390",
+            "action_score_pct": "-2.4390",
+            "directional_hit": false,
+            "hold_zero_convention": false
+          },
+          {
+            "run_id": "87d66c97-ff88-4aff-bbaa-e01966d97cd2",
+            "opportunity": "tsla-2026-02-05",
+            "ticker": "TSLA",
+            "action": "BUY",
+            "maturity": "unavailable",
+            "reason": "no_session_at_or_after_target",
+            "price_at_decision": "250.0000",
+            "price_source": "snapshot_quote"
+          }
+        ],
+        "dispersion": {
+          "metric": "sample_standard_deviation_pct",
+          "std_dev_pct": "3.9245",
+          "min_pct": "-2.4390",
+          "max_pct": "3.1111",
+          "range_pct": "5.5501",
+          "observations": 2,
+          "reason": null
+        },
+        "interval": {
+          "method": "time_block_bootstrap",
+          "statistic": "mean",
+          "lower": "-2.4390",
+          "upper": "3.1111",
+          "confidence": "0.95",
+          "block_size": 1,
+          "resamples": 1000,
+          "seed": 0,
+          "observations": 2,
+          "reason": null
+        },
+        "reason": null
+      },
+      "V3": {
+        "arm": "V3",
+        "status": "computed",
+        "value": "0.0000",
+        "unit": "percent",
+        "observations": 2,
+        "scheduled_observations": 3,
+        "excluded_observations": 1,
+        "excluded_by_reason": {
+          "no_session_at_or_after_target": 1
+        },
+        "contributing_runs": [
+          "978ad783-f825-402f-b5e2-6c43737905c3",
+          "06e77f19-4dd6-4efc-bc34-492892b620d0"
+        ],
+        "observations_detail": [
+          {
+            "run_id": "978ad783-f825-402f-b5e2-6c43737905c3",
+            "opportunity": "aapl-2026-02-03",
+            "ticker": "AAPL",
+            "action": "HOLD",
+            "maturity": "evaluated",
+            "reason": null,
+            "price_at_decision": "225.0000",
+            "price_source": "snapshot_quote",
+            "target_at": "2026-02-10T14:30:00Z",
+            "price_at_horizon": "232.0000",
+            "price_observed_at": "2026-02-11T20:00:00Z",
+            "session_shift_days": 1,
+            "forward_return_pct": "3.1111",
+            "action_score_pct": "0.0000",
+            "directional_hit": null,
+            "hold_zero_convention": true
+          },
+          {
+            "run_id": "06e77f19-4dd6-4efc-bc34-492892b620d0",
+            "opportunity": "msft-2026-02-04",
+            "ticker": "MSFT",
+            "action": "HOLD",
+            "maturity": "evaluated",
+            "reason": null,
+            "price_at_decision": "410.0000",
+            "price_source": "snapshot_quote",
+            "target_at": "2026-02-11T14:30:00Z",
+            "price_at_horizon": "400.0000",
+            "price_observed_at": "2026-02-11T20:00:00Z",
+            "session_shift_days": 0,
+            "forward_return_pct": "-2.4390",
+            "action_score_pct": "0.0000",
+            "directional_hit": null,
+            "hold_zero_convention": true
+          },
+          {
+            "run_id": "36754aef-58a3-4809-a0e1-6707ad4a744c",
+            "opportunity": "tsla-2026-02-05",
+            "ticker": "TSLA",
+            "action": "HOLD",
+            "maturity": "unavailable",
+            "reason": "no_session_at_or_after_target",
+            "price_at_decision": "250.0000",
+            "price_source": "snapshot_quote"
+          }
+        ],
+        "dispersion": {
+          "metric": "sample_standard_deviation_pct",
+          "std_dev_pct": "0.0000",
+          "min_pct": "0.0000",
+          "max_pct": "0.0000",
+          "range_pct": "0.0000",
+          "observations": 2,
+          "reason": null
+        },
+        "interval": {
+          "method": "time_block_bootstrap",
+          "statistic": "mean",
+          "lower": "0.0000",
+          "upper": "0.0000",
+          "confidence": "0.95",
+          "block_size": 1,
+          "resamples": 1000,
+          "seed": 0,
+          "observations": 2,
+          "reason": null
+        },
+        "reason": null
+      }
     }
   },
   "frozen": {
+    "opportunity_set": {
+      "schema_version": "1.0",
+      "opportunity_set_id": "alphaagent-arms.v1",
+      "label": "V0-V3 protocol execution on one frozen opportunity set (engineering validation)",
+      "description": "Three scheduled decisions (AAPL, MSFT, TSLA) over one frozen window. Every implemented arm runs against the same snapshot per opportunity, the same marks, the same risk rules and the same accounting method. The prices, the quotes and any scripted model reply are authored; this is not realised history and it makes no comparative protocol claim.",
+      "declared_at": "2026-02-02T10:05:00Z",
+      "observation_window": {
+        "start": "2026-02-03T00:00:00Z",
+        "end": "2026-02-12T00:00:00Z"
+      },
+      "as_of": "2026-02-12T00:00:00Z",
+      "pre_registration": {
+        "registered_at": "2026-02-02T10:00:00Z",
+        "registered_by": "engineering",
+        "sample_plan": {
+          "minimum_opportunities": 3,
+          "minimum_completed_arms": 4,
+          "minimum_observations": 3,
+          "note": "Below this the exercise is engineering validation only; the report says so and asserts no profitability threshold."
+        },
+        "primary_metric": {
+          "id": "mean_action_score_pct",
+          "family": "signal_diagnostics",
+          "horizon_days": 7,
+          "direction": "higher_is_better",
+          "description": "Mean signed action score at the 7-day horizon (BUY=forward, SELL=-forward, HOLD=0 by convention). Pre-registered before any arm ran; it needs matured outcomes and is null with that reason when they do not exist."
+        },
+        "cost_ceiling_usd": "1.00",
+        "acceptable_drawdown_pct": "10.00"
+      },
+      "starting_state": {
+        "cash": "10000.00",
+        "positions": {}
+      },
+      "execution_assumptions": {
+        "guard_policy_version": "guard.v1",
+        "fill_rule": "first_executable_mark_at_or_after_decision.v1",
+        "slippage_bps": "0",
+        "fee_bps": "0",
+        "fee_model": "declared zero fee: no broker integration exists, and a declared zero is labelled as an assumption rather than a recorded charge"
+      },
+      "risk_rules": {
+        "max_trade_allocation_pct": "5.00",
+        "max_portfolio_exposure_pct": "90.00",
+        "max_ticker_concentration_pct": "30.00",
+        "max_sector_concentration_pct": "40.00",
+        "max_turnover_pct": "25.00",
+        "min_cash_buffer_pct": "10.00",
+        "daily_loss_limit_usd": "500.00"
+      },
+      "benchmark": {
+        "ticker": "SPY",
+        "asset_class": "equity",
+        "selection_rule": "declared_equity_benchmark"
+      },
+      "marks": [
+        {
+          "ticker": "AAPL",
+          "at": "2026-02-03T14:30:00Z",
+          "observed_at": "2026-02-03T14:30:00Z",
+          "price": "225.00",
+          "source": "declared_fixture_mark",
+          "provenance": "authored opportunity-set mark, not a fetched close"
+        },
+        {
+          "ticker": "AAPL",
+          "at": "2026-02-03T14:35:00Z",
+          "observed_at": "2026-02-03T14:35:00Z",
+          "price": "225.50",
+          "source": "declared_fixture_mark",
+          "provenance": "authored fill mark"
+        },
+        {
+          "ticker": "AAPL",
+          "at": "2026-02-11T20:00:00Z",
+          "observed_at": "2026-02-11T20:00:00Z",
+          "price": "232.00",
+          "source": "declared_fixture_mark",
+          "provenance": "authored closing mark"
+        },
+        {
+          "ticker": "MSFT",
+          "at": "2026-02-04T14:30:00Z",
+          "observed_at": "2026-02-04T14:30:00Z",
+          "price": "410.00",
+          "source": "declared_fixture_mark",
+          "provenance": "authored opportunity-set mark, not a fetched close"
+        },
+        {
+          "ticker": "MSFT",
+          "at": "2026-02-04T14:35:00Z",
+          "observed_at": "2026-02-04T14:35:00Z",
+          "price": "411.00",
+          "source": "declared_fixture_mark",
+          "provenance": "authored fill mark"
+        },
+        {
+          "ticker": "MSFT",
+          "at": "2026-02-11T20:00:00Z",
+          "observed_at": "2026-02-11T20:00:00Z",
+          "price": "400.00",
+          "source": "declared_fixture_mark",
+          "provenance": "authored closing mark"
+        },
+        {
+          "ticker": "TSLA",
+          "at": "2026-02-05T14:30:00Z",
+          "observed_at": "2026-02-05T14:30:00Z",
+          "price": "250.00",
+          "source": "declared_fixture_mark",
+          "provenance": "authored opportunity-set mark, not a fetched close"
+        },
+        {
+          "ticker": "TSLA",
+          "at": "2026-02-05T14:35:00Z",
+          "observed_at": "2026-02-05T14:35:00Z",
+          "price": "249.50",
+          "source": "declared_fixture_mark",
+          "provenance": "authored fill mark"
+        },
+        {
+          "ticker": "TSLA",
+          "at": "2026-02-11T20:00:00Z",
+          "observed_at": "2026-02-11T20:00:00Z",
+          "price": "260.00",
+          "source": "declared_fixture_mark",
+          "provenance": "authored closing mark"
+        }
+      ],
+      "opportunities": [
+        {
+          "key": "aapl-2026-02-03",
+          "ticker": "AAPL",
+          "scheduled_at": "2026-02-03T14:30:00Z",
+          "snapshot": {
+            "portfolio_version": "alphaagent-arms.v1/aapl-2026-02-03",
+            "analysis_cutoff": "2026-02-03T14:30:00Z",
+            "captured_at": "2026-02-03T14:29:55Z",
+            "holdings": [],
+            "cash": {
+              "balance_usd": "10000.00",
+              "currency": "USD",
+              "as_of": "2026-02-03T14:29:55Z"
+            },
+            "quotes": {
+              "AAPL": {
+                "price_usd": "225.00",
+                "change_pct": "2.50",
+                "currency": "USD",
+                "as_of": "2026-02-03T14:29:55Z",
+                "source": "declared_fixture_quote"
+              }
+            }
+          },
+          "evidence": [
+            {
+              "source_type": "news_article",
+              "publisher": "declared fixture wire",
+              "published_at": "2026-02-03T12:00:00Z",
+              "available_at": "2026-02-03T12:05:00Z",
+              "retrieved_at": "2026-02-03T14:29:55Z",
+              "excerpt": "Declared fixture: services revenue grew faster than the hardware segment, and the installed base expanded.",
+              "observation": {
+                "polarity": "positive",
+                "scope": "declared_fixture"
+              }
+            },
+            {
+              "source_type": "news_article",
+              "publisher": "declared fixture wire",
+              "published_at": "2026-02-03T11:00:00Z",
+              "available_at": "2026-02-03T11:05:00Z",
+              "retrieved_at": "2026-02-03T14:29:55Z",
+              "excerpt": "Declared fixture: a supplier cut its outlook, pointing to a softer hardware cycle.",
+              "observation": {
+                "polarity": "negative",
+                "scope": "declared_fixture"
+              }
+            }
+          ]
+        },
+        {
+          "key": "msft-2026-02-04",
+          "ticker": "MSFT",
+          "scheduled_at": "2026-02-04T14:30:00Z",
+          "snapshot": {
+            "portfolio_version": "alphaagent-arms.v1/msft-2026-02-04",
+            "analysis_cutoff": "2026-02-04T14:30:00Z",
+            "captured_at": "2026-02-04T14:29:55Z",
+            "holdings": [],
+            "cash": {
+              "balance_usd": "10000.00",
+              "currency": "USD",
+              "as_of": "2026-02-04T14:29:55Z"
+            },
+            "quotes": {
+              "MSFT": {
+                "price_usd": "410.00",
+                "change_pct": "-3.00",
+                "currency": "USD",
+                "as_of": "2026-02-04T14:29:55Z",
+                "source": "declared_fixture_quote"
+              }
+            }
+          },
+          "evidence": [
+            {
+              "source_type": "fundamentals",
+              "publisher": "declared fixture filing",
+              "published_at": "2026-02-04T10:00:00Z",
+              "available_at": "2026-02-04T10:05:00Z",
+              "retrieved_at": "2026-02-04T14:29:55Z",
+              "excerpt": "Declared fixture: cloud backlog rose, while capital expenditure guidance increased.",
+              "observation": {
+                "scope": "declared_fixture"
+              }
+            },
+            {
+              "source_type": "news_article",
+              "publisher": "declared fixture wire",
+              "published_at": "2026-02-04T09:30:00Z",
+              "available_at": "2026-02-04T09:35:00Z",
+              "retrieved_at": "2026-02-04T14:29:55Z",
+              "excerpt": "Declared fixture: a licensing review added uncertainty to the enterprise pipeline.",
+              "observation": {
+                "polarity": "negative",
+                "scope": "declared_fixture"
+              }
+            }
+          ]
+        },
+        {
+          "key": "tsla-2026-02-05",
+          "ticker": "TSLA",
+          "scheduled_at": "2026-02-05T14:30:00Z",
+          "snapshot": {
+            "portfolio_version": "alphaagent-arms.v1/tsla-2026-02-05",
+            "analysis_cutoff": "2026-02-05T14:30:00Z",
+            "captured_at": "2026-02-05T14:29:55Z",
+            "holdings": [],
+            "cash": {
+              "balance_usd": "10000.00",
+              "currency": "USD",
+              "as_of": "2026-02-05T14:29:55Z"
+            },
+            "quotes": {
+              "TSLA": {
+                "price_usd": "250.00",
+                "change_pct": "1.00",
+                "currency": "USD",
+                "as_of": "2026-02-05T14:29:55Z",
+                "source": "declared_fixture_quote"
+              }
+            }
+          },
+          "evidence": [
+            {
+              "source_type": "news_article",
+              "publisher": "declared fixture wire",
+              "published_at": "2026-02-05T11:00:00Z",
+              "available_at": "2026-02-05T11:05:00Z",
+              "retrieved_at": "2026-02-05T14:29:55Z",
+              "excerpt": "Declared fixture: deliveries met the guidance range and margins were stable.",
+              "observation": {
+                "polarity": "neutral",
+                "scope": "declared_fixture"
+              }
+            },
+            {
+              "source_type": "price_quote",
+              "publisher": "declared fixture quote feed",
+              "published_at": "2026-02-05T14:25:00Z",
+              "available_at": "2026-02-05T14:25:00Z",
+              "retrieved_at": "2026-02-05T14:29:55Z",
+              "excerpt": "Declared fixture: session momentum was mildly positive into the decision.",
+              "observation": {
+                "scope": "declared_fixture"
+              }
+            }
+          ]
+        }
+      ],
+      "arms": {
+        "V0": {
+          "label": "Deterministic baseline",
+          "engine": "deterministic_baseline",
+          "protocol_version": "heuristic_fallback.v1",
+          "implemented": true
+        },
+        "V1": {
+          "label": "One analyst",
+          "engine": "single_agent",
+          "protocol_version": "single_agent_baseline.v1",
+          "implemented": true
+        },
+        "V2": {
+          "label": "Current pipeline (no explicit response round)",
+          "engine": "debate",
+          "protocol_version": "debate.no_rebuttal.v1",
+          "implemented": true
+        },
+        "V3": {
+          "label": "Explicit rebuttal",
+          "engine": "debate_with_rebuttal",
+          "protocol_version": "debate.v1",
+          "implemented": true
+        },
+        "V4": {
+          "label": "Portfolio allocation",
+          "engine": "portfolio_allocation",
+          "protocol_version": "",
+          "implemented": false,
+          "unimplemented_reason": "Declared and not implemented: its dependency FIX-08 is not done."
+        }
+      }
+    },
     "opportunity_set_hash": "2820d6eb66a3dfd2fcbefc653649db1b86dc5527b85b3c74589cb90bcc2f9131",
     "source_path": "docs/spec/fixtures/experiments/alphaagent-arms.v1.json",
     "declared_at": "2026-02-02T10:05:00Z",
@@ -58,6 +1280,20 @@
     "starting_state": {
       "cash": "10000.00",
       "positions": {}
+    },
+    "portfolio": {
+      "available": true,
+      "portfolio_id": 48,
+      "risk_profile": "medium",
+      "limits": {
+        "max_trade_allocation_pct": "5.00",
+        "max_portfolio_exposure_pct": "90.00",
+        "max_ticker_concentration_pct": "30.00",
+        "max_sector_concentration_pct": "40.00",
+        "max_turnover_pct": "25.00",
+        "min_cash_buffer_pct": "10.00",
+        "daily_loss_limit_usd": "500.00"
+      }
     },
     "execution_assumptions": {
       "guard_policy_version": "guard.v1",
@@ -79,6 +1315,16 @@
       "ticker": "SPY",
       "asset_class": "equity",
       "selection_rule": "declared_equity_benchmark"
+    },
+    "methods": {
+      "report_schema_version": "2.0",
+      "archive_format": "experiment_comparison.v2",
+      "simulation": "monotonic_event_clock.v1",
+      "fill_timing": "fill_applied_at_first_available_mark.v1",
+      "fill_rule": "first_executable_mark_at_or_after_decision.v1",
+      "accounting": "portfolio_accounting.v1",
+      "metric": "registered_signal_metric.v1",
+      "registered_metric_id": "mean_action_score_pct"
     },
     "mark_count": 9,
     "mark_sources": {
@@ -128,14 +1374,24 @@
       "runs": [
         {
           "opportunity": "aapl-2026-02-03",
-          "fixture_id": "alphaagent-arms.v1.v0.aapl-2026-02-03",
+          "fixture_id": "alphaagent-arms.v1.v0.aapl-2026-02-03.50ad033095c12bc9",
           "status": "completed",
           "failure_code": null,
-          "failure_detail": null,
-          "decision_run_id": "4033b6e1-a64a-4f19-aed4-28129c200abb",
+          "failure_detail": "run already recorded",
+          "decision_run_id": "8b7f4ee4-ae1d-43cb-b9e2-c99ba4ab0155",
           "protocol_version": "heuristic_fallback.v1",
-          "snapshot_id": "08fac509-3cd6-4afb-8379-ebdf56d1fd68",
-          "snapshot_hash": "918c65e106c7061eaf142fc9fb513749b889034391a03c97bf2bb2e51015f7a8",
+          "snapshot_id": "fcb6ef79-a1a0-420f-9e27-972fd6d4116b",
+          "snapshot_hash": "dc7cbd016c8dfb53ddddf4dc8644849c1cb43d096e0b52f799552975b50de215",
+          "synthetic": true,
+          "decision": {
+            "run_id": "8b7f4ee4-ae1d-43cb-b9e2-c99ba4ab0155",
+            "opportunity": "aapl-2026-02-03",
+            "ticker": "AAPL",
+            "action": "BUY",
+            "requested_quantity": "1.11111111",
+            "rationale": "[DETERMINISTIC ENGINE] AAPL analysis. Headline sentiment=NEUTRAL (score +0.000, headlines=0); session momentum=+2.50%; composite=+0.250. Composite signal +0.250 exceeds BUY threshold +0.15; deploying 50% of the $500.00 per-trade budget (risk profile: medium). Position=0 units, cash=$10000.00, unrealised P&L=$0.00.",
+            "recorded_at": "2026-02-03T14:30:10Z"
+          },
           "cost": {
             "measured_tokens": {
               "input": 0,
@@ -159,14 +1415,24 @@
         },
         {
           "opportunity": "msft-2026-02-04",
-          "fixture_id": "alphaagent-arms.v1.v0.msft-2026-02-04",
+          "fixture_id": "alphaagent-arms.v1.v0.msft-2026-02-04.50ad033095c12bc9",
           "status": "completed",
           "failure_code": null,
-          "failure_detail": null,
-          "decision_run_id": "0263e7b1-ba1f-43b5-8eb8-34e06aef0d03",
+          "failure_detail": "run already recorded",
+          "decision_run_id": "d5e5f7a9-8c05-44de-a202-797ddd3203db",
           "protocol_version": "heuristic_fallback.v1",
-          "snapshot_id": "3dfc4e0a-9834-4602-911b-5b933506d0d7",
-          "snapshot_hash": "c6a3491b6a3d49423fd0910408151ba06c0e7556f14ec9eb370965240e94979b",
+          "snapshot_id": "4bf2b733-3d3e-42ca-ab7e-616375a19094",
+          "snapshot_hash": "2b19184dab4969821b4540229522f49bb70013801167ef59c87e322e63cb4cec",
+          "synthetic": true,
+          "decision": {
+            "run_id": "d5e5f7a9-8c05-44de-a202-797ddd3203db",
+            "opportunity": "msft-2026-02-04",
+            "ticker": "MSFT",
+            "action": "HOLD",
+            "requested_quantity": "0",
+            "rationale": "[DETERMINISTIC ENGINE] MSFT analysis. Headline sentiment=NEUTRAL (score +0.000, headlines=0); session momentum=-3.00%; composite=-0.300. Composite signal -0.300 breaches SELL threshold -0.15, but the SELL is suppressed because there is no open position to liquidate. Holding instead. Position=0 units, cash=$10000.00, unrealised P&L=$0.00.",
+            "recorded_at": "2026-02-04T14:30:10Z"
+          },
           "cost": {
             "measured_tokens": {
               "input": 0,
@@ -190,14 +1456,24 @@
         },
         {
           "opportunity": "tsla-2026-02-05",
-          "fixture_id": "alphaagent-arms.v1.v0.tsla-2026-02-05",
+          "fixture_id": "alphaagent-arms.v1.v0.tsla-2026-02-05.50ad033095c12bc9",
           "status": "completed",
           "failure_code": null,
-          "failure_detail": null,
-          "decision_run_id": "29fc44e9-2159-4e15-ad4c-b5ca527bc11c",
+          "failure_detail": "run already recorded",
+          "decision_run_id": "f4d38715-5d09-4ef1-b6c5-1eecd6d31572",
           "protocol_version": "heuristic_fallback.v1",
-          "snapshot_id": "94c6fc4e-c40d-4b65-b021-62a90c42b883",
-          "snapshot_hash": "d3b829991af710262ef259de271490918490262edaffe1b9534bb1c37ddbf458",
+          "snapshot_id": "e25e049a-abca-49e7-a87c-5544d66f1c5b",
+          "snapshot_hash": "54f11326100d28d82eef1073be47b0a5d1fbe261d27101479bbf0aa1b2ddc8fd",
+          "synthetic": true,
+          "decision": {
+            "run_id": "f4d38715-5d09-4ef1-b6c5-1eecd6d31572",
+            "opportunity": "tsla-2026-02-05",
+            "ticker": "TSLA",
+            "action": "HOLD",
+            "requested_quantity": "0",
+            "rationale": "[DETERMINISTIC ENGINE] TSLA analysis. Headline sentiment=NEUTRAL (score +0.000, headlines=0); session momentum=+1.00%; composite=+0.100. Composite signal +0.100 is inside the neutral band [-0.15, +0.15]; no action taken. Position=0 units, cash=$10000.00, unrealised P&L=$0.00.",
+            "recorded_at": "2026-02-05T14:30:10Z"
+          },
           "cost": {
             "measured_tokens": {
               "input": 0,
@@ -222,18 +1498,18 @@
       ],
       "snapshots": [
         {
-          "snapshot_id": "08fac509-3cd6-4afb-8379-ebdf56d1fd68",
-          "content_hash": "918c65e106c7061eaf142fc9fb513749b889034391a03c97bf2bb2e51015f7a8",
+          "snapshot_id": "fcb6ef79-a1a0-420f-9e27-972fd6d4116b",
+          "content_hash": "dc7cbd016c8dfb53ddddf4dc8644849c1cb43d096e0b52f799552975b50de215",
           "opportunity": "aapl-2026-02-03"
         },
         {
-          "snapshot_id": "3dfc4e0a-9834-4602-911b-5b933506d0d7",
-          "content_hash": "c6a3491b6a3d49423fd0910408151ba06c0e7556f14ec9eb370965240e94979b",
+          "snapshot_id": "4bf2b733-3d3e-42ca-ab7e-616375a19094",
+          "content_hash": "2b19184dab4969821b4540229522f49bb70013801167ef59c87e322e63cb4cec",
           "opportunity": "msft-2026-02-04"
         },
         {
-          "snapshot_id": "94c6fc4e-c40d-4b65-b021-62a90c42b883",
-          "content_hash": "d3b829991af710262ef259de271490918490262edaffe1b9534bb1c37ddbf458",
+          "snapshot_id": "e25e049a-abca-49e7-a87c-5544d66f1c5b",
+          "content_hash": "54f11326100d28d82eef1073be47b0a5d1fbe261d27101479bbf0aa1b2ddc8fd",
           "opportunity": "tsla-2026-02-05"
         }
       ],
@@ -252,9 +1528,11 @@
             ]
           ],
           "fill_rule": "first_executable_mark_at_or_after_decision.v1",
+          "fill_timing": "fill_applied_at_first_available_mark.v1",
+          "simulation_method": "monotonic_event_clock.v1",
           "fee_model": "declared_bps",
           "guard_policy": "guard.v1",
-          "llm_cost_timing": "A known LLM cost is attributed at the decision instant (clamped to the window end) because it is external spend, not a portfolio flow.",
+          "llm_cost_timing": "A known LLM cost is attributed at the decision's recorded time (clamped to the window end) because it is external spend, not a portfolio flow.",
           "note": "Simulated replay of this arm's recorded decisions under the frozen marks, the shared guard and the same accounting method. Not realised history."
         },
         "window": {
@@ -296,7 +1574,7 @@
         "max_drawdown_pct": "0.0000",
         "drawdown": {
           "max_drawdown_pct": "0.0000",
-          "observations": 9,
+          "observations": 12,
           "peak_equity_usd": "10000.00",
           "peak_at": "2026-02-02T23:59:59Z",
           "trough_equity_usd": "10000.00",
@@ -306,10 +1584,10 @@
         },
         "net_max_drawdown_pct": "0.0000",
         "exposure": {
-          "average_gross_pct": "2.2421",
+          "average_gross_pct": "2.3075",
           "end_gross_pct": "2.5758",
           "formula": "sum(quantity * mark_price) / equity",
-          "observations": 9
+          "observations": 12
         },
         "turnover": {
           "traded_notional_usd": "250.00",
@@ -336,7 +1614,7 @@
               "unknown_fee_fill_count": 0,
               "realised_and_unrealised_pnl_usd": null,
               "pnl_pct_of_opening_equity": null,
-              "average_capital_weight_pct": "2.5224",
+              "average_capital_weight_pct": "2.5173",
               "entries": [
                 {
                   "at": "2026-02-03T14:30:00Z",
@@ -404,22 +1682,22 @@
           "recorded_cost_usd": "0.000000",
           "cost_events": [
             {
-              "at": "2026-02-12T00:00:00Z",
+              "at": "2026-02-03T14:30:10Z",
               "amount_usd": "0.000000",
               "source": "deterministic_no_model_call",
-              "run_key": "alphaagent-arms.v1.v0.aapl-2026-02-03"
+              "run_key": "alphaagent-arms.v1.v0.aapl-2026-02-03.50ad033095c12bc9"
             },
             {
-              "at": "2026-02-12T00:00:00Z",
+              "at": "2026-02-04T14:30:10Z",
               "amount_usd": "0.000000",
               "source": "deterministic_no_model_call",
-              "run_key": "alphaagent-arms.v1.v0.msft-2026-02-04"
+              "run_key": "alphaagent-arms.v1.v0.msft-2026-02-04.50ad033095c12bc9"
             },
             {
-              "at": "2026-02-12T00:00:00Z",
+              "at": "2026-02-05T14:30:10Z",
               "amount_usd": "0.000000",
               "source": "deterministic_no_model_call",
-              "run_key": "alphaagent-arms.v1.v0.tsla-2026-02-05"
+              "run_key": "alphaagent-arms.v1.v0.tsla-2026-02-05.50ad033095c12bc9"
             }
           ],
           "cost_event_count": 3,
@@ -439,6 +1717,10 @@
               "equity_net_of_llm_usd": "10000.00"
             },
             {
+              "at": "2026-02-03T14:30:10Z",
+              "equity_net_of_llm_usd": "10000.00"
+            },
+            {
               "at": "2026-02-03T14:35:00Z",
               "equity_net_of_llm_usd": "10000.56"
             },
@@ -447,11 +1729,19 @@
               "equity_net_of_llm_usd": "10000.56"
             },
             {
+              "at": "2026-02-04T14:30:10Z",
+              "equity_net_of_llm_usd": "10000.56"
+            },
+            {
               "at": "2026-02-04T14:35:00Z",
               "equity_net_of_llm_usd": "10000.56"
             },
             {
               "at": "2026-02-05T14:30:00Z",
+              "equity_net_of_llm_usd": "10000.56"
+            },
+            {
+              "at": "2026-02-05T14:30:10Z",
               "equity_net_of_llm_usd": "10000.56"
             },
             {
@@ -526,6 +1816,25 @@
             ]
           },
           {
+            "at": "2026-02-03T14:30:10Z",
+            "cash_usd": "9750.00",
+            "positions_value_usd": "250.00",
+            "equity_usd": "10000.00",
+            "equity_net_of_llm_usd": "10000.00",
+            "gross_exposure_pct": "2.5000",
+            "position_values_usd": {
+              "AAPL": "250.00"
+            },
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {
+              "AAPL": "declared_fixture_mark"
+            },
+            "oldest_mark_age_days": "0.0",
+            "events": []
+          },
+          {
             "at": "2026-02-03T14:35:00Z",
             "cash_usd": "9750.00",
             "positions_value_usd": "250.56",
@@ -564,6 +1873,25 @@
             "events": []
           },
           {
+            "at": "2026-02-04T14:30:10Z",
+            "cash_usd": "9750.00",
+            "positions_value_usd": "250.56",
+            "equity_usd": "10000.56",
+            "equity_net_of_llm_usd": "10000.56",
+            "gross_exposure_pct": "2.5055",
+            "position_values_usd": {
+              "AAPL": "250.56"
+            },
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {
+              "AAPL": "declared_fixture_mark"
+            },
+            "oldest_mark_age_days": "1.0",
+            "events": []
+          },
+          {
             "at": "2026-02-04T14:35:00Z",
             "cash_usd": "9750.00",
             "positions_value_usd": "250.56",
@@ -584,6 +1912,25 @@
           },
           {
             "at": "2026-02-05T14:30:00Z",
+            "cash_usd": "9750.00",
+            "positions_value_usd": "250.56",
+            "equity_usd": "10000.56",
+            "equity_net_of_llm_usd": "10000.56",
+            "gross_exposure_pct": "2.5055",
+            "position_values_usd": {
+              "AAPL": "250.56"
+            },
+            "fees_paid_usd": "0.00",
+            "llm_cost_cumulative_usd": "0.000000",
+            "unpriced_tickers": [],
+            "mark_sources": {
+              "AAPL": "declared_fixture_mark"
+            },
+            "oldest_mark_age_days": "2.0",
+            "events": []
+          },
+          {
+            "at": "2026-02-05T14:30:10Z",
             "cash_usd": "9750.00",
             "positions_value_usd": "250.56",
             "equity_usd": "10000.56",
@@ -669,6 +2016,10 @@
             "equity_net_of_llm_usd": "10000.00"
           },
           {
+            "at": "2026-02-03T14:30:10Z",
+            "equity_net_of_llm_usd": "10000.00"
+          },
+          {
             "at": "2026-02-03T14:35:00Z",
             "equity_net_of_llm_usd": "10000.56"
           },
@@ -677,11 +2028,19 @@
             "equity_net_of_llm_usd": "10000.56"
           },
           {
+            "at": "2026-02-04T14:30:10Z",
+            "equity_net_of_llm_usd": "10000.56"
+          },
+          {
             "at": "2026-02-04T14:35:00Z",
             "equity_net_of_llm_usd": "10000.56"
           },
           {
             "at": "2026-02-05T14:30:00Z",
+            "equity_net_of_llm_usd": "10000.56"
+          },
+          {
+            "at": "2026-02-05T14:30:10Z",
             "equity_net_of_llm_usd": "10000.56"
           },
           {
@@ -729,8 +2088,8 @@
           "drawdown_definition": "maximum decline from a prior equity peak over priced observations",
           "approximate": false,
           "approximate_reasons": [],
-          "observations": 9,
-          "priced_observations": 9,
+          "observations": 12,
+          "priced_observations": 12,
           "unpriced_observations": 0,
           "flow_count": 0,
           "fill_count": 1
@@ -740,9 +2099,10 @@
         "orders": [
           {
             "opportunity": "aapl-2026-02-03",
-            "decision_run_id": "4033b6e1-a64a-4f19-aed4-28129c200abb",
+            "decision_run_id": "8b7f4ee4-ae1d-43cb-b9e2-c99ba4ab0155",
             "decision_at": "2026-02-03T14:30:00Z",
-            "decision_recorded_at": "2026-11-11T15:47:39.424650Z",
+            "decision_recorded_at": "2026-02-03T14:30:10Z",
+            "simulated_clock_at_decision": "2026-02-03T14:30:00Z",
             "proposal_action": "BUY",
             "requested_quantity": "1.11111111",
             "price_at_decision_usd": "225.00",
@@ -762,15 +2122,28 @@
               "executed_by": "simulated",
               "source": "simulated_arm:V0"
             },
+            "fill_rule_status": "filled",
+            "fill_reason": null,
+            "scheduled_fill_at": null,
+            "applied_at": "2026-02-03T14:30:00Z",
+            "equity_before_usd": "10000.00",
             "equity_after_usd": "10000.00",
+            "cash_before_usd": "10000.00",
+            "positions_before": {},
+            "cash_after_decision_usd": "9750.00",
+            "positions_after_decision": {
+              "AAPL": "1.11111111"
+            },
+            "unpriced_positions": [],
             "reason": null,
             "fee_bps": "0"
           },
           {
             "opportunity": "msft-2026-02-04",
-            "decision_run_id": "0263e7b1-ba1f-43b5-8eb8-34e06aef0d03",
+            "decision_run_id": "d5e5f7a9-8c05-44de-a202-797ddd3203db",
             "decision_at": "2026-02-04T14:30:00Z",
-            "decision_recorded_at": "2026-11-11T15:47:39.724892Z",
+            "decision_recorded_at": "2026-02-04T14:30:10Z",
+            "simulated_clock_at_decision": "2026-02-04T14:30:00Z",
             "proposal_action": "HOLD",
             "requested_quantity": null,
             "price_at_decision_usd": "410.00",
@@ -779,14 +2152,30 @@
             "binding_rule": null,
             "allowed_quantity": "0",
             "fill": null,
+            "fill_rule_status": "hold_no_trade",
+            "fill_reason": null,
+            "scheduled_fill_at": null,
+            "applied_at": null,
+            "equity_before_usd": "10000.56",
             "equity_after_usd": "10000.56",
-            "reason": null
+            "cash_before_usd": "9750.00",
+            "positions_before": {
+              "AAPL": "1.11111111"
+            },
+            "cash_after_decision_usd": "9750.00",
+            "positions_after_decision": {
+              "AAPL": "1.11111111"
+            },
+            "unpriced_positions": [],
+            "reason": null,
+            "fee_bps": "0"
           },
           {
             "opportunity": "tsla-2026-02-05",
-            "decision_run_id": "29fc44e9-2159-4e15-ad4c-b5ca527bc11c",
+            "decision_run_id": "f4d38715-5d09-4ef1-b6c5-1eecd6d31572",
             "decision_at": "2026-02-05T14:30:00Z",
-            "decision_recorded_at": "2026-11-11T15:47:40.010672Z",
+            "decision_recorded_at": "2026-02-05T14:30:10Z",
+            "simulated_clock_at_decision": "2026-02-05T14:30:00Z",
             "proposal_action": "HOLD",
             "requested_quantity": null,
             "price_at_decision_usd": "250.00",
@@ -795,12 +2184,394 @@
             "binding_rule": null,
             "allowed_quantity": "0",
             "fill": null,
+            "fill_rule_status": "hold_no_trade",
+            "fill_reason": null,
+            "scheduled_fill_at": null,
+            "applied_at": null,
+            "equity_before_usd": "10000.56",
             "equity_after_usd": "10000.56",
-            "reason": null
+            "cash_before_usd": "9750.00",
+            "positions_before": {
+              "AAPL": "1.11111111"
+            },
+            "cash_after_decision_usd": "9750.00",
+            "positions_after_decision": {
+              "AAPL": "1.11111111"
+            },
+            "unpriced_positions": [],
+            "reason": null,
+            "fee_bps": "0"
           }
         ],
         "orders_count": 3,
         "fill_count": 1,
+        "simulation": {
+          "method_version": "monotonic_event_clock.v1",
+          "fill_timing_rule": "fill_applied_at_first_available_mark.v1",
+          "fill_rule": "first_executable_mark_at_or_after_decision.v1",
+          "clock_started_at": "2026-02-02T23:59:59Z",
+          "clock_ended_at": "2026-02-12T00:00:00Z",
+          "steps": [
+            {
+              "sequence": 0,
+              "event": "simulation_start",
+              "clock": "2026-02-02T23:59:59Z",
+              "synthetic": true,
+              "starting_state": {
+                "cash_usd": "10000.00",
+                "positions": {}
+              },
+              "available_data": {
+                "known_marks": []
+              }
+            },
+            {
+              "sequence": 1,
+              "event": "fill",
+              "clock": "2026-02-03T14:30:00Z",
+              "opportunity": "aapl-2026-02-03",
+              "decision_clock": "2026-02-03T14:30:00Z",
+              "fill": {
+                "at": "2026-02-03T14:30:00Z",
+                "ticker": "AAPL",
+                "side": "BUY",
+                "quantity": "1.11111111",
+                "price_usd": "225.00",
+                "notional_usd": "250.00",
+                "fee_usd": "0.00",
+                "fee_recorded": true,
+                "executed_by": "simulated",
+                "source": "simulated_arm:V0"
+              },
+              "cash_after_usd": "9750.00",
+              "positions_after": {
+                "AAPL": "1.11111111"
+              },
+              "available_data": {
+                "known_marks": [
+                  {
+                    "ticker": "AAPL",
+                    "at": "2026-02-03T14:30:00Z",
+                    "observed_at": "2026-02-03T14:30:00Z",
+                    "price_usd": "225.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  }
+                ]
+              },
+              "reason": "priced_at_the_decision_clock"
+            },
+            {
+              "sequence": 1,
+              "event": "decision",
+              "clock": "2026-02-03T14:30:00Z",
+              "opportunity": "aapl-2026-02-03",
+              "ticker": "AAPL",
+              "synthetic": true,
+              "available_data": {
+                "snapshot_id": "fcb6ef79-a1a0-420f-9e27-972fd6d4116b",
+                "snapshot_hash": "dc7cbd016c8dfb53ddddf4dc8644849c1cb43d096e0b52f799552975b50de215",
+                "analysis_cutoff": "2026-02-03T14:30:00Z",
+                "quote": {
+                  "as_of": "2026-02-03T14:29:55Z",
+                  "source": "declared_fixture_quote",
+                  "currency": "USD",
+                  "price_usd": "225.00",
+                  "change_pct": "2.50"
+                },
+                "known_marks": [
+                  {
+                    "ticker": "AAPL",
+                    "at": "2026-02-03T14:30:00Z",
+                    "observed_at": "2026-02-03T14:30:00Z",
+                    "price_usd": "225.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  }
+                ]
+              },
+              "decision": {
+                "run_id": "8b7f4ee4-ae1d-43cb-b9e2-c99ba4ab0155",
+                "action": "BUY",
+                "requested_quantity": "1.11111111",
+                "recorded_at": "2026-02-03T14:30:10Z"
+              },
+              "order": {
+                "fill_rule_status": "filled",
+                "fill_reason": null
+              },
+              "reason": null
+            },
+            {
+              "sequence": 3,
+              "event": "decision",
+              "clock": "2026-02-04T14:30:00Z",
+              "opportunity": "msft-2026-02-04",
+              "ticker": "MSFT",
+              "synthetic": true,
+              "available_data": {
+                "snapshot_id": "4bf2b733-3d3e-42ca-ab7e-616375a19094",
+                "snapshot_hash": "2b19184dab4969821b4540229522f49bb70013801167ef59c87e322e63cb4cec",
+                "analysis_cutoff": "2026-02-04T14:30:00Z",
+                "quote": {
+                  "as_of": "2026-02-04T14:29:55Z",
+                  "source": "declared_fixture_quote",
+                  "currency": "USD",
+                  "price_usd": "410.00",
+                  "change_pct": "-3.00"
+                },
+                "known_marks": [
+                  {
+                    "ticker": "AAPL",
+                    "at": "2026-02-03T14:30:00Z",
+                    "observed_at": "2026-02-03T14:30:00Z",
+                    "price_usd": "225.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  },
+                  {
+                    "ticker": "AAPL",
+                    "at": "2026-02-03T14:35:00Z",
+                    "observed_at": "2026-02-03T14:35:00Z",
+                    "price_usd": "225.50",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored fill mark"
+                  },
+                  {
+                    "ticker": "MSFT",
+                    "at": "2026-02-04T14:30:00Z",
+                    "observed_at": "2026-02-04T14:30:00Z",
+                    "price_usd": "410.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  }
+                ]
+              },
+              "decision": {
+                "run_id": "d5e5f7a9-8c05-44de-a202-797ddd3203db",
+                "action": "HOLD",
+                "requested_quantity": "0",
+                "recorded_at": "2026-02-04T14:30:10Z"
+              },
+              "order": {
+                "fill_rule_status": "hold_no_trade",
+                "fill_reason": null
+              },
+              "reason": null
+            },
+            {
+              "sequence": 4,
+              "event": "decision",
+              "clock": "2026-02-05T14:30:00Z",
+              "opportunity": "tsla-2026-02-05",
+              "ticker": "TSLA",
+              "synthetic": true,
+              "available_data": {
+                "snapshot_id": "e25e049a-abca-49e7-a87c-5544d66f1c5b",
+                "snapshot_hash": "54f11326100d28d82eef1073be47b0a5d1fbe261d27101479bbf0aa1b2ddc8fd",
+                "analysis_cutoff": "2026-02-05T14:30:00Z",
+                "quote": {
+                  "as_of": "2026-02-05T14:29:55Z",
+                  "source": "declared_fixture_quote",
+                  "currency": "USD",
+                  "price_usd": "250.00",
+                  "change_pct": "1.00"
+                },
+                "known_marks": [
+                  {
+                    "ticker": "AAPL",
+                    "at": "2026-02-03T14:30:00Z",
+                    "observed_at": "2026-02-03T14:30:00Z",
+                    "price_usd": "225.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  },
+                  {
+                    "ticker": "AAPL",
+                    "at": "2026-02-03T14:35:00Z",
+                    "observed_at": "2026-02-03T14:35:00Z",
+                    "price_usd": "225.50",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored fill mark"
+                  },
+                  {
+                    "ticker": "MSFT",
+                    "at": "2026-02-04T14:30:00Z",
+                    "observed_at": "2026-02-04T14:30:00Z",
+                    "price_usd": "410.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  },
+                  {
+                    "ticker": "MSFT",
+                    "at": "2026-02-04T14:35:00Z",
+                    "observed_at": "2026-02-04T14:35:00Z",
+                    "price_usd": "411.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored fill mark"
+                  },
+                  {
+                    "ticker": "TSLA",
+                    "at": "2026-02-05T14:30:00Z",
+                    "observed_at": "2026-02-05T14:30:00Z",
+                    "price_usd": "250.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  }
+                ]
+              },
+              "decision": {
+                "run_id": "f4d38715-5d09-4ef1-b6c5-1eecd6d31572",
+                "action": "HOLD",
+                "requested_quantity": "0",
+                "recorded_at": "2026-02-05T14:30:10Z"
+              },
+              "order": {
+                "fill_rule_status": "hold_no_trade",
+                "fill_reason": null
+              },
+              "reason": null
+            },
+            {
+              "sequence": 5,
+              "event": "window_close",
+              "clock": "2026-02-12T00:00:00Z",
+              "synthetic": true,
+              "ending_state": {
+                "cash_usd": "9750.00",
+                "positions": {
+                  "AAPL": "1.11111111"
+                }
+              },
+              "expired_fills": [],
+              "available_data": {
+                "known_marks": [
+                  {
+                    "ticker": "AAPL",
+                    "at": "2026-02-03T14:30:00Z",
+                    "observed_at": "2026-02-03T14:30:00Z",
+                    "price_usd": "225.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  },
+                  {
+                    "ticker": "AAPL",
+                    "at": "2026-02-03T14:35:00Z",
+                    "observed_at": "2026-02-03T14:35:00Z",
+                    "price_usd": "225.50",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored fill mark"
+                  },
+                  {
+                    "ticker": "AAPL",
+                    "at": "2026-02-11T20:00:00Z",
+                    "observed_at": "2026-02-11T20:00:00Z",
+                    "price_usd": "232.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored closing mark"
+                  },
+                  {
+                    "ticker": "MSFT",
+                    "at": "2026-02-04T14:30:00Z",
+                    "observed_at": "2026-02-04T14:30:00Z",
+                    "price_usd": "410.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  },
+                  {
+                    "ticker": "MSFT",
+                    "at": "2026-02-04T14:35:00Z",
+                    "observed_at": "2026-02-04T14:35:00Z",
+                    "price_usd": "411.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored fill mark"
+                  },
+                  {
+                    "ticker": "MSFT",
+                    "at": "2026-02-11T20:00:00Z",
+                    "observed_at": "2026-02-11T20:00:00Z",
+                    "price_usd": "400.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored closing mark"
+                  },
+                  {
+                    "ticker": "TSLA",
+                    "at": "2026-02-05T14:30:00Z",
+                    "observed_at": "2026-02-05T14:30:00Z",
+                    "price_usd": "250.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  },
+                  {
+                    "ticker": "TSLA",
+                    "at": "2026-02-05T14:35:00Z",
+                    "observed_at": "2026-02-05T14:35:00Z",
+                    "price_usd": "249.50",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored fill mark"
+                  },
+                  {
+                    "ticker": "TSLA",
+                    "at": "2026-02-11T20:00:00Z",
+                    "observed_at": "2026-02-11T20:00:00Z",
+                    "price_usd": "260.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored closing mark"
+                  }
+                ]
+              }
+            }
+          ],
+          "steps_hash": "4bb5ef5f0b73f3da78bd61b8ea5ebae6254172a86d1f3244f823ded1db3f8e4f",
+          "decision_records": [
+            {
+              "event": "fill",
+              "clock": "2026-02-03T14:30:00Z",
+              "opportunity": "aapl-2026-02-03",
+              "ticker": "AAPL",
+              "side": "BUY",
+              "quantity": "1.11111111",
+              "price_usd": "225.00",
+              "fee_usd": "0.00"
+            },
+            {
+              "event": "decision",
+              "clock": "2026-02-03T14:30:00Z",
+              "opportunity": "aapl-2026-02-03",
+              "ticker": "AAPL",
+              "action": "BUY",
+              "requested_quantity": "1.11111111",
+              "fill_rule_status": "filled",
+              "fill_reason": null
+            },
+            {
+              "event": "decision",
+              "clock": "2026-02-04T14:30:00Z",
+              "opportunity": "msft-2026-02-04",
+              "ticker": "MSFT",
+              "action": "HOLD",
+              "requested_quantity": "0",
+              "fill_rule_status": "hold_no_trade",
+              "fill_reason": null
+            },
+            {
+              "event": "decision",
+              "clock": "2026-02-05T14:30:00Z",
+              "opportunity": "tsla-2026-02-05",
+              "ticker": "TSLA",
+              "action": "HOLD",
+              "requested_quantity": "0",
+              "fill_rule_status": "hold_no_trade",
+              "fill_reason": null
+            }
+          ],
+          "decision_records_hash": "e97f087dafec2780c45b4a7f74ed658353d76113f13d7305418baa8f5ed951cf",
+          "step_count": 6,
+          "monotonic": true,
+          "expired_fills": [],
+          "synthetic": true,
+          "note": "Each decision and fill carries the simulated clock and the data known at that instant. A fill priced from a later mark is applied when the clock reaches it."
+        },
         "per_opportunity": [
           {
             "opportunity": "aapl-2026-02-03",
@@ -818,7 +2589,94 @@
             "scheduled_at": "2026-02-05T14:30:00Z"
           }
         ]
-      }
+      },
+      "primary_metric": {
+        "arm": "V0",
+        "status": "computed",
+        "value": "1.5556",
+        "unit": "percent",
+        "observations": 2,
+        "scheduled_observations": 3,
+        "excluded_observations": 1,
+        "excluded_by_reason": {
+          "no_session_at_or_after_target": 1
+        },
+        "contributing_runs": [
+          "8b7f4ee4-ae1d-43cb-b9e2-c99ba4ab0155",
+          "d5e5f7a9-8c05-44de-a202-797ddd3203db"
+        ],
+        "observations_detail": [
+          {
+            "run_id": "8b7f4ee4-ae1d-43cb-b9e2-c99ba4ab0155",
+            "opportunity": "aapl-2026-02-03",
+            "ticker": "AAPL",
+            "action": "BUY",
+            "maturity": "evaluated",
+            "reason": null,
+            "price_at_decision": "225.0000",
+            "price_source": "snapshot_quote",
+            "target_at": "2026-02-10T14:30:00Z",
+            "price_at_horizon": "232.0000",
+            "price_observed_at": "2026-02-11T20:00:00Z",
+            "session_shift_days": 1,
+            "forward_return_pct": "3.1111",
+            "action_score_pct": "3.1111",
+            "directional_hit": true,
+            "hold_zero_convention": false
+          },
+          {
+            "run_id": "d5e5f7a9-8c05-44de-a202-797ddd3203db",
+            "opportunity": "msft-2026-02-04",
+            "ticker": "MSFT",
+            "action": "HOLD",
+            "maturity": "evaluated",
+            "reason": null,
+            "price_at_decision": "410.0000",
+            "price_source": "snapshot_quote",
+            "target_at": "2026-02-11T14:30:00Z",
+            "price_at_horizon": "400.0000",
+            "price_observed_at": "2026-02-11T20:00:00Z",
+            "session_shift_days": 0,
+            "forward_return_pct": "-2.4390",
+            "action_score_pct": "0.0000",
+            "directional_hit": null,
+            "hold_zero_convention": true
+          },
+          {
+            "run_id": "f4d38715-5d09-4ef1-b6c5-1eecd6d31572",
+            "opportunity": "tsla-2026-02-05",
+            "ticker": "TSLA",
+            "action": "HOLD",
+            "maturity": "unavailable",
+            "reason": "no_session_at_or_after_target",
+            "price_at_decision": "250.0000",
+            "price_source": "snapshot_quote"
+          }
+        ],
+        "dispersion": {
+          "metric": "sample_standard_deviation_pct",
+          "std_dev_pct": "2.1999",
+          "min_pct": "0.0000",
+          "max_pct": "3.1111",
+          "range_pct": "3.1111",
+          "observations": 2,
+          "reason": null
+        },
+        "interval": {
+          "method": "time_block_bootstrap",
+          "statistic": "mean",
+          "lower": "0.0000",
+          "upper": "3.1111",
+          "confidence": "0.95",
+          "block_size": 1,
+          "resamples": 1000,
+          "seed": 0,
+          "observations": 2,
+          "reason": null
+        },
+        "reason": null
+      },
+      "synthetic": true
     },
     {
       "key": "V1",
@@ -840,8 +2698,8 @@
       "cost": {
         "runs": 3,
         "measured_tokens": {
-          "input": 0,
-          "output": 0
+          "input": 2011,
+          "output": 351
         },
         "estimated_tokens": {
           "input": 2011,
@@ -863,18 +2721,28 @@
       "runs": [
         {
           "opportunity": "aapl-2026-02-03",
-          "fixture_id": "alphaagent-arms.v1.v1.aapl-2026-02-03",
+          "fixture_id": "alphaagent-arms.v1.v1.aapl-2026-02-03.50ad033095c12bc9",
           "status": "completed",
           "failure_code": null,
-          "failure_detail": null,
-          "decision_run_id": "dec3ab9e-b387-4f68-80b2-358c5b8281d2",
+          "failure_detail": "run already recorded",
+          "decision_run_id": "10cecf53-c19d-4126-ae0d-c16c8f12e73c",
           "protocol_version": "single_agent_baseline.v1",
-          "snapshot_id": "08fac509-3cd6-4afb-8379-ebdf56d1fd68",
-          "snapshot_hash": "918c65e106c7061eaf142fc9fb513749b889034391a03c97bf2bb2e51015f7a8",
+          "snapshot_id": "fcb6ef79-a1a0-420f-9e27-972fd6d4116b",
+          "snapshot_hash": "dc7cbd016c8dfb53ddddf4dc8644849c1cb43d096e0b52f799552975b50de215",
+          "synthetic": true,
+          "decision": {
+            "run_id": "10cecf53-c19d-4126-ae0d-c16c8f12e73c",
+            "opportunity": "aapl-2026-02-03",
+            "ticker": "AAPL",
+            "action": "HOLD",
+            "requested_quantity": "0",
+            "rationale": "Single analyst baseline: one case, no adversarial round. The scripted analyst holds because the evidence on its own does not support size.",
+            "recorded_at": "2026-02-03T14:30:10Z"
+          },
           "cost": {
             "measured_tokens": {
-              "input": 0,
-              "output": 0
+              "input": 675,
+              "output": 117
             },
             "estimated_tokens": {
               "input": 675,
@@ -894,18 +2762,28 @@
         },
         {
           "opportunity": "msft-2026-02-04",
-          "fixture_id": "alphaagent-arms.v1.v1.msft-2026-02-04",
+          "fixture_id": "alphaagent-arms.v1.v1.msft-2026-02-04.50ad033095c12bc9",
           "status": "completed",
           "failure_code": null,
-          "failure_detail": null,
-          "decision_run_id": "4311328d-b3ff-4658-a26d-e503ad8d4ca8",
+          "failure_detail": "run already recorded",
+          "decision_run_id": "2c9124b5-521f-4846-98e7-5964917c57c1",
           "protocol_version": "single_agent_baseline.v1",
-          "snapshot_id": "3dfc4e0a-9834-4602-911b-5b933506d0d7",
-          "snapshot_hash": "c6a3491b6a3d49423fd0910408151ba06c0e7556f14ec9eb370965240e94979b",
+          "snapshot_id": "4bf2b733-3d3e-42ca-ab7e-616375a19094",
+          "snapshot_hash": "2b19184dab4969821b4540229522f49bb70013801167ef59c87e322e63cb4cec",
+          "synthetic": true,
+          "decision": {
+            "run_id": "2c9124b5-521f-4846-98e7-5964917c57c1",
+            "opportunity": "msft-2026-02-04",
+            "ticker": "MSFT",
+            "action": "HOLD",
+            "requested_quantity": "0",
+            "rationale": "Single analyst baseline: one case, no adversarial round. The scripted analyst holds because the evidence on its own does not support size.",
+            "recorded_at": "2026-02-04T14:30:10Z"
+          },
           "cost": {
             "measured_tokens": {
-              "input": 0,
-              "output": 0
+              "input": 670,
+              "output": 117
             },
             "estimated_tokens": {
               "input": 670,
@@ -925,18 +2803,28 @@
         },
         {
           "opportunity": "tsla-2026-02-05",
-          "fixture_id": "alphaagent-arms.v1.v1.tsla-2026-02-05",
+          "fixture_id": "alphaagent-arms.v1.v1.tsla-2026-02-05.50ad033095c12bc9",
           "status": "completed",
           "failure_code": null,
-          "failure_detail": null,
-          "decision_run_id": "bbd1b68b-97a1-4e01-aa28-069240ccaf0b",
+          "failure_detail": "run already recorded",
+          "decision_run_id": "365be93d-e06f-4a3a-b196-d4510379378a",
           "protocol_version": "single_agent_baseline.v1",
-          "snapshot_id": "94c6fc4e-c40d-4b65-b021-62a90c42b883",
-          "snapshot_hash": "d3b829991af710262ef259de271490918490262edaffe1b9534bb1c37ddbf458",
+          "snapshot_id": "e25e049a-abca-49e7-a87c-5544d66f1c5b",
+          "snapshot_hash": "54f11326100d28d82eef1073be47b0a5d1fbe261d27101479bbf0aa1b2ddc8fd",
+          "synthetic": true,
+          "decision": {
+            "run_id": "365be93d-e06f-4a3a-b196-d4510379378a",
+            "opportunity": "tsla-2026-02-05",
+            "ticker": "TSLA",
+            "action": "HOLD",
+            "requested_quantity": "0",
+            "rationale": "Single analyst baseline: one case, no adversarial round. The scripted analyst holds because the evidence on its own does not support size.",
+            "recorded_at": "2026-02-05T14:30:10Z"
+          },
           "cost": {
             "measured_tokens": {
-              "input": 0,
-              "output": 0
+              "input": 666,
+              "output": 117
             },
             "estimated_tokens": {
               "input": 666,
@@ -957,18 +2845,18 @@
       ],
       "snapshots": [
         {
-          "snapshot_id": "08fac509-3cd6-4afb-8379-ebdf56d1fd68",
-          "content_hash": "918c65e106c7061eaf142fc9fb513749b889034391a03c97bf2bb2e51015f7a8",
+          "snapshot_id": "fcb6ef79-a1a0-420f-9e27-972fd6d4116b",
+          "content_hash": "dc7cbd016c8dfb53ddddf4dc8644849c1cb43d096e0b52f799552975b50de215",
           "opportunity": "aapl-2026-02-03"
         },
         {
-          "snapshot_id": "3dfc4e0a-9834-4602-911b-5b933506d0d7",
-          "content_hash": "c6a3491b6a3d49423fd0910408151ba06c0e7556f14ec9eb370965240e94979b",
+          "snapshot_id": "4bf2b733-3d3e-42ca-ab7e-616375a19094",
+          "content_hash": "2b19184dab4969821b4540229522f49bb70013801167ef59c87e322e63cb4cec",
           "opportunity": "msft-2026-02-04"
         },
         {
-          "snapshot_id": "94c6fc4e-c40d-4b65-b021-62a90c42b883",
-          "content_hash": "d3b829991af710262ef259de271490918490262edaffe1b9534bb1c37ddbf458",
+          "snapshot_id": "e25e049a-abca-49e7-a87c-5544d66f1c5b",
+          "content_hash": "54f11326100d28d82eef1073be47b0a5d1fbe261d27101479bbf0aa1b2ddc8fd",
           "opportunity": "tsla-2026-02-05"
         }
       ],
@@ -987,9 +2875,11 @@
             ]
           ],
           "fill_rule": "first_executable_mark_at_or_after_decision.v1",
+          "fill_timing": "fill_applied_at_first_available_mark.v1",
+          "simulation_method": "monotonic_event_clock.v1",
           "fee_model": "declared_bps",
           "guard_policy": "guard.v1",
-          "llm_cost_timing": "A known LLM cost is attributed at the decision instant (clamped to the window end) because it is external spend, not a portfolio flow.",
+          "llm_cost_timing": "A known LLM cost is attributed at the decision's recorded time (clamped to the window end) because it is external spend, not a portfolio flow.",
           "note": "Simulated replay of this arm's recorded decisions under the frozen marks, the shared guard and the same accounting method. Not realised history."
         },
         "window": {
@@ -1382,9 +3272,10 @@
         "orders": [
           {
             "opportunity": "aapl-2026-02-03",
-            "decision_run_id": "dec3ab9e-b387-4f68-80b2-358c5b8281d2",
+            "decision_run_id": "10cecf53-c19d-4126-ae0d-c16c8f12e73c",
             "decision_at": "2026-02-03T14:30:00Z",
-            "decision_recorded_at": "2026-11-11T15:47:40.494795Z",
+            "decision_recorded_at": "2026-02-03T14:30:10Z",
+            "simulated_clock_at_decision": "2026-02-03T14:30:00Z",
             "proposal_action": "HOLD",
             "requested_quantity": null,
             "price_at_decision_usd": "225.00",
@@ -1393,14 +3284,26 @@
             "binding_rule": null,
             "allowed_quantity": "0",
             "fill": null,
+            "fill_rule_status": "hold_no_trade",
+            "fill_reason": null,
+            "scheduled_fill_at": null,
+            "applied_at": null,
+            "equity_before_usd": "10000.00",
             "equity_after_usd": "10000.00",
-            "reason": null
+            "cash_before_usd": "10000.00",
+            "positions_before": {},
+            "cash_after_decision_usd": "10000.00",
+            "positions_after_decision": {},
+            "unpriced_positions": [],
+            "reason": null,
+            "fee_bps": "0"
           },
           {
             "opportunity": "msft-2026-02-04",
-            "decision_run_id": "4311328d-b3ff-4658-a26d-e503ad8d4ca8",
+            "decision_run_id": "2c9124b5-521f-4846-98e7-5964917c57c1",
             "decision_at": "2026-02-04T14:30:00Z",
-            "decision_recorded_at": "2026-11-11T15:47:41.057961Z",
+            "decision_recorded_at": "2026-02-04T14:30:10Z",
+            "simulated_clock_at_decision": "2026-02-04T14:30:00Z",
             "proposal_action": "HOLD",
             "requested_quantity": null,
             "price_at_decision_usd": "410.00",
@@ -1409,14 +3312,26 @@
             "binding_rule": null,
             "allowed_quantity": "0",
             "fill": null,
+            "fill_rule_status": "hold_no_trade",
+            "fill_reason": null,
+            "scheduled_fill_at": null,
+            "applied_at": null,
+            "equity_before_usd": "10000.00",
             "equity_after_usd": "10000.00",
-            "reason": null
+            "cash_before_usd": "10000.00",
+            "positions_before": {},
+            "cash_after_decision_usd": "10000.00",
+            "positions_after_decision": {},
+            "unpriced_positions": [],
+            "reason": null,
+            "fee_bps": "0"
           },
           {
             "opportunity": "tsla-2026-02-05",
-            "decision_run_id": "bbd1b68b-97a1-4e01-aa28-069240ccaf0b",
+            "decision_run_id": "365be93d-e06f-4a3a-b196-d4510379378a",
             "decision_at": "2026-02-05T14:30:00Z",
-            "decision_recorded_at": "2026-11-11T15:47:41.627093Z",
+            "decision_recorded_at": "2026-02-05T14:30:10Z",
+            "simulated_clock_at_decision": "2026-02-05T14:30:00Z",
             "proposal_action": "HOLD",
             "requested_quantity": null,
             "price_at_decision_usd": "250.00",
@@ -1425,12 +3340,342 @@
             "binding_rule": null,
             "allowed_quantity": "0",
             "fill": null,
+            "fill_rule_status": "hold_no_trade",
+            "fill_reason": null,
+            "scheduled_fill_at": null,
+            "applied_at": null,
+            "equity_before_usd": "10000.00",
             "equity_after_usd": "10000.00",
-            "reason": null
+            "cash_before_usd": "10000.00",
+            "positions_before": {},
+            "cash_after_decision_usd": "10000.00",
+            "positions_after_decision": {},
+            "unpriced_positions": [],
+            "reason": null,
+            "fee_bps": "0"
           }
         ],
         "orders_count": 3,
         "fill_count": 0,
+        "simulation": {
+          "method_version": "monotonic_event_clock.v1",
+          "fill_timing_rule": "fill_applied_at_first_available_mark.v1",
+          "fill_rule": "first_executable_mark_at_or_after_decision.v1",
+          "clock_started_at": "2026-02-02T23:59:59Z",
+          "clock_ended_at": "2026-02-12T00:00:00Z",
+          "steps": [
+            {
+              "sequence": 0,
+              "event": "simulation_start",
+              "clock": "2026-02-02T23:59:59Z",
+              "synthetic": true,
+              "starting_state": {
+                "cash_usd": "10000.00",
+                "positions": {}
+              },
+              "available_data": {
+                "known_marks": []
+              }
+            },
+            {
+              "sequence": 1,
+              "event": "decision",
+              "clock": "2026-02-03T14:30:00Z",
+              "opportunity": "aapl-2026-02-03",
+              "ticker": "AAPL",
+              "synthetic": true,
+              "available_data": {
+                "snapshot_id": "fcb6ef79-a1a0-420f-9e27-972fd6d4116b",
+                "snapshot_hash": "dc7cbd016c8dfb53ddddf4dc8644849c1cb43d096e0b52f799552975b50de215",
+                "analysis_cutoff": "2026-02-03T14:30:00Z",
+                "quote": {
+                  "as_of": "2026-02-03T14:29:55Z",
+                  "source": "declared_fixture_quote",
+                  "currency": "USD",
+                  "price_usd": "225.00",
+                  "change_pct": "2.50"
+                },
+                "known_marks": [
+                  {
+                    "ticker": "AAPL",
+                    "at": "2026-02-03T14:30:00Z",
+                    "observed_at": "2026-02-03T14:30:00Z",
+                    "price_usd": "225.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  }
+                ]
+              },
+              "decision": {
+                "run_id": "10cecf53-c19d-4126-ae0d-c16c8f12e73c",
+                "action": "HOLD",
+                "requested_quantity": "0",
+                "recorded_at": "2026-02-03T14:30:10Z"
+              },
+              "order": {
+                "fill_rule_status": "hold_no_trade",
+                "fill_reason": null
+              },
+              "reason": null
+            },
+            {
+              "sequence": 2,
+              "event": "decision",
+              "clock": "2026-02-04T14:30:00Z",
+              "opportunity": "msft-2026-02-04",
+              "ticker": "MSFT",
+              "synthetic": true,
+              "available_data": {
+                "snapshot_id": "4bf2b733-3d3e-42ca-ab7e-616375a19094",
+                "snapshot_hash": "2b19184dab4969821b4540229522f49bb70013801167ef59c87e322e63cb4cec",
+                "analysis_cutoff": "2026-02-04T14:30:00Z",
+                "quote": {
+                  "as_of": "2026-02-04T14:29:55Z",
+                  "source": "declared_fixture_quote",
+                  "currency": "USD",
+                  "price_usd": "410.00",
+                  "change_pct": "-3.00"
+                },
+                "known_marks": [
+                  {
+                    "ticker": "AAPL",
+                    "at": "2026-02-03T14:30:00Z",
+                    "observed_at": "2026-02-03T14:30:00Z",
+                    "price_usd": "225.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  },
+                  {
+                    "ticker": "AAPL",
+                    "at": "2026-02-03T14:35:00Z",
+                    "observed_at": "2026-02-03T14:35:00Z",
+                    "price_usd": "225.50",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored fill mark"
+                  },
+                  {
+                    "ticker": "MSFT",
+                    "at": "2026-02-04T14:30:00Z",
+                    "observed_at": "2026-02-04T14:30:00Z",
+                    "price_usd": "410.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  }
+                ]
+              },
+              "decision": {
+                "run_id": "2c9124b5-521f-4846-98e7-5964917c57c1",
+                "action": "HOLD",
+                "requested_quantity": "0",
+                "recorded_at": "2026-02-04T14:30:10Z"
+              },
+              "order": {
+                "fill_rule_status": "hold_no_trade",
+                "fill_reason": null
+              },
+              "reason": null
+            },
+            {
+              "sequence": 3,
+              "event": "decision",
+              "clock": "2026-02-05T14:30:00Z",
+              "opportunity": "tsla-2026-02-05",
+              "ticker": "TSLA",
+              "synthetic": true,
+              "available_data": {
+                "snapshot_id": "e25e049a-abca-49e7-a87c-5544d66f1c5b",
+                "snapshot_hash": "54f11326100d28d82eef1073be47b0a5d1fbe261d27101479bbf0aa1b2ddc8fd",
+                "analysis_cutoff": "2026-02-05T14:30:00Z",
+                "quote": {
+                  "as_of": "2026-02-05T14:29:55Z",
+                  "source": "declared_fixture_quote",
+                  "currency": "USD",
+                  "price_usd": "250.00",
+                  "change_pct": "1.00"
+                },
+                "known_marks": [
+                  {
+                    "ticker": "AAPL",
+                    "at": "2026-02-03T14:30:00Z",
+                    "observed_at": "2026-02-03T14:30:00Z",
+                    "price_usd": "225.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  },
+                  {
+                    "ticker": "AAPL",
+                    "at": "2026-02-03T14:35:00Z",
+                    "observed_at": "2026-02-03T14:35:00Z",
+                    "price_usd": "225.50",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored fill mark"
+                  },
+                  {
+                    "ticker": "MSFT",
+                    "at": "2026-02-04T14:30:00Z",
+                    "observed_at": "2026-02-04T14:30:00Z",
+                    "price_usd": "410.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  },
+                  {
+                    "ticker": "MSFT",
+                    "at": "2026-02-04T14:35:00Z",
+                    "observed_at": "2026-02-04T14:35:00Z",
+                    "price_usd": "411.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored fill mark"
+                  },
+                  {
+                    "ticker": "TSLA",
+                    "at": "2026-02-05T14:30:00Z",
+                    "observed_at": "2026-02-05T14:30:00Z",
+                    "price_usd": "250.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  }
+                ]
+              },
+              "decision": {
+                "run_id": "365be93d-e06f-4a3a-b196-d4510379378a",
+                "action": "HOLD",
+                "requested_quantity": "0",
+                "recorded_at": "2026-02-05T14:30:10Z"
+              },
+              "order": {
+                "fill_rule_status": "hold_no_trade",
+                "fill_reason": null
+              },
+              "reason": null
+            },
+            {
+              "sequence": 4,
+              "event": "window_close",
+              "clock": "2026-02-12T00:00:00Z",
+              "synthetic": true,
+              "ending_state": {
+                "cash_usd": "10000.00",
+                "positions": {}
+              },
+              "expired_fills": [],
+              "available_data": {
+                "known_marks": [
+                  {
+                    "ticker": "AAPL",
+                    "at": "2026-02-03T14:30:00Z",
+                    "observed_at": "2026-02-03T14:30:00Z",
+                    "price_usd": "225.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  },
+                  {
+                    "ticker": "AAPL",
+                    "at": "2026-02-03T14:35:00Z",
+                    "observed_at": "2026-02-03T14:35:00Z",
+                    "price_usd": "225.50",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored fill mark"
+                  },
+                  {
+                    "ticker": "AAPL",
+                    "at": "2026-02-11T20:00:00Z",
+                    "observed_at": "2026-02-11T20:00:00Z",
+                    "price_usd": "232.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored closing mark"
+                  },
+                  {
+                    "ticker": "MSFT",
+                    "at": "2026-02-04T14:30:00Z",
+                    "observed_at": "2026-02-04T14:30:00Z",
+                    "price_usd": "410.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  },
+                  {
+                    "ticker": "MSFT",
+                    "at": "2026-02-04T14:35:00Z",
+                    "observed_at": "2026-02-04T14:35:00Z",
+                    "price_usd": "411.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored fill mark"
+                  },
+                  {
+                    "ticker": "MSFT",
+                    "at": "2026-02-11T20:00:00Z",
+                    "observed_at": "2026-02-11T20:00:00Z",
+                    "price_usd": "400.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored closing mark"
+                  },
+                  {
+                    "ticker": "TSLA",
+                    "at": "2026-02-05T14:30:00Z",
+                    "observed_at": "2026-02-05T14:30:00Z",
+                    "price_usd": "250.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  },
+                  {
+                    "ticker": "TSLA",
+                    "at": "2026-02-05T14:35:00Z",
+                    "observed_at": "2026-02-05T14:35:00Z",
+                    "price_usd": "249.50",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored fill mark"
+                  },
+                  {
+                    "ticker": "TSLA",
+                    "at": "2026-02-11T20:00:00Z",
+                    "observed_at": "2026-02-11T20:00:00Z",
+                    "price_usd": "260.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored closing mark"
+                  }
+                ]
+              }
+            }
+          ],
+          "steps_hash": "cb721cd33264cc25627e722eb9ad32736f9a36885e25426b346f56fab26dcede",
+          "decision_records": [
+            {
+              "event": "decision",
+              "clock": "2026-02-03T14:30:00Z",
+              "opportunity": "aapl-2026-02-03",
+              "ticker": "AAPL",
+              "action": "HOLD",
+              "requested_quantity": "0",
+              "fill_rule_status": "hold_no_trade",
+              "fill_reason": null
+            },
+            {
+              "event": "decision",
+              "clock": "2026-02-04T14:30:00Z",
+              "opportunity": "msft-2026-02-04",
+              "ticker": "MSFT",
+              "action": "HOLD",
+              "requested_quantity": "0",
+              "fill_rule_status": "hold_no_trade",
+              "fill_reason": null
+            },
+            {
+              "event": "decision",
+              "clock": "2026-02-05T14:30:00Z",
+              "opportunity": "tsla-2026-02-05",
+              "ticker": "TSLA",
+              "action": "HOLD",
+              "requested_quantity": "0",
+              "fill_rule_status": "hold_no_trade",
+              "fill_reason": null
+            }
+          ],
+          "decision_records_hash": "c29e34911a467481dca7460e59335ad5c0a2dddee327d9bcb5cd8f40b274b3d7",
+          "step_count": 5,
+          "monotonic": true,
+          "expired_fills": [],
+          "synthetic": true,
+          "note": "Each decision and fill carries the simulated clock and the data known at that instant. A fill priced from a later mark is applied when the clock reaches it."
+        },
         "per_opportunity": [
           {
             "opportunity": "aapl-2026-02-03",
@@ -1448,7 +3693,94 @@
             "scheduled_at": "2026-02-05T14:30:00Z"
           }
         ]
-      }
+      },
+      "primary_metric": {
+        "arm": "V1",
+        "status": "computed",
+        "value": "0.0000",
+        "unit": "percent",
+        "observations": 2,
+        "scheduled_observations": 3,
+        "excluded_observations": 1,
+        "excluded_by_reason": {
+          "no_session_at_or_after_target": 1
+        },
+        "contributing_runs": [
+          "10cecf53-c19d-4126-ae0d-c16c8f12e73c",
+          "2c9124b5-521f-4846-98e7-5964917c57c1"
+        ],
+        "observations_detail": [
+          {
+            "run_id": "10cecf53-c19d-4126-ae0d-c16c8f12e73c",
+            "opportunity": "aapl-2026-02-03",
+            "ticker": "AAPL",
+            "action": "HOLD",
+            "maturity": "evaluated",
+            "reason": null,
+            "price_at_decision": "225.0000",
+            "price_source": "snapshot_quote",
+            "target_at": "2026-02-10T14:30:00Z",
+            "price_at_horizon": "232.0000",
+            "price_observed_at": "2026-02-11T20:00:00Z",
+            "session_shift_days": 1,
+            "forward_return_pct": "3.1111",
+            "action_score_pct": "0.0000",
+            "directional_hit": null,
+            "hold_zero_convention": true
+          },
+          {
+            "run_id": "2c9124b5-521f-4846-98e7-5964917c57c1",
+            "opportunity": "msft-2026-02-04",
+            "ticker": "MSFT",
+            "action": "HOLD",
+            "maturity": "evaluated",
+            "reason": null,
+            "price_at_decision": "410.0000",
+            "price_source": "snapshot_quote",
+            "target_at": "2026-02-11T14:30:00Z",
+            "price_at_horizon": "400.0000",
+            "price_observed_at": "2026-02-11T20:00:00Z",
+            "session_shift_days": 0,
+            "forward_return_pct": "-2.4390",
+            "action_score_pct": "0.0000",
+            "directional_hit": null,
+            "hold_zero_convention": true
+          },
+          {
+            "run_id": "365be93d-e06f-4a3a-b196-d4510379378a",
+            "opportunity": "tsla-2026-02-05",
+            "ticker": "TSLA",
+            "action": "HOLD",
+            "maturity": "unavailable",
+            "reason": "no_session_at_or_after_target",
+            "price_at_decision": "250.0000",
+            "price_source": "snapshot_quote"
+          }
+        ],
+        "dispersion": {
+          "metric": "sample_standard_deviation_pct",
+          "std_dev_pct": "0.0000",
+          "min_pct": "0.0000",
+          "max_pct": "0.0000",
+          "range_pct": "0.0000",
+          "observations": 2,
+          "reason": null
+        },
+        "interval": {
+          "method": "time_block_bootstrap",
+          "statistic": "mean",
+          "lower": "0.0000",
+          "upper": "0.0000",
+          "confidence": "0.95",
+          "block_size": 1,
+          "resamples": 1000,
+          "seed": 0,
+          "observations": 2,
+          "reason": null
+        },
+        "reason": null
+      },
+      "synthetic": true
     },
     {
       "key": "V2",
@@ -1470,8 +3802,8 @@
       "cost": {
         "runs": 3,
         "measured_tokens": {
-          "input": 0,
-          "output": 0
+          "input": 6655,
+          "output": 1005
         },
         "estimated_tokens": {
           "input": 6655,
@@ -1493,18 +3825,28 @@
       "runs": [
         {
           "opportunity": "aapl-2026-02-03",
-          "fixture_id": "alphaagent-arms.v1.v2.aapl-2026-02-03",
+          "fixture_id": "alphaagent-arms.v1.v2.aapl-2026-02-03.50ad033095c12bc9",
           "status": "completed",
           "failure_code": null,
-          "failure_detail": null,
-          "decision_run_id": "986bfe51-de01-4f63-aadc-f06747912525",
+          "failure_detail": "run already recorded",
+          "decision_run_id": "2d491200-e31b-45d7-8ad3-76107cd98c2c",
           "protocol_version": "debate.no_rebuttal.v1",
-          "snapshot_id": "08fac509-3cd6-4afb-8379-ebdf56d1fd68",
-          "snapshot_hash": "918c65e106c7061eaf142fc9fb513749b889034391a03c97bf2bb2e51015f7a8",
+          "snapshot_id": "fcb6ef79-a1a0-420f-9e27-972fd6d4116b",
+          "snapshot_hash": "dc7cbd016c8dfb53ddddf4dc8644849c1cb43d096e0b52f799552975b50de215",
+          "synthetic": true,
+          "decision": {
+            "run_id": "2d491200-e31b-45d7-8ad3-76107cd98c2c",
+            "opportunity": "aapl-2026-02-03",
+            "ticker": "AAPL",
+            "action": "BUY",
+            "requested_quantity": "1.00000000",
+            "rationale": "No rebuttal round was executed in this configuration; the scripted CIO follows the constructive case and buys a small position.",
+            "recorded_at": "2026-02-03T14:30:10Z"
+          },
           "cost": {
             "measured_tokens": {
-              "input": 0,
-              "output": 0
+              "input": 2227,
+              "output": 335
             },
             "estimated_tokens": {
               "input": 2227,
@@ -1524,18 +3866,28 @@
         },
         {
           "opportunity": "msft-2026-02-04",
-          "fixture_id": "alphaagent-arms.v1.v2.msft-2026-02-04",
+          "fixture_id": "alphaagent-arms.v1.v2.msft-2026-02-04.50ad033095c12bc9",
           "status": "completed",
           "failure_code": null,
-          "failure_detail": null,
-          "decision_run_id": "b400afd7-1625-4bd3-9b93-c317325ddb2f",
+          "failure_detail": "run already recorded",
+          "decision_run_id": "0a481591-0d52-4a69-a03d-5dc1c486ca45",
           "protocol_version": "debate.no_rebuttal.v1",
-          "snapshot_id": "3dfc4e0a-9834-4602-911b-5b933506d0d7",
-          "snapshot_hash": "c6a3491b6a3d49423fd0910408151ba06c0e7556f14ec9eb370965240e94979b",
+          "snapshot_id": "4bf2b733-3d3e-42ca-ab7e-616375a19094",
+          "snapshot_hash": "2b19184dab4969821b4540229522f49bb70013801167ef59c87e322e63cb4cec",
+          "synthetic": true,
+          "decision": {
+            "run_id": "0a481591-0d52-4a69-a03d-5dc1c486ca45",
+            "opportunity": "msft-2026-02-04",
+            "ticker": "MSFT",
+            "action": "BUY",
+            "requested_quantity": "1.00000000",
+            "rationale": "No rebuttal round was executed in this configuration; the scripted CIO follows the constructive case and buys a small position.",
+            "recorded_at": "2026-02-04T14:30:10Z"
+          },
           "cost": {
             "measured_tokens": {
-              "input": 0,
-              "output": 0
+              "input": 2217,
+              "output": 335
             },
             "estimated_tokens": {
               "input": 2217,
@@ -1555,18 +3907,28 @@
         },
         {
           "opportunity": "tsla-2026-02-05",
-          "fixture_id": "alphaagent-arms.v1.v2.tsla-2026-02-05",
+          "fixture_id": "alphaagent-arms.v1.v2.tsla-2026-02-05.50ad033095c12bc9",
           "status": "completed",
           "failure_code": null,
-          "failure_detail": null,
-          "decision_run_id": "39b5d7a7-3272-4dcc-9cfc-c6452d6cff47",
+          "failure_detail": "run already recorded",
+          "decision_run_id": "87d66c97-ff88-4aff-bbaa-e01966d97cd2",
           "protocol_version": "debate.no_rebuttal.v1",
-          "snapshot_id": "94c6fc4e-c40d-4b65-b021-62a90c42b883",
-          "snapshot_hash": "d3b829991af710262ef259de271490918490262edaffe1b9534bb1c37ddbf458",
+          "snapshot_id": "e25e049a-abca-49e7-a87c-5544d66f1c5b",
+          "snapshot_hash": "54f11326100d28d82eef1073be47b0a5d1fbe261d27101479bbf0aa1b2ddc8fd",
+          "synthetic": true,
+          "decision": {
+            "run_id": "87d66c97-ff88-4aff-bbaa-e01966d97cd2",
+            "opportunity": "tsla-2026-02-05",
+            "ticker": "TSLA",
+            "action": "BUY",
+            "requested_quantity": "1.00000000",
+            "rationale": "No rebuttal round was executed in this configuration; the scripted CIO follows the constructive case and buys a small position.",
+            "recorded_at": "2026-02-05T14:30:10Z"
+          },
           "cost": {
             "measured_tokens": {
-              "input": 0,
-              "output": 0
+              "input": 2211,
+              "output": 335
             },
             "estimated_tokens": {
               "input": 2211,
@@ -1587,18 +3949,18 @@
       ],
       "snapshots": [
         {
-          "snapshot_id": "08fac509-3cd6-4afb-8379-ebdf56d1fd68",
-          "content_hash": "918c65e106c7061eaf142fc9fb513749b889034391a03c97bf2bb2e51015f7a8",
+          "snapshot_id": "fcb6ef79-a1a0-420f-9e27-972fd6d4116b",
+          "content_hash": "dc7cbd016c8dfb53ddddf4dc8644849c1cb43d096e0b52f799552975b50de215",
           "opportunity": "aapl-2026-02-03"
         },
         {
-          "snapshot_id": "3dfc4e0a-9834-4602-911b-5b933506d0d7",
-          "content_hash": "c6a3491b6a3d49423fd0910408151ba06c0e7556f14ec9eb370965240e94979b",
+          "snapshot_id": "4bf2b733-3d3e-42ca-ab7e-616375a19094",
+          "content_hash": "2b19184dab4969821b4540229522f49bb70013801167ef59c87e322e63cb4cec",
           "opportunity": "msft-2026-02-04"
         },
         {
-          "snapshot_id": "94c6fc4e-c40d-4b65-b021-62a90c42b883",
-          "content_hash": "d3b829991af710262ef259de271490918490262edaffe1b9534bb1c37ddbf458",
+          "snapshot_id": "e25e049a-abca-49e7-a87c-5544d66f1c5b",
+          "content_hash": "54f11326100d28d82eef1073be47b0a5d1fbe261d27101479bbf0aa1b2ddc8fd",
           "opportunity": "tsla-2026-02-05"
         }
       ],
@@ -1617,9 +3979,11 @@
             ]
           ],
           "fill_rule": "first_executable_mark_at_or_after_decision.v1",
+          "fill_timing": "fill_applied_at_first_available_mark.v1",
+          "simulation_method": "monotonic_event_clock.v1",
           "fee_model": "declared_bps",
           "guard_policy": "guard.v1",
-          "llm_cost_timing": "A known LLM cost is attributed at the decision instant (clamped to the window end) because it is external spend, not a portfolio flow.",
+          "llm_cost_timing": "A known LLM cost is attributed at the decision's recorded time (clamped to the window end) because it is external spend, not a portfolio flow.",
           "note": "Simulated replay of this arm's recorded decisions under the frozen marks, the shared guard and the same accounting method. Not realised history."
         },
         "window": {
@@ -2202,9 +4566,10 @@
         "orders": [
           {
             "opportunity": "aapl-2026-02-03",
-            "decision_run_id": "986bfe51-de01-4f63-aadc-f06747912525",
+            "decision_run_id": "2d491200-e31b-45d7-8ad3-76107cd98c2c",
             "decision_at": "2026-02-03T14:30:00Z",
-            "decision_recorded_at": "2026-11-11T15:47:42.335015Z",
+            "decision_recorded_at": "2026-02-03T14:30:10Z",
+            "simulated_clock_at_decision": "2026-02-03T14:30:00Z",
             "proposal_action": "BUY",
             "requested_quantity": "1.00000000",
             "price_at_decision_usd": "225.00",
@@ -2224,15 +4589,28 @@
               "executed_by": "simulated",
               "source": "simulated_arm:V2"
             },
+            "fill_rule_status": "filled",
+            "fill_reason": null,
+            "scheduled_fill_at": null,
+            "applied_at": "2026-02-03T14:30:00Z",
+            "equity_before_usd": "10000.00",
             "equity_after_usd": "10000.00",
+            "cash_before_usd": "10000.00",
+            "positions_before": {},
+            "cash_after_decision_usd": "9775.00",
+            "positions_after_decision": {
+              "AAPL": "1.00000000"
+            },
+            "unpriced_positions": [],
             "reason": null,
             "fee_bps": "0"
           },
           {
             "opportunity": "msft-2026-02-04",
-            "decision_run_id": "b400afd7-1625-4bd3-9b93-c317325ddb2f",
+            "decision_run_id": "0a481591-0d52-4a69-a03d-5dc1c486ca45",
             "decision_at": "2026-02-04T14:30:00Z",
-            "decision_recorded_at": "2026-11-11T15:47:43.117159Z",
+            "decision_recorded_at": "2026-02-04T14:30:10Z",
+            "simulated_clock_at_decision": "2026-02-04T14:30:00Z",
             "proposal_action": "BUY",
             "requested_quantity": "1.00000000",
             "price_at_decision_usd": "410.00",
@@ -2252,15 +4630,31 @@
               "executed_by": "simulated",
               "source": "simulated_arm:V2"
             },
+            "fill_rule_status": "filled",
+            "fill_reason": null,
+            "scheduled_fill_at": null,
+            "applied_at": "2026-02-04T14:30:00Z",
+            "equity_before_usd": "10000.50",
             "equity_after_usd": "10000.50",
+            "cash_before_usd": "9775.00",
+            "positions_before": {
+              "AAPL": "1.00000000"
+            },
+            "cash_after_decision_usd": "9365.00",
+            "positions_after_decision": {
+              "AAPL": "1.00000000",
+              "MSFT": "1.00000000"
+            },
+            "unpriced_positions": [],
             "reason": null,
             "fee_bps": "0"
           },
           {
             "opportunity": "tsla-2026-02-05",
-            "decision_run_id": "39b5d7a7-3272-4dcc-9cfc-c6452d6cff47",
+            "decision_run_id": "87d66c97-ff88-4aff-bbaa-e01966d97cd2",
             "decision_at": "2026-02-05T14:30:00Z",
-            "decision_recorded_at": "2026-11-11T15:47:43.848627Z",
+            "decision_recorded_at": "2026-02-05T14:30:10Z",
+            "simulated_clock_at_decision": "2026-02-05T14:30:00Z",
             "proposal_action": "BUY",
             "requested_quantity": "1.00000000",
             "price_at_decision_usd": "250.00",
@@ -2280,13 +4674,542 @@
               "executed_by": "simulated",
               "source": "simulated_arm:V2"
             },
+            "fill_rule_status": "filled",
+            "fill_reason": null,
+            "scheduled_fill_at": null,
+            "applied_at": "2026-02-05T14:30:00Z",
+            "equity_before_usd": "10001.50",
             "equity_after_usd": "10001.50",
+            "cash_before_usd": "9365.00",
+            "positions_before": {
+              "AAPL": "1.00000000",
+              "MSFT": "1.00000000"
+            },
+            "cash_after_decision_usd": "9115.00",
+            "positions_after_decision": {
+              "AAPL": "1.00000000",
+              "MSFT": "1.00000000",
+              "TSLA": "1.00000000"
+            },
+            "unpriced_positions": [],
             "reason": null,
             "fee_bps": "0"
           }
         ],
         "orders_count": 3,
         "fill_count": 3,
+        "simulation": {
+          "method_version": "monotonic_event_clock.v1",
+          "fill_timing_rule": "fill_applied_at_first_available_mark.v1",
+          "fill_rule": "first_executable_mark_at_or_after_decision.v1",
+          "clock_started_at": "2026-02-02T23:59:59Z",
+          "clock_ended_at": "2026-02-12T00:00:00Z",
+          "steps": [
+            {
+              "sequence": 0,
+              "event": "simulation_start",
+              "clock": "2026-02-02T23:59:59Z",
+              "synthetic": true,
+              "starting_state": {
+                "cash_usd": "10000.00",
+                "positions": {}
+              },
+              "available_data": {
+                "known_marks": []
+              }
+            },
+            {
+              "sequence": 1,
+              "event": "fill",
+              "clock": "2026-02-03T14:30:00Z",
+              "opportunity": "aapl-2026-02-03",
+              "decision_clock": "2026-02-03T14:30:00Z",
+              "fill": {
+                "at": "2026-02-03T14:30:00Z",
+                "ticker": "AAPL",
+                "side": "BUY",
+                "quantity": "1.00000000",
+                "price_usd": "225.00",
+                "notional_usd": "225.00",
+                "fee_usd": "0.00",
+                "fee_recorded": true,
+                "executed_by": "simulated",
+                "source": "simulated_arm:V2"
+              },
+              "cash_after_usd": "9775.00",
+              "positions_after": {
+                "AAPL": "1.00000000"
+              },
+              "available_data": {
+                "known_marks": [
+                  {
+                    "ticker": "AAPL",
+                    "at": "2026-02-03T14:30:00Z",
+                    "observed_at": "2026-02-03T14:30:00Z",
+                    "price_usd": "225.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  }
+                ]
+              },
+              "reason": "priced_at_the_decision_clock"
+            },
+            {
+              "sequence": 1,
+              "event": "decision",
+              "clock": "2026-02-03T14:30:00Z",
+              "opportunity": "aapl-2026-02-03",
+              "ticker": "AAPL",
+              "synthetic": true,
+              "available_data": {
+                "snapshot_id": "fcb6ef79-a1a0-420f-9e27-972fd6d4116b",
+                "snapshot_hash": "dc7cbd016c8dfb53ddddf4dc8644849c1cb43d096e0b52f799552975b50de215",
+                "analysis_cutoff": "2026-02-03T14:30:00Z",
+                "quote": {
+                  "as_of": "2026-02-03T14:29:55Z",
+                  "source": "declared_fixture_quote",
+                  "currency": "USD",
+                  "price_usd": "225.00",
+                  "change_pct": "2.50"
+                },
+                "known_marks": [
+                  {
+                    "ticker": "AAPL",
+                    "at": "2026-02-03T14:30:00Z",
+                    "observed_at": "2026-02-03T14:30:00Z",
+                    "price_usd": "225.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  }
+                ]
+              },
+              "decision": {
+                "run_id": "2d491200-e31b-45d7-8ad3-76107cd98c2c",
+                "action": "BUY",
+                "requested_quantity": "1.00000000",
+                "recorded_at": "2026-02-03T14:30:10Z"
+              },
+              "order": {
+                "fill_rule_status": "filled",
+                "fill_reason": null
+              },
+              "reason": null
+            },
+            {
+              "sequence": 3,
+              "event": "fill",
+              "clock": "2026-02-04T14:30:00Z",
+              "opportunity": "msft-2026-02-04",
+              "decision_clock": "2026-02-04T14:30:00Z",
+              "fill": {
+                "at": "2026-02-04T14:30:00Z",
+                "ticker": "MSFT",
+                "side": "BUY",
+                "quantity": "1.00000000",
+                "price_usd": "410.00",
+                "notional_usd": "410.00",
+                "fee_usd": "0.00",
+                "fee_recorded": true,
+                "executed_by": "simulated",
+                "source": "simulated_arm:V2"
+              },
+              "cash_after_usd": "9365.00",
+              "positions_after": {
+                "AAPL": "1.00000000",
+                "MSFT": "1.00000000"
+              },
+              "available_data": {
+                "known_marks": [
+                  {
+                    "ticker": "AAPL",
+                    "at": "2026-02-03T14:30:00Z",
+                    "observed_at": "2026-02-03T14:30:00Z",
+                    "price_usd": "225.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  },
+                  {
+                    "ticker": "AAPL",
+                    "at": "2026-02-03T14:35:00Z",
+                    "observed_at": "2026-02-03T14:35:00Z",
+                    "price_usd": "225.50",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored fill mark"
+                  },
+                  {
+                    "ticker": "MSFT",
+                    "at": "2026-02-04T14:30:00Z",
+                    "observed_at": "2026-02-04T14:30:00Z",
+                    "price_usd": "410.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  }
+                ]
+              },
+              "reason": "priced_at_the_decision_clock"
+            },
+            {
+              "sequence": 3,
+              "event": "decision",
+              "clock": "2026-02-04T14:30:00Z",
+              "opportunity": "msft-2026-02-04",
+              "ticker": "MSFT",
+              "synthetic": true,
+              "available_data": {
+                "snapshot_id": "4bf2b733-3d3e-42ca-ab7e-616375a19094",
+                "snapshot_hash": "2b19184dab4969821b4540229522f49bb70013801167ef59c87e322e63cb4cec",
+                "analysis_cutoff": "2026-02-04T14:30:00Z",
+                "quote": {
+                  "as_of": "2026-02-04T14:29:55Z",
+                  "source": "declared_fixture_quote",
+                  "currency": "USD",
+                  "price_usd": "410.00",
+                  "change_pct": "-3.00"
+                },
+                "known_marks": [
+                  {
+                    "ticker": "AAPL",
+                    "at": "2026-02-03T14:30:00Z",
+                    "observed_at": "2026-02-03T14:30:00Z",
+                    "price_usd": "225.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  },
+                  {
+                    "ticker": "AAPL",
+                    "at": "2026-02-03T14:35:00Z",
+                    "observed_at": "2026-02-03T14:35:00Z",
+                    "price_usd": "225.50",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored fill mark"
+                  },
+                  {
+                    "ticker": "MSFT",
+                    "at": "2026-02-04T14:30:00Z",
+                    "observed_at": "2026-02-04T14:30:00Z",
+                    "price_usd": "410.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  }
+                ]
+              },
+              "decision": {
+                "run_id": "0a481591-0d52-4a69-a03d-5dc1c486ca45",
+                "action": "BUY",
+                "requested_quantity": "1.00000000",
+                "recorded_at": "2026-02-04T14:30:10Z"
+              },
+              "order": {
+                "fill_rule_status": "filled",
+                "fill_reason": null
+              },
+              "reason": null
+            },
+            {
+              "sequence": 5,
+              "event": "fill",
+              "clock": "2026-02-05T14:30:00Z",
+              "opportunity": "tsla-2026-02-05",
+              "decision_clock": "2026-02-05T14:30:00Z",
+              "fill": {
+                "at": "2026-02-05T14:30:00Z",
+                "ticker": "TSLA",
+                "side": "BUY",
+                "quantity": "1.00000000",
+                "price_usd": "250.00",
+                "notional_usd": "250.00",
+                "fee_usd": "0.00",
+                "fee_recorded": true,
+                "executed_by": "simulated",
+                "source": "simulated_arm:V2"
+              },
+              "cash_after_usd": "9115.00",
+              "positions_after": {
+                "AAPL": "1.00000000",
+                "MSFT": "1.00000000",
+                "TSLA": "1.00000000"
+              },
+              "available_data": {
+                "known_marks": [
+                  {
+                    "ticker": "AAPL",
+                    "at": "2026-02-03T14:30:00Z",
+                    "observed_at": "2026-02-03T14:30:00Z",
+                    "price_usd": "225.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  },
+                  {
+                    "ticker": "AAPL",
+                    "at": "2026-02-03T14:35:00Z",
+                    "observed_at": "2026-02-03T14:35:00Z",
+                    "price_usd": "225.50",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored fill mark"
+                  },
+                  {
+                    "ticker": "MSFT",
+                    "at": "2026-02-04T14:30:00Z",
+                    "observed_at": "2026-02-04T14:30:00Z",
+                    "price_usd": "410.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  },
+                  {
+                    "ticker": "MSFT",
+                    "at": "2026-02-04T14:35:00Z",
+                    "observed_at": "2026-02-04T14:35:00Z",
+                    "price_usd": "411.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored fill mark"
+                  },
+                  {
+                    "ticker": "TSLA",
+                    "at": "2026-02-05T14:30:00Z",
+                    "observed_at": "2026-02-05T14:30:00Z",
+                    "price_usd": "250.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  }
+                ]
+              },
+              "reason": "priced_at_the_decision_clock"
+            },
+            {
+              "sequence": 5,
+              "event": "decision",
+              "clock": "2026-02-05T14:30:00Z",
+              "opportunity": "tsla-2026-02-05",
+              "ticker": "TSLA",
+              "synthetic": true,
+              "available_data": {
+                "snapshot_id": "e25e049a-abca-49e7-a87c-5544d66f1c5b",
+                "snapshot_hash": "54f11326100d28d82eef1073be47b0a5d1fbe261d27101479bbf0aa1b2ddc8fd",
+                "analysis_cutoff": "2026-02-05T14:30:00Z",
+                "quote": {
+                  "as_of": "2026-02-05T14:29:55Z",
+                  "source": "declared_fixture_quote",
+                  "currency": "USD",
+                  "price_usd": "250.00",
+                  "change_pct": "1.00"
+                },
+                "known_marks": [
+                  {
+                    "ticker": "AAPL",
+                    "at": "2026-02-03T14:30:00Z",
+                    "observed_at": "2026-02-03T14:30:00Z",
+                    "price_usd": "225.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  },
+                  {
+                    "ticker": "AAPL",
+                    "at": "2026-02-03T14:35:00Z",
+                    "observed_at": "2026-02-03T14:35:00Z",
+                    "price_usd": "225.50",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored fill mark"
+                  },
+                  {
+                    "ticker": "MSFT",
+                    "at": "2026-02-04T14:30:00Z",
+                    "observed_at": "2026-02-04T14:30:00Z",
+                    "price_usd": "410.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  },
+                  {
+                    "ticker": "MSFT",
+                    "at": "2026-02-04T14:35:00Z",
+                    "observed_at": "2026-02-04T14:35:00Z",
+                    "price_usd": "411.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored fill mark"
+                  },
+                  {
+                    "ticker": "TSLA",
+                    "at": "2026-02-05T14:30:00Z",
+                    "observed_at": "2026-02-05T14:30:00Z",
+                    "price_usd": "250.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  }
+                ]
+              },
+              "decision": {
+                "run_id": "87d66c97-ff88-4aff-bbaa-e01966d97cd2",
+                "action": "BUY",
+                "requested_quantity": "1.00000000",
+                "recorded_at": "2026-02-05T14:30:10Z"
+              },
+              "order": {
+                "fill_rule_status": "filled",
+                "fill_reason": null
+              },
+              "reason": null
+            },
+            {
+              "sequence": 7,
+              "event": "window_close",
+              "clock": "2026-02-12T00:00:00Z",
+              "synthetic": true,
+              "ending_state": {
+                "cash_usd": "9115.00",
+                "positions": {
+                  "AAPL": "1.00000000",
+                  "MSFT": "1.00000000",
+                  "TSLA": "1.00000000"
+                }
+              },
+              "expired_fills": [],
+              "available_data": {
+                "known_marks": [
+                  {
+                    "ticker": "AAPL",
+                    "at": "2026-02-03T14:30:00Z",
+                    "observed_at": "2026-02-03T14:30:00Z",
+                    "price_usd": "225.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  },
+                  {
+                    "ticker": "AAPL",
+                    "at": "2026-02-03T14:35:00Z",
+                    "observed_at": "2026-02-03T14:35:00Z",
+                    "price_usd": "225.50",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored fill mark"
+                  },
+                  {
+                    "ticker": "AAPL",
+                    "at": "2026-02-11T20:00:00Z",
+                    "observed_at": "2026-02-11T20:00:00Z",
+                    "price_usd": "232.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored closing mark"
+                  },
+                  {
+                    "ticker": "MSFT",
+                    "at": "2026-02-04T14:30:00Z",
+                    "observed_at": "2026-02-04T14:30:00Z",
+                    "price_usd": "410.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  },
+                  {
+                    "ticker": "MSFT",
+                    "at": "2026-02-04T14:35:00Z",
+                    "observed_at": "2026-02-04T14:35:00Z",
+                    "price_usd": "411.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored fill mark"
+                  },
+                  {
+                    "ticker": "MSFT",
+                    "at": "2026-02-11T20:00:00Z",
+                    "observed_at": "2026-02-11T20:00:00Z",
+                    "price_usd": "400.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored closing mark"
+                  },
+                  {
+                    "ticker": "TSLA",
+                    "at": "2026-02-05T14:30:00Z",
+                    "observed_at": "2026-02-05T14:30:00Z",
+                    "price_usd": "250.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  },
+                  {
+                    "ticker": "TSLA",
+                    "at": "2026-02-05T14:35:00Z",
+                    "observed_at": "2026-02-05T14:35:00Z",
+                    "price_usd": "249.50",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored fill mark"
+                  },
+                  {
+                    "ticker": "TSLA",
+                    "at": "2026-02-11T20:00:00Z",
+                    "observed_at": "2026-02-11T20:00:00Z",
+                    "price_usd": "260.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored closing mark"
+                  }
+                ]
+              }
+            }
+          ],
+          "steps_hash": "9fe34bfbcb3fb4d4a7aa145027fb682b4a99845220d971fbdf73b45ab65d4e5e",
+          "decision_records": [
+            {
+              "event": "fill",
+              "clock": "2026-02-03T14:30:00Z",
+              "opportunity": "aapl-2026-02-03",
+              "ticker": "AAPL",
+              "side": "BUY",
+              "quantity": "1.00000000",
+              "price_usd": "225.00",
+              "fee_usd": "0.00"
+            },
+            {
+              "event": "decision",
+              "clock": "2026-02-03T14:30:00Z",
+              "opportunity": "aapl-2026-02-03",
+              "ticker": "AAPL",
+              "action": "BUY",
+              "requested_quantity": "1.00000000",
+              "fill_rule_status": "filled",
+              "fill_reason": null
+            },
+            {
+              "event": "fill",
+              "clock": "2026-02-04T14:30:00Z",
+              "opportunity": "msft-2026-02-04",
+              "ticker": "MSFT",
+              "side": "BUY",
+              "quantity": "1.00000000",
+              "price_usd": "410.00",
+              "fee_usd": "0.00"
+            },
+            {
+              "event": "decision",
+              "clock": "2026-02-04T14:30:00Z",
+              "opportunity": "msft-2026-02-04",
+              "ticker": "MSFT",
+              "action": "BUY",
+              "requested_quantity": "1.00000000",
+              "fill_rule_status": "filled",
+              "fill_reason": null
+            },
+            {
+              "event": "fill",
+              "clock": "2026-02-05T14:30:00Z",
+              "opportunity": "tsla-2026-02-05",
+              "ticker": "TSLA",
+              "side": "BUY",
+              "quantity": "1.00000000",
+              "price_usd": "250.00",
+              "fee_usd": "0.00"
+            },
+            {
+              "event": "decision",
+              "clock": "2026-02-05T14:30:00Z",
+              "opportunity": "tsla-2026-02-05",
+              "ticker": "TSLA",
+              "action": "BUY",
+              "requested_quantity": "1.00000000",
+              "fill_rule_status": "filled",
+              "fill_reason": null
+            }
+          ],
+          "decision_records_hash": "07621fdcfaf0bd368e651fee4a889dd9326810a006dfdaf48af928820136fcd6",
+          "step_count": 8,
+          "monotonic": true,
+          "expired_fills": [],
+          "synthetic": true,
+          "note": "Each decision and fill carries the simulated clock and the data known at that instant. A fill priced from a later mark is applied when the clock reaches it."
+        },
         "per_opportunity": [
           {
             "opportunity": "aapl-2026-02-03",
@@ -2304,7 +5227,94 @@
             "scheduled_at": "2026-02-05T14:30:00Z"
           }
         ]
-      }
+      },
+      "primary_metric": {
+        "arm": "V2",
+        "status": "computed",
+        "value": "0.3360",
+        "unit": "percent",
+        "observations": 2,
+        "scheduled_observations": 3,
+        "excluded_observations": 1,
+        "excluded_by_reason": {
+          "no_session_at_or_after_target": 1
+        },
+        "contributing_runs": [
+          "2d491200-e31b-45d7-8ad3-76107cd98c2c",
+          "0a481591-0d52-4a69-a03d-5dc1c486ca45"
+        ],
+        "observations_detail": [
+          {
+            "run_id": "2d491200-e31b-45d7-8ad3-76107cd98c2c",
+            "opportunity": "aapl-2026-02-03",
+            "ticker": "AAPL",
+            "action": "BUY",
+            "maturity": "evaluated",
+            "reason": null,
+            "price_at_decision": "225.0000",
+            "price_source": "snapshot_quote",
+            "target_at": "2026-02-10T14:30:00Z",
+            "price_at_horizon": "232.0000",
+            "price_observed_at": "2026-02-11T20:00:00Z",
+            "session_shift_days": 1,
+            "forward_return_pct": "3.1111",
+            "action_score_pct": "3.1111",
+            "directional_hit": true,
+            "hold_zero_convention": false
+          },
+          {
+            "run_id": "0a481591-0d52-4a69-a03d-5dc1c486ca45",
+            "opportunity": "msft-2026-02-04",
+            "ticker": "MSFT",
+            "action": "BUY",
+            "maturity": "evaluated",
+            "reason": null,
+            "price_at_decision": "410.0000",
+            "price_source": "snapshot_quote",
+            "target_at": "2026-02-11T14:30:00Z",
+            "price_at_horizon": "400.0000",
+            "price_observed_at": "2026-02-11T20:00:00Z",
+            "session_shift_days": 0,
+            "forward_return_pct": "-2.4390",
+            "action_score_pct": "-2.4390",
+            "directional_hit": false,
+            "hold_zero_convention": false
+          },
+          {
+            "run_id": "87d66c97-ff88-4aff-bbaa-e01966d97cd2",
+            "opportunity": "tsla-2026-02-05",
+            "ticker": "TSLA",
+            "action": "BUY",
+            "maturity": "unavailable",
+            "reason": "no_session_at_or_after_target",
+            "price_at_decision": "250.0000",
+            "price_source": "snapshot_quote"
+          }
+        ],
+        "dispersion": {
+          "metric": "sample_standard_deviation_pct",
+          "std_dev_pct": "3.9245",
+          "min_pct": "-2.4390",
+          "max_pct": "3.1111",
+          "range_pct": "5.5501",
+          "observations": 2,
+          "reason": null
+        },
+        "interval": {
+          "method": "time_block_bootstrap",
+          "statistic": "mean",
+          "lower": "-2.4390",
+          "upper": "3.1111",
+          "confidence": "0.95",
+          "block_size": 1,
+          "resamples": 1000,
+          "seed": 0,
+          "observations": 2,
+          "reason": null
+        },
+        "reason": null
+      },
+      "synthetic": true
     },
     {
       "key": "V3",
@@ -2326,8 +5336,8 @@
       "cost": {
         "runs": 3,
         "measured_tokens": {
-          "input": 0,
-          "output": 0
+          "input": 12728,
+          "output": 1581
         },
         "estimated_tokens": {
           "input": 12728,
@@ -2349,18 +5359,28 @@
       "runs": [
         {
           "opportunity": "aapl-2026-02-03",
-          "fixture_id": "alphaagent-arms.v1.v3.aapl-2026-02-03",
+          "fixture_id": "alphaagent-arms.v1.v3.aapl-2026-02-03.50ad033095c12bc9",
           "status": "completed",
           "failure_code": null,
-          "failure_detail": null,
-          "decision_run_id": "522dd707-8a29-4f5c-b1d2-b5ba543b8f03",
+          "failure_detail": "run already recorded",
+          "decision_run_id": "978ad783-f825-402f-b5e2-6c43737905c3",
           "protocol_version": "debate.v1",
-          "snapshot_id": "08fac509-3cd6-4afb-8379-ebdf56d1fd68",
-          "snapshot_hash": "918c65e106c7061eaf142fc9fb513749b889034391a03c97bf2bb2e51015f7a8",
+          "snapshot_id": "fcb6ef79-a1a0-420f-9e27-972fd6d4116b",
+          "snapshot_hash": "dc7cbd016c8dfb53ddddf4dc8644849c1cb43d096e0b52f799552975b50de215",
+          "synthetic": true,
+          "decision": {
+            "run_id": "978ad783-f825-402f-b5e2-6c43737905c3",
+            "opportunity": "aapl-2026-02-03",
+            "ticker": "AAPL",
+            "action": "HOLD",
+            "requested_quantity": "0",
+            "rationale": "The scripted rebuttal disputed the bear claim and left the dispute open, so the CIO holds rather than treating the matter as settled.",
+            "recorded_at": "2026-02-03T14:30:10Z"
+          },
           "cost": {
             "measured_tokens": {
-              "input": 0,
-              "output": 0
+              "input": 4265,
+              "output": 527
             },
             "estimated_tokens": {
               "input": 4265,
@@ -2380,18 +5400,28 @@
         },
         {
           "opportunity": "msft-2026-02-04",
-          "fixture_id": "alphaagent-arms.v1.v3.msft-2026-02-04",
+          "fixture_id": "alphaagent-arms.v1.v3.msft-2026-02-04.50ad033095c12bc9",
           "status": "completed",
           "failure_code": null,
-          "failure_detail": null,
-          "decision_run_id": "7f84a800-6892-4a47-95cd-bc22694746c5",
+          "failure_detail": "run already recorded",
+          "decision_run_id": "06e77f19-4dd6-4efc-bc34-492892b620d0",
           "protocol_version": "debate.v1",
-          "snapshot_id": "3dfc4e0a-9834-4602-911b-5b933506d0d7",
-          "snapshot_hash": "c6a3491b6a3d49423fd0910408151ba06c0e7556f14ec9eb370965240e94979b",
+          "snapshot_id": "4bf2b733-3d3e-42ca-ab7e-616375a19094",
+          "snapshot_hash": "2b19184dab4969821b4540229522f49bb70013801167ef59c87e322e63cb4cec",
+          "synthetic": true,
+          "decision": {
+            "run_id": "06e77f19-4dd6-4efc-bc34-492892b620d0",
+            "opportunity": "msft-2026-02-04",
+            "ticker": "MSFT",
+            "action": "HOLD",
+            "requested_quantity": "0",
+            "rationale": "The scripted rebuttal disputed the bear claim and left the dispute open, so the CIO holds rather than treating the matter as settled.",
+            "recorded_at": "2026-02-04T14:30:10Z"
+          },
           "cost": {
             "measured_tokens": {
-              "input": 0,
-              "output": 0
+              "input": 4240,
+              "output": 527
             },
             "estimated_tokens": {
               "input": 4240,
@@ -2411,18 +5441,28 @@
         },
         {
           "opportunity": "tsla-2026-02-05",
-          "fixture_id": "alphaagent-arms.v1.v3.tsla-2026-02-05",
+          "fixture_id": "alphaagent-arms.v1.v3.tsla-2026-02-05.50ad033095c12bc9",
           "status": "completed",
           "failure_code": null,
-          "failure_detail": null,
-          "decision_run_id": "892a6e54-90da-45e0-9b37-cd5616297b6d",
+          "failure_detail": "run already recorded",
+          "decision_run_id": "36754aef-58a3-4809-a0e1-6707ad4a744c",
           "protocol_version": "debate.v1",
-          "snapshot_id": "94c6fc4e-c40d-4b65-b021-62a90c42b883",
-          "snapshot_hash": "d3b829991af710262ef259de271490918490262edaffe1b9534bb1c37ddbf458",
+          "snapshot_id": "e25e049a-abca-49e7-a87c-5544d66f1c5b",
+          "snapshot_hash": "54f11326100d28d82eef1073be47b0a5d1fbe261d27101479bbf0aa1b2ddc8fd",
+          "synthetic": true,
+          "decision": {
+            "run_id": "36754aef-58a3-4809-a0e1-6707ad4a744c",
+            "opportunity": "tsla-2026-02-05",
+            "ticker": "TSLA",
+            "action": "HOLD",
+            "requested_quantity": "0",
+            "rationale": "The scripted rebuttal disputed the bear claim and left the dispute open, so the CIO holds rather than treating the matter as settled.",
+            "recorded_at": "2026-02-05T14:30:10Z"
+          },
           "cost": {
             "measured_tokens": {
-              "input": 0,
-              "output": 0
+              "input": 4223,
+              "output": 527
             },
             "estimated_tokens": {
               "input": 4223,
@@ -2443,18 +5483,18 @@
       ],
       "snapshots": [
         {
-          "snapshot_id": "08fac509-3cd6-4afb-8379-ebdf56d1fd68",
-          "content_hash": "918c65e106c7061eaf142fc9fb513749b889034391a03c97bf2bb2e51015f7a8",
+          "snapshot_id": "fcb6ef79-a1a0-420f-9e27-972fd6d4116b",
+          "content_hash": "dc7cbd016c8dfb53ddddf4dc8644849c1cb43d096e0b52f799552975b50de215",
           "opportunity": "aapl-2026-02-03"
         },
         {
-          "snapshot_id": "3dfc4e0a-9834-4602-911b-5b933506d0d7",
-          "content_hash": "c6a3491b6a3d49423fd0910408151ba06c0e7556f14ec9eb370965240e94979b",
+          "snapshot_id": "4bf2b733-3d3e-42ca-ab7e-616375a19094",
+          "content_hash": "2b19184dab4969821b4540229522f49bb70013801167ef59c87e322e63cb4cec",
           "opportunity": "msft-2026-02-04"
         },
         {
-          "snapshot_id": "94c6fc4e-c40d-4b65-b021-62a90c42b883",
-          "content_hash": "d3b829991af710262ef259de271490918490262edaffe1b9534bb1c37ddbf458",
+          "snapshot_id": "e25e049a-abca-49e7-a87c-5544d66f1c5b",
+          "content_hash": "54f11326100d28d82eef1073be47b0a5d1fbe261d27101479bbf0aa1b2ddc8fd",
           "opportunity": "tsla-2026-02-05"
         }
       ],
@@ -2473,9 +5513,11 @@
             ]
           ],
           "fill_rule": "first_executable_mark_at_or_after_decision.v1",
+          "fill_timing": "fill_applied_at_first_available_mark.v1",
+          "simulation_method": "monotonic_event_clock.v1",
           "fee_model": "declared_bps",
           "guard_policy": "guard.v1",
-          "llm_cost_timing": "A known LLM cost is attributed at the decision instant (clamped to the window end) because it is external spend, not a portfolio flow.",
+          "llm_cost_timing": "A known LLM cost is attributed at the decision's recorded time (clamped to the window end) because it is external spend, not a portfolio flow.",
           "note": "Simulated replay of this arm's recorded decisions under the frozen marks, the shared guard and the same accounting method. Not realised history."
         },
         "window": {
@@ -2868,9 +5910,10 @@
         "orders": [
           {
             "opportunity": "aapl-2026-02-03",
-            "decision_run_id": "522dd707-8a29-4f5c-b1d2-b5ba543b8f03",
+            "decision_run_id": "978ad783-f825-402f-b5e2-6c43737905c3",
             "decision_at": "2026-02-03T14:30:00Z",
-            "decision_recorded_at": "2026-11-11T15:47:44.763081Z",
+            "decision_recorded_at": "2026-02-03T14:30:10Z",
+            "simulated_clock_at_decision": "2026-02-03T14:30:00Z",
             "proposal_action": "HOLD",
             "requested_quantity": null,
             "price_at_decision_usd": "225.00",
@@ -2879,14 +5922,26 @@
             "binding_rule": null,
             "allowed_quantity": "0",
             "fill": null,
+            "fill_rule_status": "hold_no_trade",
+            "fill_reason": null,
+            "scheduled_fill_at": null,
+            "applied_at": null,
+            "equity_before_usd": "10000.00",
             "equity_after_usd": "10000.00",
-            "reason": null
+            "cash_before_usd": "10000.00",
+            "positions_before": {},
+            "cash_after_decision_usd": "10000.00",
+            "positions_after_decision": {},
+            "unpriced_positions": [],
+            "reason": null,
+            "fee_bps": "0"
           },
           {
             "opportunity": "msft-2026-02-04",
-            "decision_run_id": "7f84a800-6892-4a47-95cd-bc22694746c5",
+            "decision_run_id": "06e77f19-4dd6-4efc-bc34-492892b620d0",
             "decision_at": "2026-02-04T14:30:00Z",
-            "decision_recorded_at": "2026-11-11T15:47:45.607392Z",
+            "decision_recorded_at": "2026-02-04T14:30:10Z",
+            "simulated_clock_at_decision": "2026-02-04T14:30:00Z",
             "proposal_action": "HOLD",
             "requested_quantity": null,
             "price_at_decision_usd": "410.00",
@@ -2895,14 +5950,26 @@
             "binding_rule": null,
             "allowed_quantity": "0",
             "fill": null,
+            "fill_rule_status": "hold_no_trade",
+            "fill_reason": null,
+            "scheduled_fill_at": null,
+            "applied_at": null,
+            "equity_before_usd": "10000.00",
             "equity_after_usd": "10000.00",
-            "reason": null
+            "cash_before_usd": "10000.00",
+            "positions_before": {},
+            "cash_after_decision_usd": "10000.00",
+            "positions_after_decision": {},
+            "unpriced_positions": [],
+            "reason": null,
+            "fee_bps": "0"
           },
           {
             "opportunity": "tsla-2026-02-05",
-            "decision_run_id": "892a6e54-90da-45e0-9b37-cd5616297b6d",
+            "decision_run_id": "36754aef-58a3-4809-a0e1-6707ad4a744c",
             "decision_at": "2026-02-05T14:30:00Z",
-            "decision_recorded_at": "2026-11-11T15:47:46.593318Z",
+            "decision_recorded_at": "2026-02-05T14:30:10Z",
+            "simulated_clock_at_decision": "2026-02-05T14:30:00Z",
             "proposal_action": "HOLD",
             "requested_quantity": null,
             "price_at_decision_usd": "250.00",
@@ -2911,12 +5978,342 @@
             "binding_rule": null,
             "allowed_quantity": "0",
             "fill": null,
+            "fill_rule_status": "hold_no_trade",
+            "fill_reason": null,
+            "scheduled_fill_at": null,
+            "applied_at": null,
+            "equity_before_usd": "10000.00",
             "equity_after_usd": "10000.00",
-            "reason": null
+            "cash_before_usd": "10000.00",
+            "positions_before": {},
+            "cash_after_decision_usd": "10000.00",
+            "positions_after_decision": {},
+            "unpriced_positions": [],
+            "reason": null,
+            "fee_bps": "0"
           }
         ],
         "orders_count": 3,
         "fill_count": 0,
+        "simulation": {
+          "method_version": "monotonic_event_clock.v1",
+          "fill_timing_rule": "fill_applied_at_first_available_mark.v1",
+          "fill_rule": "first_executable_mark_at_or_after_decision.v1",
+          "clock_started_at": "2026-02-02T23:59:59Z",
+          "clock_ended_at": "2026-02-12T00:00:00Z",
+          "steps": [
+            {
+              "sequence": 0,
+              "event": "simulation_start",
+              "clock": "2026-02-02T23:59:59Z",
+              "synthetic": true,
+              "starting_state": {
+                "cash_usd": "10000.00",
+                "positions": {}
+              },
+              "available_data": {
+                "known_marks": []
+              }
+            },
+            {
+              "sequence": 1,
+              "event": "decision",
+              "clock": "2026-02-03T14:30:00Z",
+              "opportunity": "aapl-2026-02-03",
+              "ticker": "AAPL",
+              "synthetic": true,
+              "available_data": {
+                "snapshot_id": "fcb6ef79-a1a0-420f-9e27-972fd6d4116b",
+                "snapshot_hash": "dc7cbd016c8dfb53ddddf4dc8644849c1cb43d096e0b52f799552975b50de215",
+                "analysis_cutoff": "2026-02-03T14:30:00Z",
+                "quote": {
+                  "as_of": "2026-02-03T14:29:55Z",
+                  "source": "declared_fixture_quote",
+                  "currency": "USD",
+                  "price_usd": "225.00",
+                  "change_pct": "2.50"
+                },
+                "known_marks": [
+                  {
+                    "ticker": "AAPL",
+                    "at": "2026-02-03T14:30:00Z",
+                    "observed_at": "2026-02-03T14:30:00Z",
+                    "price_usd": "225.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  }
+                ]
+              },
+              "decision": {
+                "run_id": "978ad783-f825-402f-b5e2-6c43737905c3",
+                "action": "HOLD",
+                "requested_quantity": "0",
+                "recorded_at": "2026-02-03T14:30:10Z"
+              },
+              "order": {
+                "fill_rule_status": "hold_no_trade",
+                "fill_reason": null
+              },
+              "reason": null
+            },
+            {
+              "sequence": 2,
+              "event": "decision",
+              "clock": "2026-02-04T14:30:00Z",
+              "opportunity": "msft-2026-02-04",
+              "ticker": "MSFT",
+              "synthetic": true,
+              "available_data": {
+                "snapshot_id": "4bf2b733-3d3e-42ca-ab7e-616375a19094",
+                "snapshot_hash": "2b19184dab4969821b4540229522f49bb70013801167ef59c87e322e63cb4cec",
+                "analysis_cutoff": "2026-02-04T14:30:00Z",
+                "quote": {
+                  "as_of": "2026-02-04T14:29:55Z",
+                  "source": "declared_fixture_quote",
+                  "currency": "USD",
+                  "price_usd": "410.00",
+                  "change_pct": "-3.00"
+                },
+                "known_marks": [
+                  {
+                    "ticker": "AAPL",
+                    "at": "2026-02-03T14:30:00Z",
+                    "observed_at": "2026-02-03T14:30:00Z",
+                    "price_usd": "225.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  },
+                  {
+                    "ticker": "AAPL",
+                    "at": "2026-02-03T14:35:00Z",
+                    "observed_at": "2026-02-03T14:35:00Z",
+                    "price_usd": "225.50",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored fill mark"
+                  },
+                  {
+                    "ticker": "MSFT",
+                    "at": "2026-02-04T14:30:00Z",
+                    "observed_at": "2026-02-04T14:30:00Z",
+                    "price_usd": "410.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  }
+                ]
+              },
+              "decision": {
+                "run_id": "06e77f19-4dd6-4efc-bc34-492892b620d0",
+                "action": "HOLD",
+                "requested_quantity": "0",
+                "recorded_at": "2026-02-04T14:30:10Z"
+              },
+              "order": {
+                "fill_rule_status": "hold_no_trade",
+                "fill_reason": null
+              },
+              "reason": null
+            },
+            {
+              "sequence": 3,
+              "event": "decision",
+              "clock": "2026-02-05T14:30:00Z",
+              "opportunity": "tsla-2026-02-05",
+              "ticker": "TSLA",
+              "synthetic": true,
+              "available_data": {
+                "snapshot_id": "e25e049a-abca-49e7-a87c-5544d66f1c5b",
+                "snapshot_hash": "54f11326100d28d82eef1073be47b0a5d1fbe261d27101479bbf0aa1b2ddc8fd",
+                "analysis_cutoff": "2026-02-05T14:30:00Z",
+                "quote": {
+                  "as_of": "2026-02-05T14:29:55Z",
+                  "source": "declared_fixture_quote",
+                  "currency": "USD",
+                  "price_usd": "250.00",
+                  "change_pct": "1.00"
+                },
+                "known_marks": [
+                  {
+                    "ticker": "AAPL",
+                    "at": "2026-02-03T14:30:00Z",
+                    "observed_at": "2026-02-03T14:30:00Z",
+                    "price_usd": "225.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  },
+                  {
+                    "ticker": "AAPL",
+                    "at": "2026-02-03T14:35:00Z",
+                    "observed_at": "2026-02-03T14:35:00Z",
+                    "price_usd": "225.50",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored fill mark"
+                  },
+                  {
+                    "ticker": "MSFT",
+                    "at": "2026-02-04T14:30:00Z",
+                    "observed_at": "2026-02-04T14:30:00Z",
+                    "price_usd": "410.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  },
+                  {
+                    "ticker": "MSFT",
+                    "at": "2026-02-04T14:35:00Z",
+                    "observed_at": "2026-02-04T14:35:00Z",
+                    "price_usd": "411.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored fill mark"
+                  },
+                  {
+                    "ticker": "TSLA",
+                    "at": "2026-02-05T14:30:00Z",
+                    "observed_at": "2026-02-05T14:30:00Z",
+                    "price_usd": "250.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  }
+                ]
+              },
+              "decision": {
+                "run_id": "36754aef-58a3-4809-a0e1-6707ad4a744c",
+                "action": "HOLD",
+                "requested_quantity": "0",
+                "recorded_at": "2026-02-05T14:30:10Z"
+              },
+              "order": {
+                "fill_rule_status": "hold_no_trade",
+                "fill_reason": null
+              },
+              "reason": null
+            },
+            {
+              "sequence": 4,
+              "event": "window_close",
+              "clock": "2026-02-12T00:00:00Z",
+              "synthetic": true,
+              "ending_state": {
+                "cash_usd": "10000.00",
+                "positions": {}
+              },
+              "expired_fills": [],
+              "available_data": {
+                "known_marks": [
+                  {
+                    "ticker": "AAPL",
+                    "at": "2026-02-03T14:30:00Z",
+                    "observed_at": "2026-02-03T14:30:00Z",
+                    "price_usd": "225.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  },
+                  {
+                    "ticker": "AAPL",
+                    "at": "2026-02-03T14:35:00Z",
+                    "observed_at": "2026-02-03T14:35:00Z",
+                    "price_usd": "225.50",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored fill mark"
+                  },
+                  {
+                    "ticker": "AAPL",
+                    "at": "2026-02-11T20:00:00Z",
+                    "observed_at": "2026-02-11T20:00:00Z",
+                    "price_usd": "232.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored closing mark"
+                  },
+                  {
+                    "ticker": "MSFT",
+                    "at": "2026-02-04T14:30:00Z",
+                    "observed_at": "2026-02-04T14:30:00Z",
+                    "price_usd": "410.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  },
+                  {
+                    "ticker": "MSFT",
+                    "at": "2026-02-04T14:35:00Z",
+                    "observed_at": "2026-02-04T14:35:00Z",
+                    "price_usd": "411.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored fill mark"
+                  },
+                  {
+                    "ticker": "MSFT",
+                    "at": "2026-02-11T20:00:00Z",
+                    "observed_at": "2026-02-11T20:00:00Z",
+                    "price_usd": "400.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored closing mark"
+                  },
+                  {
+                    "ticker": "TSLA",
+                    "at": "2026-02-05T14:30:00Z",
+                    "observed_at": "2026-02-05T14:30:00Z",
+                    "price_usd": "250.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored opportunity-set mark, not a fetched close"
+                  },
+                  {
+                    "ticker": "TSLA",
+                    "at": "2026-02-05T14:35:00Z",
+                    "observed_at": "2026-02-05T14:35:00Z",
+                    "price_usd": "249.50",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored fill mark"
+                  },
+                  {
+                    "ticker": "TSLA",
+                    "at": "2026-02-11T20:00:00Z",
+                    "observed_at": "2026-02-11T20:00:00Z",
+                    "price_usd": "260.00",
+                    "source": "declared_fixture_mark",
+                    "provenance": "authored closing mark"
+                  }
+                ]
+              }
+            }
+          ],
+          "steps_hash": "e5318ac4239b07fa32292ee10a83c88ca1b12d48eb15f075d5093da3b41c1dd9",
+          "decision_records": [
+            {
+              "event": "decision",
+              "clock": "2026-02-03T14:30:00Z",
+              "opportunity": "aapl-2026-02-03",
+              "ticker": "AAPL",
+              "action": "HOLD",
+              "requested_quantity": "0",
+              "fill_rule_status": "hold_no_trade",
+              "fill_reason": null
+            },
+            {
+              "event": "decision",
+              "clock": "2026-02-04T14:30:00Z",
+              "opportunity": "msft-2026-02-04",
+              "ticker": "MSFT",
+              "action": "HOLD",
+              "requested_quantity": "0",
+              "fill_rule_status": "hold_no_trade",
+              "fill_reason": null
+            },
+            {
+              "event": "decision",
+              "clock": "2026-02-05T14:30:00Z",
+              "opportunity": "tsla-2026-02-05",
+              "ticker": "TSLA",
+              "action": "HOLD",
+              "requested_quantity": "0",
+              "fill_rule_status": "hold_no_trade",
+              "fill_reason": null
+            }
+          ],
+          "decision_records_hash": "c29e34911a467481dca7460e59335ad5c0a2dddee327d9bcb5cd8f40b274b3d7",
+          "step_count": 5,
+          "monotonic": true,
+          "expired_fills": [],
+          "synthetic": true,
+          "note": "Each decision and fill carries the simulated clock and the data known at that instant. A fill priced from a later mark is applied when the clock reaches it."
+        },
         "per_opportunity": [
           {
             "opportunity": "aapl-2026-02-03",
@@ -2934,7 +6331,94 @@
             "scheduled_at": "2026-02-05T14:30:00Z"
           }
         ]
-      }
+      },
+      "primary_metric": {
+        "arm": "V3",
+        "status": "computed",
+        "value": "0.0000",
+        "unit": "percent",
+        "observations": 2,
+        "scheduled_observations": 3,
+        "excluded_observations": 1,
+        "excluded_by_reason": {
+          "no_session_at_or_after_target": 1
+        },
+        "contributing_runs": [
+          "978ad783-f825-402f-b5e2-6c43737905c3",
+          "06e77f19-4dd6-4efc-bc34-492892b620d0"
+        ],
+        "observations_detail": [
+          {
+            "run_id": "978ad783-f825-402f-b5e2-6c43737905c3",
+            "opportunity": "aapl-2026-02-03",
+            "ticker": "AAPL",
+            "action": "HOLD",
+            "maturity": "evaluated",
+            "reason": null,
+            "price_at_decision": "225.0000",
+            "price_source": "snapshot_quote",
+            "target_at": "2026-02-10T14:30:00Z",
+            "price_at_horizon": "232.0000",
+            "price_observed_at": "2026-02-11T20:00:00Z",
+            "session_shift_days": 1,
+            "forward_return_pct": "3.1111",
+            "action_score_pct": "0.0000",
+            "directional_hit": null,
+            "hold_zero_convention": true
+          },
+          {
+            "run_id": "06e77f19-4dd6-4efc-bc34-492892b620d0",
+            "opportunity": "msft-2026-02-04",
+            "ticker": "MSFT",
+            "action": "HOLD",
+            "maturity": "evaluated",
+            "reason": null,
+            "price_at_decision": "410.0000",
+            "price_source": "snapshot_quote",
+            "target_at": "2026-02-11T14:30:00Z",
+            "price_at_horizon": "400.0000",
+            "price_observed_at": "2026-02-11T20:00:00Z",
+            "session_shift_days": 0,
+            "forward_return_pct": "-2.4390",
+            "action_score_pct": "0.0000",
+            "directional_hit": null,
+            "hold_zero_convention": true
+          },
+          {
+            "run_id": "36754aef-58a3-4809-a0e1-6707ad4a744c",
+            "opportunity": "tsla-2026-02-05",
+            "ticker": "TSLA",
+            "action": "HOLD",
+            "maturity": "unavailable",
+            "reason": "no_session_at_or_after_target",
+            "price_at_decision": "250.0000",
+            "price_source": "snapshot_quote"
+          }
+        ],
+        "dispersion": {
+          "metric": "sample_standard_deviation_pct",
+          "std_dev_pct": "0.0000",
+          "min_pct": "0.0000",
+          "max_pct": "0.0000",
+          "range_pct": "0.0000",
+          "observations": 2,
+          "reason": null
+        },
+        "interval": {
+          "method": "time_block_bootstrap",
+          "statistic": "mean",
+          "lower": "0.0000",
+          "upper": "0.0000",
+          "confidence": "0.95",
+          "block_size": 1,
+          "resamples": 1000,
+          "seed": 0,
+          "observations": 2,
+          "reason": null
+        },
+        "reason": null
+      },
+      "synthetic": true
     },
     {
       "key": "V4",
@@ -2942,7 +6426,7 @@
       "engine": "portfolio_allocation",
       "implemented": false,
       "status": "not_executed",
-      "reason": "V4 (portfolio allocation) is declared and not implemented: its dependency FIX-08 is not done. It is excluded from the equal-opportunity denominator rather than measured as a zero.",
+      "reason": "V4 (portfolio allocation) is declared and not executed: no V4 arm has been scheduled or measured. It is excluded from the equal-opportunity denominator rather than measured as a zero.",
       "protocol_version": "",
       "expected_protocol_version": "",
       "protocol_matches_declaration": null,
@@ -2979,14 +6463,16 @@
       "runs": [
         {
           "opportunity": "aapl-2026-02-03",
-          "fixture_id": "alphaagent-arms.v1.v4.aapl-2026-02-03",
+          "fixture_id": "alphaagent-arms.v1.v4.aapl-2026-02-03.50ad033095c12bc9",
           "status": "not_executed",
           "failure_code": "unimplemented",
-          "failure_detail": "V4 (portfolio allocation) is declared and not implemented: its dependency FIX-08 is not done. It is excluded from the equal-opportunity denominator rather than measured as a zero.",
+          "failure_detail": "V4 (portfolio allocation) is declared and not executed: no V4 arm has been scheduled or measured. It is excluded from the equal-opportunity denominator rather than measured as a zero.",
           "decision_run_id": null,
           "protocol_version": null,
           "snapshot_id": null,
           "snapshot_hash": null,
+          "synthetic": true,
+          "decision": null,
           "cost": {
             "measured_tokens": {
               "input": 0,
@@ -3005,14 +6491,16 @@
         },
         {
           "opportunity": "msft-2026-02-04",
-          "fixture_id": "alphaagent-arms.v1.v4.msft-2026-02-04",
+          "fixture_id": "alphaagent-arms.v1.v4.msft-2026-02-04.50ad033095c12bc9",
           "status": "not_executed",
           "failure_code": "unimplemented",
-          "failure_detail": "V4 (portfolio allocation) is declared and not implemented: its dependency FIX-08 is not done. It is excluded from the equal-opportunity denominator rather than measured as a zero.",
+          "failure_detail": "V4 (portfolio allocation) is declared and not executed: no V4 arm has been scheduled or measured. It is excluded from the equal-opportunity denominator rather than measured as a zero.",
           "decision_run_id": null,
           "protocol_version": null,
           "snapshot_id": null,
           "snapshot_hash": null,
+          "synthetic": true,
+          "decision": null,
           "cost": {
             "measured_tokens": {
               "input": 0,
@@ -3031,14 +6519,16 @@
         },
         {
           "opportunity": "tsla-2026-02-05",
-          "fixture_id": "alphaagent-arms.v1.v4.tsla-2026-02-05",
+          "fixture_id": "alphaagent-arms.v1.v4.tsla-2026-02-05.50ad033095c12bc9",
           "status": "not_executed",
           "failure_code": "unimplemented",
-          "failure_detail": "V4 (portfolio allocation) is declared and not implemented: its dependency FIX-08 is not done. It is excluded from the equal-opportunity denominator rather than measured as a zero.",
+          "failure_detail": "V4 (portfolio allocation) is declared and not executed: no V4 arm has been scheduled or measured. It is excluded from the equal-opportunity denominator rather than measured as a zero.",
           "decision_run_id": null,
           "protocol_version": null,
           "snapshot_id": null,
           "snapshot_hash": null,
+          "synthetic": true,
+          "decision": null,
           "cost": {
             "measured_tokens": {
               "input": 0,
@@ -3057,9 +6547,142 @@
         }
       ],
       "snapshots": [],
-      "trajectory": null
+      "trajectory": null,
+      "primary_metric": {
+        "arm": "V4",
+        "status": "not_executed",
+        "value": null,
+        "unit": "percent",
+        "in_denominator": false,
+        "reason": "V4 (portfolio allocation) is declared and not executed: no V4 arm has been scheduled or measured. It is excluded from the equal-opportunity denominator rather than measured as a zero.",
+        "denominator_eligible": false
+      },
+      "synthetic": true
     }
   ],
+  "execution": {
+    "execution_id": "50ad033095c12bc9",
+    "execution_id_kind": "deterministic_namespace.v1",
+    "namespace": "50ad033095c12bc9",
+    "namespace_version": "experiment_execution.v1",
+    "portfolio_id": 48,
+    "provider_mode_requested": "stub",
+    "provider_mode_used": "stub",
+    "started_at": "2026-02-12T00:00:00Z",
+    "snapshots_used": {
+      "aapl-2026-02-03": {
+        "snapshot_id": "fcb6ef79-a1a0-420f-9e27-972fd6d4116b",
+        "content_hash": "dc7cbd016c8dfb53ddddf4dc8644849c1cb43d096e0b52f799552975b50de215",
+        "portfolio_version": "alphaagent-arms.v1:2820d6eb66a3dfd2:aapl-2026-02-03",
+        "analysis_cutoff": "2026-02-03T14:30:00Z",
+        "captured_at": "2026-02-03T14:29:55Z",
+        "holdings": [],
+        "cash": {
+          "as_of": "2026-02-03T14:29:55Z",
+          "currency": "USD",
+          "balance_usd": "10000.00"
+        },
+        "quotes": {
+          "AAPL": {
+            "as_of": "2026-02-03T14:29:55Z",
+            "source": "declared_fixture_quote",
+            "currency": "USD",
+            "price_usd": "225.00",
+            "change_pct": "2.50"
+          }
+        }
+      },
+      "msft-2026-02-04": {
+        "snapshot_id": "4bf2b733-3d3e-42ca-ab7e-616375a19094",
+        "content_hash": "2b19184dab4969821b4540229522f49bb70013801167ef59c87e322e63cb4cec",
+        "portfolio_version": "alphaagent-arms.v1:2820d6eb66a3dfd2:msft-2026-02-04",
+        "analysis_cutoff": "2026-02-04T14:30:00Z",
+        "captured_at": "2026-02-04T14:29:55Z",
+        "holdings": [],
+        "cash": {
+          "as_of": "2026-02-04T14:29:55Z",
+          "currency": "USD",
+          "balance_usd": "10000.00"
+        },
+        "quotes": {
+          "MSFT": {
+            "as_of": "2026-02-04T14:29:55Z",
+            "source": "declared_fixture_quote",
+            "currency": "USD",
+            "price_usd": "410.00",
+            "change_pct": "-3.00"
+          }
+        }
+      },
+      "tsla-2026-02-05": {
+        "snapshot_id": "e25e049a-abca-49e7-a87c-5544d66f1c5b",
+        "content_hash": "54f11326100d28d82eef1073be47b0a5d1fbe261d27101479bbf0aa1b2ddc8fd",
+        "portfolio_version": "alphaagent-arms.v1:2820d6eb66a3dfd2:tsla-2026-02-05",
+        "analysis_cutoff": "2026-02-05T14:30:00Z",
+        "captured_at": "2026-02-05T14:29:55Z",
+        "holdings": [],
+        "cash": {
+          "as_of": "2026-02-05T14:29:55Z",
+          "currency": "USD",
+          "balance_usd": "10000.00"
+        },
+        "quotes": {
+          "TSLA": {
+            "as_of": "2026-02-05T14:29:55Z",
+            "source": "declared_fixture_quote",
+            "currency": "USD",
+            "price_usd": "250.00",
+            "change_pct": "1.00"
+          }
+        }
+      }
+    },
+    "evidence": {
+      "aapl-2026-02-03": {
+        "created": 0,
+        "declared": 2
+      },
+      "msft-2026-02-04": {
+        "created": 0,
+        "declared": 2
+      },
+      "tsla-2026-02-05": {
+        "created": 0,
+        "declared": 2
+      }
+    },
+    "client_modes": {
+      "V0": "deterministic",
+      "V1": "stub",
+      "V2": "stub",
+      "V3": "stub"
+    },
+    "run_ids": {
+      "V0": [
+        "8b7f4ee4-ae1d-43cb-b9e2-c99ba4ab0155",
+        "d5e5f7a9-8c05-44de-a202-797ddd3203db",
+        "f4d38715-5d09-4ef1-b6c5-1eecd6d31572"
+      ],
+      "V1": [
+        "10cecf53-c19d-4126-ae0d-c16c8f12e73c",
+        "2c9124b5-521f-4846-98e7-5964917c57c1",
+        "365be93d-e06f-4a3a-b196-d4510379378a"
+      ],
+      "V2": [
+        "2d491200-e31b-45d7-8ad3-76107cd98c2c",
+        "0a481591-0d52-4a69-a03d-5dc1c486ca45",
+        "87d66c97-ff88-4aff-bbaa-e01966d97cd2"
+      ],
+      "V3": [
+        "978ad783-f825-402f-b5e2-6c43737905c3",
+        "06e77f19-4dd6-4efc-bc34-492892b620d0",
+        "36754aef-58a3-4809-a0e1-6707ad4a744c"
+      ]
+    },
+    "run_count": 12,
+    "idempotent": true,
+    "note": "Re-running with the same inputs and provider mode reuses this namespace's runs. A different portfolio, opportunity-set content or provider mode has its own namespace and cannot read or overwrite these decisions or costs."
+  },
   "verification": {
     "distinct_protocol_ids": true,
     "protocol_ids": {
@@ -3071,82 +6694,116 @@
     },
     "identical_snapshots_across_arms": true,
     "reference_snapshots": {
-      "aapl-2026-02-03": "918c65e106c7061eaf142fc9fb513749b889034391a03c97bf2bb2e51015f7a8",
-      "msft-2026-02-04": "c6a3491b6a3d49423fd0910408151ba06c0e7556f14ec9eb370965240e94979b",
-      "tsla-2026-02-05": "d3b829991af710262ef259de271490918490262edaffe1b9534bb1c37ddbf458"
+      "aapl-2026-02-03": "dc7cbd016c8dfb53ddddf4dc8644849c1cb43d096e0b52f799552975b50de215",
+      "msft-2026-02-04": "2b19184dab4969821b4540229522f49bb70013801167ef59c87e322e63cb4cec",
+      "tsla-2026-02-05": "54f11326100d28d82eef1073be47b0a5d1fbe261d27101479bbf0aa1b2ddc8fd"
     },
     "snapshot_sets": {
       "V0": {
         "aapl-2026-02-03": {
-          "snapshot_id": "08fac509-3cd6-4afb-8379-ebdf56d1fd68",
-          "content_hash": "918c65e106c7061eaf142fc9fb513749b889034391a03c97bf2bb2e51015f7a8",
+          "snapshot_id": "fcb6ef79-a1a0-420f-9e27-972fd6d4116b",
+          "content_hash": "dc7cbd016c8dfb53ddddf4dc8644849c1cb43d096e0b52f799552975b50de215",
           "opportunity": "aapl-2026-02-03"
         },
         "msft-2026-02-04": {
-          "snapshot_id": "3dfc4e0a-9834-4602-911b-5b933506d0d7",
-          "content_hash": "c6a3491b6a3d49423fd0910408151ba06c0e7556f14ec9eb370965240e94979b",
+          "snapshot_id": "4bf2b733-3d3e-42ca-ab7e-616375a19094",
+          "content_hash": "2b19184dab4969821b4540229522f49bb70013801167ef59c87e322e63cb4cec",
           "opportunity": "msft-2026-02-04"
         },
         "tsla-2026-02-05": {
-          "snapshot_id": "94c6fc4e-c40d-4b65-b021-62a90c42b883",
-          "content_hash": "d3b829991af710262ef259de271490918490262edaffe1b9534bb1c37ddbf458",
+          "snapshot_id": "e25e049a-abca-49e7-a87c-5544d66f1c5b",
+          "content_hash": "54f11326100d28d82eef1073be47b0a5d1fbe261d27101479bbf0aa1b2ddc8fd",
           "opportunity": "tsla-2026-02-05"
         }
       },
       "V1": {
         "aapl-2026-02-03": {
-          "snapshot_id": "08fac509-3cd6-4afb-8379-ebdf56d1fd68",
-          "content_hash": "918c65e106c7061eaf142fc9fb513749b889034391a03c97bf2bb2e51015f7a8",
+          "snapshot_id": "fcb6ef79-a1a0-420f-9e27-972fd6d4116b",
+          "content_hash": "dc7cbd016c8dfb53ddddf4dc8644849c1cb43d096e0b52f799552975b50de215",
           "opportunity": "aapl-2026-02-03"
         },
         "msft-2026-02-04": {
-          "snapshot_id": "3dfc4e0a-9834-4602-911b-5b933506d0d7",
-          "content_hash": "c6a3491b6a3d49423fd0910408151ba06c0e7556f14ec9eb370965240e94979b",
+          "snapshot_id": "4bf2b733-3d3e-42ca-ab7e-616375a19094",
+          "content_hash": "2b19184dab4969821b4540229522f49bb70013801167ef59c87e322e63cb4cec",
           "opportunity": "msft-2026-02-04"
         },
         "tsla-2026-02-05": {
-          "snapshot_id": "94c6fc4e-c40d-4b65-b021-62a90c42b883",
-          "content_hash": "d3b829991af710262ef259de271490918490262edaffe1b9534bb1c37ddbf458",
+          "snapshot_id": "e25e049a-abca-49e7-a87c-5544d66f1c5b",
+          "content_hash": "54f11326100d28d82eef1073be47b0a5d1fbe261d27101479bbf0aa1b2ddc8fd",
           "opportunity": "tsla-2026-02-05"
         }
       },
       "V2": {
         "aapl-2026-02-03": {
-          "snapshot_id": "08fac509-3cd6-4afb-8379-ebdf56d1fd68",
-          "content_hash": "918c65e106c7061eaf142fc9fb513749b889034391a03c97bf2bb2e51015f7a8",
+          "snapshot_id": "fcb6ef79-a1a0-420f-9e27-972fd6d4116b",
+          "content_hash": "dc7cbd016c8dfb53ddddf4dc8644849c1cb43d096e0b52f799552975b50de215",
           "opportunity": "aapl-2026-02-03"
         },
         "msft-2026-02-04": {
-          "snapshot_id": "3dfc4e0a-9834-4602-911b-5b933506d0d7",
-          "content_hash": "c6a3491b6a3d49423fd0910408151ba06c0e7556f14ec9eb370965240e94979b",
+          "snapshot_id": "4bf2b733-3d3e-42ca-ab7e-616375a19094",
+          "content_hash": "2b19184dab4969821b4540229522f49bb70013801167ef59c87e322e63cb4cec",
           "opportunity": "msft-2026-02-04"
         },
         "tsla-2026-02-05": {
-          "snapshot_id": "94c6fc4e-c40d-4b65-b021-62a90c42b883",
-          "content_hash": "d3b829991af710262ef259de271490918490262edaffe1b9534bb1c37ddbf458",
+          "snapshot_id": "e25e049a-abca-49e7-a87c-5544d66f1c5b",
+          "content_hash": "54f11326100d28d82eef1073be47b0a5d1fbe261d27101479bbf0aa1b2ddc8fd",
           "opportunity": "tsla-2026-02-05"
         }
       },
       "V3": {
         "aapl-2026-02-03": {
-          "snapshot_id": "08fac509-3cd6-4afb-8379-ebdf56d1fd68",
-          "content_hash": "918c65e106c7061eaf142fc9fb513749b889034391a03c97bf2bb2e51015f7a8",
+          "snapshot_id": "fcb6ef79-a1a0-420f-9e27-972fd6d4116b",
+          "content_hash": "dc7cbd016c8dfb53ddddf4dc8644849c1cb43d096e0b52f799552975b50de215",
           "opportunity": "aapl-2026-02-03"
         },
         "msft-2026-02-04": {
-          "snapshot_id": "3dfc4e0a-9834-4602-911b-5b933506d0d7",
-          "content_hash": "c6a3491b6a3d49423fd0910408151ba06c0e7556f14ec9eb370965240e94979b",
+          "snapshot_id": "4bf2b733-3d3e-42ca-ab7e-616375a19094",
+          "content_hash": "2b19184dab4969821b4540229522f49bb70013801167ef59c87e322e63cb4cec",
           "opportunity": "msft-2026-02-04"
         },
         "tsla-2026-02-05": {
-          "snapshot_id": "94c6fc4e-c40d-4b65-b021-62a90c42b883",
-          "content_hash": "d3b829991af710262ef259de271490918490262edaffe1b9534bb1c37ddbf458",
+          "snapshot_id": "e25e049a-abca-49e7-a87c-5544d66f1c5b",
+          "content_hash": "54f11326100d28d82eef1073be47b0a5d1fbe261d27101479bbf0aa1b2ddc8fd",
           "opportunity": "tsla-2026-02-05"
         }
       }
     },
+    "execution_id": "50ad033095c12bc9",
+    "namespace": "50ad033095c12bc9",
+    "run_ids": {
+      "V0": [
+        "8b7f4ee4-ae1d-43cb-b9e2-c99ba4ab0155",
+        "d5e5f7a9-8c05-44de-a202-797ddd3203db",
+        "f4d38715-5d09-4ef1-b6c5-1eecd6d31572"
+      ],
+      "V1": [
+        "10cecf53-c19d-4126-ae0d-c16c8f12e73c",
+        "2c9124b5-521f-4846-98e7-5964917c57c1",
+        "365be93d-e06f-4a3a-b196-d4510379378a"
+      ],
+      "V2": [
+        "2d491200-e31b-45d7-8ad3-76107cd98c2c",
+        "0a481591-0d52-4a69-a03d-5dc1c486ca45",
+        "87d66c97-ff88-4aff-bbaa-e01966d97cd2"
+      ],
+      "V3": [
+        "978ad783-f825-402f-b5e2-6c43737905c3",
+        "06e77f19-4dd6-4efc-bc34-492892b620d0",
+        "36754aef-58a3-4809-a0e1-6707ad4a744c"
+      ],
+      "V4": [
+        "",
+        "",
+        ""
+      ]
+    },
+    "run_count": 12,
+    "recompute_command": "python manage.py rebuild_experiment_report --path <archived-report.json>",
+    "metric_path": "pre_registration.primary_metric_result",
+    "content_hash_path": "contents_hash",
+    "archive_format": "experiment_comparison.v2",
     "same_opportunity_set": true,
-    "note": "Protocol ids are read from the runs, not copied from the declaration. Snapshot identity is compared by content hash per opportunity across arms."
+    "note": "Protocol ids are read from the runs, not copied from the declaration. Snapshot identity is compared by content hash per opportunity across arms. Run identity is namespaced to this execution."
   },
   "denominators": {
     "rule": "all_scheduled_runs_of_implemented_arms",
@@ -3165,7 +6822,16 @@
     "failed": 0,
     "not_executed": 0,
     "completion_rate_pct": "100.0000",
-    "note": "A missing or failed run is counted in the denominator. Dropping it would make an arm look complete by omission."
+    "metric_observations": 8,
+    "metric_scheduled_observations": 12,
+    "metric_excluded_observations": 4,
+    "v4": {
+      "status": "not_executed",
+      "implemented": false,
+      "in_denominator": false,
+      "reason": "V4 (portfolio allocation) is declared and not executed: no V4 arm has been scheduled or measured. It is excluded from the equal-opportunity denominator rather than measured as a zero."
+    },
+    "note": "A missing or failed run is counted in the denominator. Dropping it would make an arm look complete by omission. V4 is excluded because it did not execute, not because its result was zero."
   },
   "fairness": {
     "equal_opportunity": {
@@ -3236,8 +6902,8 @@
   },
   "cost_breakdown": {
     "measured_tokens": {
-      "input": 0,
-      "output": 0
+      "input": 21394,
+      "output": 2937
     },
     "estimated_tokens": {
       "input": 21394,
@@ -3252,7 +6918,42 @@
     "timed_out_calls": 0,
     "unreconciled_timeout_calls": 0,
     "strict_billed_ceiling": false,
-    "note": "A null total means at least one arm's cost was not reported. The report never substitutes the price-table estimate for a billed figure, and never zero for unknown."
+    "note": "A null total means at least one arm's cost was not reported. The report never substitutes the price-table estimate for a billed figure, and never zero for unknown.",
+    "scope": {
+      "execution_id": "50ad033095c12bc9",
+      "namespace": "50ad033095c12bc9",
+      "arms": [
+        "V0",
+        "V1",
+        "V2",
+        "V3"
+      ],
+      "run_count": 12,
+      "run_ids": {
+        "V0": [
+          "8b7f4ee4-ae1d-43cb-b9e2-c99ba4ab0155",
+          "d5e5f7a9-8c05-44de-a202-797ddd3203db",
+          "f4d38715-5d09-4ef1-b6c5-1eecd6d31572"
+        ],
+        "V1": [
+          "10cecf53-c19d-4126-ae0d-c16c8f12e73c",
+          "2c9124b5-521f-4846-98e7-5964917c57c1",
+          "365be93d-e06f-4a3a-b196-d4510379378a"
+        ],
+        "V2": [
+          "2d491200-e31b-45d7-8ad3-76107cd98c2c",
+          "0a481591-0d52-4a69-a03d-5dc1c486ca45",
+          "87d66c97-ff88-4aff-bbaa-e01966d97cd2"
+        ],
+        "V3": [
+          "978ad783-f825-402f-b5e2-6c43737905c3",
+          "06e77f19-4dd6-4efc-bc34-492892b620d0",
+          "36754aef-58a3-4809-a0e1-6707ad4a744c"
+        ],
+        "V4": []
+      },
+      "note": "The ledger is scoped to this execution's namespaced runs only."
+    }
   },
   "drawdown_gate": {
     "acceptable_drawdown_pct": "10.00",
@@ -3282,6 +6983,8 @@
     "profitability_threshold": null,
     "simulated_provider": true,
     "simulated_content": true,
+    "synthetic_label": "synthetic_simulation",
+    "real_market_outcome": false,
     "comparative_protocol_claim": false,
     "reason": "The opportunity set, marks and arm trajectories are authored/simulated. With the scripted provider the model outputs are not LLM samples, and even with a live provider a single opportunity set is engineering validation, not a comparative result.",
     "what_is_real": "The protocol code paths, the shared snapshots and their hashes, the guard evaluation, the fill rule, the accounting method and the cost separation.",
@@ -3311,44 +7014,5 @@
     "acceptable_drawdown_pct": "10.00",
     "checksum": "2820d6eb66a3dfd2fcbefc653649db1b86dc5527b85b3c74589cb90bcc2f9131"
   },
-  "contents_hash": "be8221bbb3d9b517ec1d890c1fd52fd8ccc70d7dd56c4b9d0eddee6670e4ff6d",
-  "execution": {
-    "started_at": "2026-11-11T15:47:38.996687Z",
-    "snapshots_used": {
-      "aapl-2026-02-03": {
-        "snapshot_id": "08fac509-3cd6-4afb-8379-ebdf56d1fd68",
-        "content_hash": "918c65e106c7061eaf142fc9fb513749b889034391a03c97bf2bb2e51015f7a8"
-      },
-      "msft-2026-02-04": {
-        "snapshot_id": "3dfc4e0a-9834-4602-911b-5b933506d0d7",
-        "content_hash": "c6a3491b6a3d49423fd0910408151ba06c0e7556f14ec9eb370965240e94979b"
-      },
-      "tsla-2026-02-05": {
-        "snapshot_id": "94c6fc4e-c40d-4b65-b021-62a90c42b883",
-        "content_hash": "d3b829991af710262ef259de271490918490262edaffe1b9534bb1c37ddbf458"
-      }
-    },
-    "evidence": {
-      "aapl-2026-02-03": {
-        "created": 0,
-        "declared": 2
-      },
-      "msft-2026-02-04": {
-        "created": 0,
-        "declared": 2
-      },
-      "tsla-2026-02-05": {
-        "created": 0,
-        "declared": 2
-      }
-    },
-    "client_modes": {
-      "V0": "deterministic",
-      "V1": "stub",
-      "V2": "stub",
-      "V3": "stub"
-    },
-    "idempotent": true,
-    "note": "Re-running reuses a run whose stable fixture id exists. It does not re-call a provider for an arm/opportunity already recorded."
-  }
+  "contents_hash": "65c9c9a043cfd79e1279fb302db1eaba7c8785db8ede5343aa130c7ff9955be9"
 }
