@@ -48,6 +48,7 @@ from services.allocation_provider import (
 from services.allocation_submission import (
     SubmissionRequest,
     collect_quotes,
+    process_submission,
     submit_analysis,
 )
 from services.debate_protocol import (
@@ -211,6 +212,14 @@ class AllocationWorkflowFixture(APITestCase):
         )
         self.quote_patch.start()
         self.addCleanup(self.quote_patch.stop)
+        # The HTTP layer returns after the durable row. These tests drive the
+        # worker themselves rather than depending on a broker or eager mode.
+        self.dispatched = []
+        self.dispatch_patch = patch(
+            "core.decision_views.dispatch_submission", side_effect=self.dispatched.append
+        )
+        self.dispatch_patch.start()
+        self.addCleanup(self.dispatch_patch.stop)
 
     def submit(self, key: str = "fix08-key-1", **overrides):
         return self.client.post(
@@ -219,11 +228,25 @@ class AllocationWorkflowFixture(APITestCase):
             format="json",
         )
 
+    def run_worker(self, run_id=None, *, owner: str = "test-worker"):
+        if run_id is None:
+            self.assertTrue(self.dispatched, "the endpoint did not dispatch a worker task")
+            run_id = self.dispatched[-1].pk
+        submission = AllocationSubmission.objects.get(pk=run_id)
+        processed = process_submission(submission, owner=owner)
+        self.assertFalse(processed.is_terminal and processed.plan_id is None and False)
+        return processed
+
     def submit_and_get_plan(self, key: str = "fix08-key-1", **overrides) -> PortfolioPlan:
         response = self.submit(key, **overrides)
         self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED, response.data)
-        self.assertEqual(response.data["status"], AllocationSubmissionStatus.COMPLETED)
-        return PortfolioPlan.objects.get(pk=response.data["plan_id"])
+        self.assertEqual(response.data["status"], AllocationSubmissionStatus.QUEUED)
+        self.assertIsNone(response.data["plan_id"])
+        self.assertEqual(response.data["attempt_count"], 0)
+        submission = self.run_worker(response.data["run_id"])
+        self.assertEqual(submission.status, AllocationSubmissionStatus.SUCCEEDED)
+        self.assertIsNotNone(submission.plan_id)
+        return PortfolioPlan.objects.get(pk=submission.plan_id)
 
 
 class SubmissionApiTests(AllocationWorkflowFixture):
@@ -253,35 +276,60 @@ class SubmissionApiTests(AllocationWorkflowFixture):
         self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
         self.assertIn("run_id", response.data)
         self.assertIn("/status/", response.data["status_url"])
-        self.assertEqual(response.data["status"], AllocationSubmissionStatus.COMPLETED)
-        self.assertIsNotNone(response.data["plan_id"])
+        # Step 6: the 202 names only the durable submission. No model ran and no
+        # plan exists yet.
+        self.assertEqual(response.data["status"], AllocationSubmissionStatus.QUEUED)
+        self.assertIsNone(response.data["plan_id"])
+        self.assertFalse(response.data["terminal"])
+        self.assertEqual(response.data["attempt_count"], 0)
+        self.assertEqual(len(self.dispatched), 1)
         self.assertTrue(response.data["status_path"].startswith("/api/decision-runs/"))
-        self.assertEqual(response.data["synthetic_response"], True)
         self.assertEqual(Transaction.objects.filter(portfolio=self.portfolio).count(), 0)
         submission = AllocationSubmission.objects.get(pk=response.data["run_id"])
         self.assertEqual(submission.request_hash, response.data["request_hash"])
-        self.assertFalse(submission.data_quality["input"]["prices"]["missing_tickers"])
 
-    def test_status_url_reports_completed_and_links_the_plan(self):
+        processed = self.run_worker(response.data["run_id"])
+        self.assertEqual(processed.status, AllocationSubmissionStatus.SUCCEEDED)
+        self.assertEqual(processed.attempt_count, 1)
+        self.assertIsNotNone(processed.plan_id)
+        self.assertFalse(processed.data_quality["input"]["prices"]["missing_tickers"])
+        self.assertEqual(Transaction.objects.filter(portfolio=self.portfolio).count(), 0)
+
+    def test_status_url_reports_succeeded_and_links_the_plan(self):
         response = self.submit()
+        queued = self.client.get(response.data["status_path"])
+        self.assertEqual(queued.status_code, status.HTTP_200_OK)
+        self.assertEqual(queued.data["status"], AllocationSubmissionStatus.QUEUED)
+        self.assertFalse(queued.data["terminal"])
+        self.assertEqual(queued["Retry-After"], "1")
+        self.assertIsNone(queued.data["terminal_at"])
+
+        processed = self.run_worker(response.data["run_id"])
         status_response = self.client.get(response.data["status_path"])
         self.assertEqual(status_response.status_code, status.HTTP_200_OK)
         self.assertEqual(status_response.data["run_id"], response.data["run_id"])
-        self.assertEqual(status_response.data["status"], AllocationSubmissionStatus.COMPLETED)
+        self.assertEqual(status_response.data["status"], AllocationSubmissionStatus.SUCCEEDED)
         self.assertTrue(status_response.data["terminal"])
-        self.assertEqual(status_response.data["plan_id"], response.data["plan_id"])
+        self.assertIsNotNone(status_response.data["terminal_at"])
+        self.assertEqual(status_response.data["attempt_count"], 1)
+        self.assertEqual(status_response.data["plan_id"], str(processed.plan_id))
         self.assertIn("/api/portfolio-plans/", status_response.data["plan_url"])
+        self.assertNotIn("Retry-After", status_response)
 
     def test_repeating_the_same_key_and_body_returns_the_same_run_without_a_second_plan(self):
         first = self.submit("same-key")
+        self.run_worker(first.data["run_id"])
         second = self.submit("same-key")
         self.assertEqual(first.status_code, status.HTTP_202_ACCEPTED)
         self.assertEqual(second.status_code, status.HTTP_202_ACCEPTED)
         self.assertEqual(second.data["run_id"], first.data["run_id"])
-        self.assertEqual(second.data["plan_id"], first.data["plan_id"])
+        self.assertIsNotNone(second.data["plan_id"])
+        self.assertEqual(second.data["status"], AllocationSubmissionStatus.SUCCEEDED)
         self.assertTrue(second.data["idempotent_replay"])
         self.assertEqual(AllocationSubmission.objects.count(), 1)
         self.assertEqual(PortfolioPlan.objects.count(), 1)
+        # A replay does not dispatch a second worker for a terminal row.
+        self.assertEqual(len(self.dispatched), 1)
 
     def test_reusing_a_key_with_a_different_payload_is_a_409(self):
         first = self.submit("conflict-key")
@@ -349,10 +397,11 @@ class SubmissionApiTests(AllocationWorkflowFixture):
 
         with patch("services.allocation_submission.get_latest_quote", side_effect=missing_msft):
             response = self.submit("missing-price-key")
-        self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED, response.data)
-        submission = AllocationSubmission.objects.get(pk=response.data["run_id"])
+            self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED, response.data)
+            submission = self.run_worker(response.data["run_id"])
+        self.assertEqual(submission.status, AllocationSubmissionStatus.SUCCEEDED)
         self.assertIn("MSFT", submission.data_quality["input"]["prices"]["missing_tickers"])
-        plan = PortfolioPlan.objects.get(pk=response.data["plan_id"])
+        plan = PortfolioPlan.objects.get(pk=submission.plan_id)
         self.assertTrue(
             any(
                 "No price was available for: MSFT" in text
@@ -378,8 +427,10 @@ class SubmissionApiTests(AllocationWorkflowFixture):
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED, response.data)
-        self.assertEqual(response.data["status"], AllocationSubmissionStatus.COMPLETED)
-        plan = PortfolioPlan.objects.get(pk=response.data["plan_id"])
+        self.assertEqual(response.data["status"], AllocationSubmissionStatus.QUEUED)
+        submission = self.run_worker(response.data["run_id"])
+        self.assertEqual(submission.status, AllocationSubmissionStatus.SUCCEEDED)
+        plan = PortfolioPlan.objects.get(pk=submission.plan_id)
         self.assertEqual(plan.status, PlanStatus.PROPOSED)
         self.assertEqual(Transaction.objects.filter(portfolio=self.portfolio).count(), 0)
         review = build_plan_review(plan)
@@ -393,18 +444,22 @@ class SubmissionApiTests(AllocationWorkflowFixture):
             side_effect=AllocationProviderUnavailable("provider intentionally unavailable"),
         ):
             first = self.submit("failure-key", mode="live", stub_response=None)
-        self.assertEqual(first.status_code, status.HTTP_202_ACCEPTED, first.data)
-        self.assertEqual(first.data["status"], AllocationSubmissionStatus.FAILED)
-        self.assertEqual(first.data["error"]["code"], "AllocationProviderUnavailable")
+            self.assertEqual(first.status_code, status.HTTP_202_ACCEPTED, first.data)
+            self.assertEqual(first.data["status"], AllocationSubmissionStatus.QUEUED)
+            submission = self.run_worker(first.data["run_id"])
+        self.assertEqual(submission.status, AllocationSubmissionStatus.FAILED)
+        self.assertEqual(submission.error_code, "AllocationProviderUnavailable")
         with patch(
             "services.allocation_submission.build_allocation_client",
             side_effect=AssertionError("must not call the provider twice"),
         ):
             second = self.submit("failure-key", mode="live", stub_response=None)
-        self.assertEqual(second.status_code, status.HTTP_202_ACCEPTED)
-        self.assertEqual(second.data["run_id"], first.data["run_id"])
-        self.assertEqual(second.data["status"], AllocationSubmissionStatus.FAILED)
+            self.assertEqual(second.status_code, status.HTTP_202_ACCEPTED)
+            self.assertEqual(second.data["run_id"], first.data["run_id"])
+            self.assertEqual(second.data["status"], AllocationSubmissionStatus.FAILED)
+            self.assertEqual(second.data["failure_reason"], "AllocationProviderUnavailable")
         self.assertEqual(AllocationSubmission.objects.count(), 1)
+        self.assertEqual(len(self.dispatched), 1)
 
 
 class ReviewAndApprovalTests(AllocationWorkflowFixture):
@@ -853,13 +908,15 @@ class LiveSubmissionIntegrationTests(AllocationWorkflowFixture):
         )
         with patch("services.allocation_submission.build_allocation_client", return_value=client):
             response = self.submit("live-key", mode="live", stub_response=None)
-        self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED, response.data)
-        self.assertEqual(response.data["status"], AllocationSubmissionStatus.COMPLETED)
-        self.assertEqual(response.data["provider"], "anthropic")
-        self.assertEqual(response.data["model"], "test-model")
-        self.assertFalse(response.data["synthetic_response"])
+            self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED, response.data)
+            self.assertEqual(response.data["status"], AllocationSubmissionStatus.QUEUED)
+            submission = self.run_worker(response.data["run_id"])
+        self.assertEqual(submission.status, AllocationSubmissionStatus.SUCCEEDED)
+        self.assertEqual(submission.provider, "anthropic")
+        self.assertEqual(submission.model, "test-model")
+        self.assertFalse(submission.synthetic_response)
         self.assertEqual(len(stage.calls), 1)
-        plan = PortfolioPlan.objects.get(pk=response.data["plan_id"])
+        plan = PortfolioPlan.objects.get(pk=submission.plan_id)
         review = build_plan_review(plan)
         provenance = review["provenance"]
         self.assertEqual(provenance["provider"], "anthropic")
@@ -912,7 +969,9 @@ class ApplyServiceApprovalBindingTests(TestCase):
             submission, _ = submit_analysis(
                 self.portfolio, data=request_body(self.portfolio, "binding-key")
             )
-        self.assertEqual(submission.status, AllocationSubmissionStatus.COMPLETED)
+            self.assertEqual(submission.status, AllocationSubmissionStatus.QUEUED)
+            submission = process_submission(submission, owner="binding-worker")
+        self.assertEqual(submission.status, AllocationSubmissionStatus.SUCCEEDED)
         self.plan = submission.plan
 
     def test_require_valid_approval_uses_the_plan_version_and_expiry(self):
@@ -958,7 +1017,9 @@ class ApplyServiceApprovalBindingTests(TestCase):
                 portfolio,
                 data=request_body(portfolio, "boom-key", mode="live", stub_response=None),
             )
-        self.assertTrue(created)
+            self.assertTrue(created)
+            self.assertEqual(submission.status, AllocationSubmissionStatus.QUEUED)
+            submission = process_submission(submission, owner="boom-worker")
         self.assertEqual(submission.status, AllocationSubmissionStatus.FAILED)
         self.assertEqual(submission.error_code, "RuntimeError")
         self.assertIn("provider exploded", submission.error_detail)

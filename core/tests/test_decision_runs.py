@@ -7,6 +7,7 @@ assertions rather than ``ValueError``/``assertRaises(Exception)``.
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from io import StringIO
@@ -27,7 +28,7 @@ from core.decision_errors import (
     RebuttalValidationError,
     SnapshotImmutableError,
 )
-from core.decision_json import content_hash
+from core.decision_json import verify_export_bundle
 from core.decision_models import (
     ClaimStance,
     ClaimType,
@@ -649,9 +650,12 @@ class DecisionRunApiTests(APITestCase):
         self.assertTrue(omitted["excerpt_omitted"])
         self.assertGreater(omitted["excerpt_chars"], 0)
 
-        checksum = bundle.pop("checksum")
+        checksum = bundle["checksum"]
         self.assertEqual(checksum["algorithm"], "sha256")
-        self.assertEqual(checksum["value"], content_hash(bundle))
+        self.assertTrue(checksum["canonicalisation"])
+        # Verify the payload as served (parsed from the response bytes), not a
+        # rebuilt copy: that is the document the offline viewer will read.
+        verify_export_bundle(json.loads(response.content.decode()))
 
     def test_requires_authentication(self):
         response = APIClient().get(reverse("core:decision-run-list"))

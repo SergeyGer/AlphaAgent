@@ -273,20 +273,39 @@ portfolio. Body:
   `stub_response`; without one it submits a deterministic hold request, both
   labelled stub.
 * `protocol_version` must equal `portfolio_allocation.v1`.
-* The row is written **before** the model call. `request_hash` covers the
-  canonical request body, so the same key and body returns the first submission
-  even if the model would answer differently, and the same key with a different
-  body is **409**.
-* Response: **202** with `run_id`, `status_url`, `status_path`, `plan_id`,
-  `plan_url`, `idempotent_replay`, and the current submission status. The status
-  endpoint is `GET /api/decision-runs/<run_id>/status/`.
-* Submission is executed inline in the request because the project cannot
-  assume a Celery worker for one portfolio call; a queued task with no worker
-  would leave the status at `accepted` forever. The row is committed first, so a
-  crash mid-call is visible as `running`.
-* Submission creates a `proposed` plan and **no ledger row**. A failed analysis
-  is stored as `failed` with a typed error and replayed on retry of the same key;
-  it is never retried automatically and never replaced by a stub.
+* The row is written **before** any work. `request_hash` covers the canonical
+  request body, so the same key and body returns the first submission even if
+  the model would answer differently, and the same key with a different body is
+  **409**.
+* Response: **202** from the durable row alone - `run_id`, `status_url`,
+  `status_path`, `idempotent_replay`, and the current submission status. The
+  model has not been called when the response is written. The status endpoint
+  is `GET /api/decision-runs/<run_id>/status/`.
+* A Celery worker (`tasks.run_allocation_submission_task`) claims the row with an
+  owner lease and attempt counter. The lifecycle is `queued` -> `running` ->
+  `succeeded` | `failed` | `cancelled` | `timed_out`; every transition is a
+  conditional, locked write and a terminal row is never reopened.
+* The provider call is checkpointed: `provider_call_started_at` is written
+  before the call and the validated proposal (`provider_result`) plus model
+  metadata immediately after it, before any plan row. A retry that finds the
+  result resumes at plan creation and does not spend again. A retry that finds a
+  started call with no result records `provider_call_unreconciled` and stops:
+  the first call may already have been billed, so a second spend is not assumed
+  safe.
+* Submission creates a `proposed` plan and **no ledger row**. The plan and the
+  `succeeded` status are committed in one transaction, re-checking cancellation
+  and the deadline under the row lock, so a cancelled or timed-out submission
+  has no plan for the apply endpoint to act on.
+* A failed, cancelled or timed-out analysis is stored with a stable
+  `failure_reason` (`error.code`) and is replayed on retry of the same key; it is
+  never retried automatically and never replaced by a stub.
+* `POST /api/decision-runs/<run_id>/cancel/` cancels an open submission. The
+  optional `reason` is a stable code (`^[a-z][a-z0-9_.:-]{0,63}$`), default
+  `cancelled_by_user`. Cancelling a terminal row is **409**.
+* `python manage.py repair_allocation_submissions` is the repair path. Dry run is
+  the default; `--execute` times out a past-deadline row, fails an unreconciled
+  provider call, or re-queues a row whose worker died before the paid call. It
+  never creates a plan or applies a trade.
 
 Why the record is an `AllocationSubmission`, not a `DecisionRun`: the existing
 `DecisionRun` is per instrument (one ticker, one debate, one guard record). A

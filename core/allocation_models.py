@@ -475,18 +475,25 @@ class PortfolioPlanLeg(models.Model):
 class AllocationSubmissionStatus(models.TextChoices):
     """Lifecycle of one idempotent portfolio-analysis request.
 
-    ``accepted`` is the row written before the model call. It is deliberately
-    separate from ``running``: a crash between the two leaves a submission that
-    was recorded and not executed, which is visible rather than silently
-    re-run. A failed analysis keeps the row (and its error) so a retry of the
-    same idempotency key returns the same failure rather than paying for a
-    second call.
+    ``queued`` is the durable row written before any work. A worker claims it
+    and moves it to ``running``; the response returns as soon as the row is
+    committed, so a slow provider never blocks the request and a process death
+    leaves a state a repair command can see.
+
+    ``succeeded``, ``failed``, ``cancelled`` and ``timed_out`` are terminal.
+    Every transition is monotonic: a terminal row is never reopened, and a
+    cancelled or timed-out submission is refused at the final, locked step that
+    would create and attach a plan. A failure keeps the row so a retry of the
+    same idempotency key returns the same outcome rather than paying for a
+    second provider call.
     """
 
-    ACCEPTED = "accepted", "Accepted"
+    QUEUED = "queued", "Queued"
     RUNNING = "running", "Running"
-    COMPLETED = "completed", "Completed"
+    SUCCEEDED = "succeeded", "Succeeded"
     FAILED = "failed", "Failed"
+    CANCELLED = "cancelled", "Cancelled"
+    TIMED_OUT = "timed_out", "Timed out"
 
 
 class AllocationSubmission(models.Model):
@@ -524,7 +531,7 @@ class AllocationSubmission(models.Model):
     status = models.CharField(
         max_length=16,
         choices=AllocationSubmissionStatus.choices,
-        default=AllocationSubmissionStatus.ACCEPTED,
+        default=AllocationSubmissionStatus.QUEUED,
         db_index=True,
     )
 
@@ -553,6 +560,36 @@ class AllocationSubmission(models.Model):
 
     error_code = models.CharField(max_length=64, blank=True, default="")
     error_detail = models.TextField(blank=True, default="")
+
+    #: Explicit ownership and attempt accounting. ``attempt_count`` increases
+    #: only when a worker claims the row; a redelivered task that does not own
+    #: a live lease does nothing. The lease is what tells the repair command
+    #: that the worker that claimed this row is gone.
+    attempt_count = models.PositiveIntegerField(default=0)
+    max_attempts = models.PositiveIntegerField(default=3)
+    claimed_by = models.CharField(max_length=128, blank=True, default="")
+    claimed_at = models.DateTimeField(null=True, blank=True)
+    heartbeat_at = models.DateTimeField(null=True, blank=True)
+    lease_expires_at = models.DateTimeField(null=True, blank=True)
+    #: The absolute deadline for the whole submission. Set when the durable row
+    #: is written, so a submission with no worker at all is still visibly past
+    #: its deadline rather than queued forever with no reported reason.
+    deadline_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    queued_at = models.DateTimeField(default=timezone.now, db_index=True)
+    last_dispatched_at = models.DateTimeField(null=True, blank=True)
+
+    #: The provider call is a paid side effect, so it gets its own checkpoint.
+    #: ``provider_call_started_at`` is written before the call and
+    #: ``provider_completed_at`` with ``provider_result`` after it. A retry that
+    #: finds a start without a result does not call the provider again; it
+    #: records ``provider_call_unreconciled`` and stops.
+    provider_call_started_at = models.DateTimeField(null=True, blank=True)
+    provider_completed_at = models.DateTimeField(null=True, blank=True)
+    provider_result = models.JSONField(default=dict, blank=True)
+    #: The validated proposal is persisted before any plan row is written, so a
+    #: retry can resume without a second provider spend and the plan creation is
+    #: a separate, atomic step.
+    worker_metadata = models.JSONField(default=dict, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     started_at = models.DateTimeField(null=True, blank=True)
@@ -584,9 +621,16 @@ class AllocationSubmission(models.Model):
     @property
     def is_terminal(self) -> bool:
         return self.status in {
-            AllocationSubmissionStatus.COMPLETED,
+            AllocationSubmissionStatus.SUCCEEDED,
             AllocationSubmissionStatus.FAILED,
+            AllocationSubmissionStatus.CANCELLED,
+            AllocationSubmissionStatus.TIMED_OUT,
         }
+
+    @property
+    def terminal_at(self):
+        """The terminal timestamp, or ``None`` while the submission is open."""
+        return self.completed_at if self.is_terminal else None
 
 
 # ---------------------------------------------------------------------------

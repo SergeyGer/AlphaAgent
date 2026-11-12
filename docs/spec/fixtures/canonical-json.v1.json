@@ -1,0 +1,95 @@
+{
+  "vector_version": "1.0",
+  "canonicalisation": "JSON with keys sorted by UTF-16 code unit, compact separators, no insignificant whitespace, UTF-8; JSON numbers formatted like ECMAScript Number::toString (so 90.0 is 90); Decimal values as normalised fixed-point strings without an exponent or trailing fractional zeros; strings escaped as JSON.stringify escapes them",
+  "scope": "shared by core/tests/test_p1_export_portability.py and frontend/viewer/exportParity.test.ts",
+  "vectors": [
+    {
+      "name": "nested-and-reordered",
+      "value": {
+        "z": [
+          3,
+          {
+            "b": "two",
+            "a": "one"
+          }
+        ],
+        "a": {
+          "unicode": "ünïcode 你好 🚀",
+          "null": null,
+          "bool": true,
+          "decimal": "90.0"
+        },
+        "m": 0
+      },
+      "canonical": "{\"a\":{\"bool\":true,\"decimal\":\"90.0\",\"null\":null,\"unicode\":\"ünïcode 你好 🚀\"},\"m\":0,\"z\":[3,{\"a\":\"one\",\"b\":\"two\"}]}",
+      "sha256": "a61424ffcf1ee3eeab180ad74e8ffa7f0b33dcb970e24a60a8568b8ee5b50458"
+    },
+    {
+      "name": "number-normalisation",
+      "value": [
+        90.0,
+        300.0,
+        0.125,
+        0.0025,
+        1e-07,
+        1e+21,
+        -0.0,
+        -2.5,
+        100.0,
+        0.0
+      ],
+      "canonical": "[90,300,0.125,0.0025,1e-7,1e+21,0,-2.5,100,0]",
+      "sha256": "ccd48e3493ce5002e61bfff2f98aeda0f529c0d262d70fa741e105028f1fa29f"
+    },
+    {
+      "name": "decimal-strings-and-nullable-times",
+      "value": {
+        "requested_quantity": "90.0",
+        "allowed_quantity": "300.00",
+        "zero": "0",
+        "fraction": "0.00000001",
+        "negative": "-12.50",
+        "started_at": "2026-11-12T15:00:00Z",
+        "completed_at": null,
+        "unicode": "Résumé — 你好"
+      },
+      "canonical": "{\"allowed_quantity\":\"300.00\",\"completed_at\":null,\"fraction\":\"0.00000001\",\"negative\":\"-12.50\",\"requested_quantity\":\"90.0\",\"started_at\":\"2026-11-12T15:00:00Z\",\"unicode\":\"Résumé — 你好\",\"zero\":\"0\"}",
+      "sha256": "b8c1e6f92a05416c7dbc3abf2a6a95f6b30061455cd79e2279390762824f0c74"
+    },
+    {
+      "name": "string-escaping",
+      "value": {
+        "quote": "He said \"sell\".",
+        "path": "C:\\tmp\\alpha",
+        "newline": "line\nbreak",
+        "tab": "a\tb",
+        "controls": "a\u0001b"
+      },
+      "canonical": "{\"controls\":\"a\\u0001b\",\"newline\":\"line\\nbreak\",\"path\":\"C:\\\\tmp\\\\alpha\",\"quote\":\"He said \\\"sell\\\".\",\"tab\":\"a\\tb\"}",
+      "sha256": "328f71ece50259bcf51dd4054abe0655fa13574d720a30d60b73273c418e119b"
+    },
+    {
+      "name": "utf16-key-order",
+      "value": {
+        "z": 1,
+        "😀": 2,
+        "�": 3,
+        "a": 4
+      },
+      "canonical": "{\"a\":4,\"z\":1,\"😀\":2,\"�\":3}",
+      "sha256": "457acdce1d25ebc60ffb27e29b20b7c605a348c888972f4983adafbb58d26447"
+    },
+    {
+      "name": "empty-containers",
+      "value": {
+        "empty_list": [],
+        "empty_object": {},
+        "false": false,
+        "null": null,
+        "true": true
+      },
+      "canonical": "{\"empty_list\":[],\"empty_object\":{},\"false\":false,\"null\":null,\"true\":true}",
+      "sha256": "ee2b074263d39c3e7357b053d487ae3983efd1b16f9a1abb3056545e749f9671"
+    }
+  ]
+}

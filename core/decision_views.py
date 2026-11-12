@@ -20,6 +20,7 @@ Routes (mounted under ``/api/`` by ``core/urls.py``)::
 from __future__ import annotations
 
 import logging
+import re
 from uuid import UUID, uuid4
 
 from django.db.models import Max
@@ -32,7 +33,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from core.allocation_models import AllocationSubmission
+from core.allocation_models import AllocationSubmission, AllocationSubmissionStatus
 from core.decision_models import DecisionRun
 from core.decision_serializers import (
     DecisionRunSerializer,
@@ -45,11 +46,14 @@ from core.models import Portfolio
 from services.allocation_submission import (
     AllocationSubmissionConflict,
     AllocationSubmissionError,
+    cancel_submission,
+    dispatch_submission,
     submission_as_dict,
     submit_analysis,
 )
 
 __all__ = [
+    "DecisionRunCancelView",
     "DecisionRunDetailView",
     "DecisionRunEventsView",
     "DecisionRunExportView",
@@ -57,6 +61,10 @@ __all__ = [
     "DecisionRunMetadataView",
     "DecisionRunStatusView",
 ]
+
+#: A cancellation reason is a stable machine code, not prose. Prose belongs in
+#: an audit note, not in a status field a client branches on.
+CANCEL_REASON_RE = re.compile(r"^[a-z][a-z0-9_.:-]{0,63}$")
 
 #: Default and maximum window for the events endpoint. The default matches
 #: DRF's PAGE_SIZE so the decision endpoints feel like the rest of the API.
@@ -77,6 +85,22 @@ def _error(status_code: int, detail: str) -> Response:
         },
         status=status_code,
     )
+
+
+def _get_submission(request: Request, run_id: str) -> AllocationSubmission:
+    """Load a submission owned by the caller, or raise an indistinguishable 404."""
+    try:
+        pk = UUID(str(run_id))
+    except (TypeError, ValueError, AttributeError) as exc:
+        raise Http404("Allocation submission not found.") from exc
+    submission = (
+        AllocationSubmission.objects.select_related("plan")
+        .filter(pk=pk, portfolio__user=request.user)
+        .first()
+    )
+    if submission is None:
+        raise Http404("Allocation submission not found.")
+    return submission
 
 
 def _get_run(request: Request, run_id: str, *, with_detail: bool = False) -> DecisionRun:
@@ -136,8 +160,26 @@ class DecisionRunListView(generics.ListAPIView):
             submission, created = submit_analysis(portfolio, data=request.data, user=request.user)
         except AllocationSubmissionError as exc:
             return _error(status.HTTP_400_BAD_REQUEST, exc.detail)
-        except AllocationSubmissionConflict as exc:
-            return _error(status.HTTP_409_CONFLICT, str(exc))
+        except AllocationSubmissionConflict:
+            # No exception text in the response. The conflict is a stable,
+            # documented condition; the concrete ids were already logged.
+            logger.warning(
+                "Allocation submission idempotency conflict for portfolio %s",
+                portfolio.id,
+            )
+            return _error(
+                status.HTTP_409_CONFLICT,
+                "That idempotency key is already recorded for a different request body "
+                "in this portfolio. Use a new key for a different submission.",
+            )
+
+        # The request is over at the durable row. Dispatch is fire-and-forget:
+        # a broker failure leaves the row queued with its deadline, which the
+        # repair command can see. A replayed row still queued is dispatched
+        # again; an already-claimed or terminal row is not.
+        if submission.status == AllocationSubmissionStatus.QUEUED:
+            dispatch_submission(submission)
+            submission.refresh_from_db()
 
         payload = submission_as_dict(submission)
         status_url = reverse("core:decision-run-status", args=[submission.id])
@@ -205,25 +247,17 @@ class DecisionRunStatusView(APIView):
     the same prefix because that is where the submission was accepted; the
     separate ``.../status/`` segment keeps the two id spaces from colliding.
 
-    The status is ``accepted``, ``running``, ``completed`` or ``failed``. A
-    completed submission always names the plan it produced; a failed one always
-    names its typed error. Neither case is a trade.
+    The status is ``queued``, ``running``, ``succeeded``, ``failed``,
+    ``cancelled`` or ``timed_out``. The payload carries ``terminal``,
+    ``terminal_at``, a stable ``failure_reason`` for a non-successful terminal
+    row, the attempt count, the deadline and the plan link. None of those states
+    is a trade.
     """
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request: Request, run_id: str) -> Response:
-        try:
-            pk = UUID(str(run_id))
-        except (TypeError, ValueError, AttributeError) as exc:
-            raise Http404("Allocation submission not found.") from exc
-        submission = (
-            AllocationSubmission.objects.select_related("plan")
-            .filter(pk=pk, portfolio__user=request.user)
-            .first()
-        )
-        if submission is None:
-            raise Http404("Allocation submission not found.")
+        submission = _get_submission(request, run_id)
         payload = submission_as_dict(submission)
         payload["status_url"] = request.build_absolute_uri(
             reverse("core:decision-run-status", args=[submission.id])
@@ -240,6 +274,51 @@ class DecisionRunStatusView(APIView):
         if not submission.is_terminal:
             response["Retry-After"] = "1"
         return response
+
+
+class DecisionRunCancelView(APIView):
+    """``POST /api/decision-runs/<run_id>/cancel/`` - cancel an open submission.
+
+    Cancelling is a terminal, monotonic transition. A queued row is stopped
+    before any worker picks it up; a running row is stopped at the locked step
+    that would create and attach a plan, so a provider reply that arrives later
+    cannot produce a plan or a trade. A terminal row is refused with 409 rather
+    than silently "cancelled" a second time.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, run_id: str) -> Response:
+        submission = _get_submission(request, run_id)
+        if submission.is_terminal:
+            return _error(
+                status.HTTP_409_CONFLICT,
+                "The submission is already terminal and cannot be cancelled.",
+            )
+        reason = request.data.get("reason") if isinstance(request.data, dict) else None
+        code = "cancelled_by_user"
+        if reason not in (None, ""):
+            text = str(reason).strip()
+            if not CANCEL_REASON_RE.match(text):
+                return _error(
+                    status.HTTP_400_BAD_REQUEST,
+                    "reason must be 1-64 characters from a-z 0-9 . _ : - and start with a letter.",
+                )
+            code = text
+        submission, changed = cancel_submission(submission, reason=code)
+        payload = submission_as_dict(submission)
+        payload["status_url"] = request.build_absolute_uri(
+            reverse("core:decision-run-status", args=[submission.id])
+        )
+        payload["plan_url"] = (
+            request.build_absolute_uri(
+                reverse("core:portfolio-plan-detail", args=[submission.plan_id])
+            )
+            if submission.plan_id
+            else None
+        )
+        payload["cancelled"] = changed
+        return Response(payload, status=status.HTTP_200_OK)
 
 
 class DecisionRunDetailView(APIView):

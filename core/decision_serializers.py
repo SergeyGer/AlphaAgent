@@ -26,8 +26,12 @@ from datetime import timedelta
 from django.utils import timezone
 from rest_framework import serializers
 
-from core.decision_json import content_hash as hash_of
-from core.decision_json import utc_iso
+from core.decision_json import (
+    EXPORT_CANONICALISATION,
+    export_content_hash,
+    export_json_safe,
+    utc_iso,
+)
 from core.decision_models import (
     ClaimStance,
     DecisionRun,
@@ -342,6 +346,11 @@ def outcome_payload(outcome: OutcomeRecord) -> dict:
     if not isinstance(basis, dict):
         basis = {}
     reference_at = outcome.reference_at or basis.get("reference_at")
+    # The measurement basis is stored JSON, so a producer can record the
+    # reference instant as an ISO string. Formatting it through ``utc_iso``
+    # would assume a datetime and raise; a captured string is already the wire
+    # form and is passed through unchanged.
+    reference_at_text = reference_at if isinstance(reference_at, str) else utc_iso(reference_at)
     return {
         "id": str(outcome.id),
         "horizon_days": outcome.horizon_days,
@@ -378,7 +387,7 @@ def outcome_payload(outcome: OutcomeRecord) -> dict:
             "basis": outcome.measurement_basis or basis.get("basis"),
             "method_version": outcome.method_version,
             "horizon_policy": basis.get("horizon_policy"),
-            "reference_at": utc_iso(reference_at),
+            "reference_at": reference_at_text,
             "fill_id": basis.get("fill_id"),
             "fill_price": basis.get("fill_price"),
             "fill_timestamp": basis.get("fill_timestamp"),
@@ -825,6 +834,7 @@ def build_export_bundle(run: DecisionRun, *, events=None) -> dict:
 
     bundle = {
         "bundle_version": BUNDLE_SCHEMA_VERSION,
+        "schema_version": BUNDLE_SCHEMA_VERSION,
         "bundle_kind": "alphaagent.decision-run",
         "exported_at": utc_iso(timezone.now()),
         "run": run_payload,
@@ -868,9 +878,18 @@ def build_export_bundle(run: DecisionRun, *, events=None) -> dict:
 
     bundle = _redact(bundle)
     bundle = _redact_evidence_bodies(bundle)
+    # Normalise to the primitives that are actually served before hashing. The
+    # digest must describe the document the viewer reads, not a pre-encoding
+    # object that DRF might render differently (a remaining Decimal would become
+    # a float on the wire and change the text under the checksum).
+    bundle = export_json_safe(bundle)
     bundle["checksum"] = {
         "algorithm": "sha256",
-        "scope": "this object with the checksum member removed",
-        "value": hash_of(bundle),
+        "scope": (
+            "this object with the checksum member removed, canonicalised as "
+            "sorted-key compact JSON in UTF-8"
+        ),
+        "canonicalisation": EXPORT_CANONICALISATION,
+        "value": export_content_hash(bundle),
     }
     return bundle
