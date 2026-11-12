@@ -221,6 +221,45 @@ Like the Phase 3 report snapshot, it is an example output, is not loaded by any
 command, and can be regenerated.
 
 
+## Export portability fixtures (P1 remediation step 5)
+
+Two committed files make the browser and Python agree about an exported run.
+
+### `canonical-json.v1.json`
+
+The shared canonical-JSON vectors. Both
+`core/tests/test_p1_export_portability.py` and
+`frontend/viewer/exportParity.test.ts` read this exact file and assert the same
+canonical text and SHA-256 for every vector. The form is:
+
+* object keys sorted by UTF-16 code unit;
+* compact separators, no insignificant whitespace, UTF-8;
+* JSON numbers formatted like ECMAScript `Number::toString`, so the Python float
+  `90.0` and the JavaScript number `90` both hash as `90`;
+* `Decimal` values normalised to fixed-point strings with no exponent and no
+  trailing fractional zeros (`Decimal("90.0")` -> `"90"`);
+* strings escaped the way `JSON.stringify` escapes them.
+
+The vectors cover nested data with reordered keys, decimal strings, nullable
+times, Unicode, extreme and fractional numbers, escaping, and UTF-16 key order.
+Changing either implementation alone fails one of the two suites.
+
+### `decision-run-export.v1.json`
+
+A real document captured from `GET /api/decision-runs/<id>/export/` by
+`venv/bin/python scripts/build_export_sample.py --force`. It is produced from the
+run in `core/tests/export_sample.py`, which carries two guard evaluations, a
+superseded outcome, a pending/unavailable outcome schedule, nullable publication
+times, nested decimal strings and Unicode settings.
+
+The Django suite verifies the file's checksum from the stored document and
+compares its recursive shape with a fresh endpoint export; the Vitest suite
+imports the same bytes unchanged through the viewer's importer and renders the
+round trip. A newly emitted field therefore fails the Python shape test until the
+sample is regenerated, and the browser test proves the regeneration is
+importable. The export now carries `schema_version` and names its
+canonicalisation in `checksum.canonicalisation`.
+
 ## FIX-08 recorded provider run
 
 [`fix08-live-allocation.v1.json`](fixtures/fix08-live-allocation.v1.json) is a

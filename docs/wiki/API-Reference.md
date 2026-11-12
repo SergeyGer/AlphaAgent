@@ -306,18 +306,30 @@ The FIX-08 authenticated, idempotent portfolio-analysis submission. Body:
 
 `mode` is `live` or explicit `stub`; a live request may not carry
 `stub_response`. The response is `202` with `run_id`, `status_url`,
-`status_path`, `plan_id`, `plan_url`, `idempotent_replay` and the submission
-status. The same key with the same canonical body returns the first run; the
+`status_path`, `idempotent_replay`, `attempt_count` and the submission status.
+It is written from the durable `queued` row **before** the worker calls the
+provider. The same key with the same canonical body returns the first run; the
 same key with a different body is `409`. Another user's portfolio is `404`.
 Submission creates a proposed plan and **no ledger row**.
 
 ### `GET /api/decision-runs/<run_id>/status/` — `200`, `401`, `404`
 
-The status URL returned by the submission. `status` is `accepted`, `running`,
-`completed` or `failed`; `plan_id`/`plan_url` are present on completion and
-`error` carries the typed failure. A non-terminal response sends
+The status URL returned by the submission. `status` is `queued`, `running`,
+`succeeded`, `failed`, `cancelled` or `timed_out`. The response also carries
+`terminal`, `terminal_at`, `failure_reason` (a stable code, null while open or
+after success), `attempt_count`, `claimed_by`, `deadline_at`, and
+`plan_id`/`plan_url` when a plan exists. A non-terminal response sends
 `Retry-After: 1`. This id space is the submission's, not a per-ticker
 `DecisionRun` id.
+
+### `POST /api/decision-runs/<run_id>/cancel/` — `200`, `400`, `401`, `404`, `409`
+
+Cancels an open submission. The optional body `{"reason": "user_withdrew"}` must
+be a stable code (1-64 characters from a-z 0-9 . _ : -, starting with a letter);
+the default is `cancelled_by_user`. A queued row never runs; a running row is
+stopped at the locked step that would attach a plan, so a later provider reply
+creates no plan and applies no trade. Cancelling an already-terminal row is
+`409`.
 
 ## Advisory portfolio plans (FIX-08)
 

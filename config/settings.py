@@ -490,6 +490,16 @@ ALLOCATION_CONFIG = {
     #: How many tickers one analysis may name. A bound keeps one request from
     #: turning into an unbounded prompt and cost; it is not a security control.
     "MAX_TICKERS_PER_ANALYSIS": env_int("AI_ALLOCATION_MAX_TICKERS_PER_ANALYSIS", 25),
+    # -- asynchronous analysis ownership and recovery (P1 step 6) ----------
+    # The HTTP request writes a durable submission and returns. The deadline is
+    # longer than the provider run deadline so the worker can still persist a
+    # result and create the plan; it is also the repair command's definition of
+    # "stuck". The lease is short enough that a dead worker is noticed within
+    # one repair sweep, but is renewed at each checkpoint.
+    "ANALYSIS_TIMEOUT_SECONDS": env_int("AI_ALLOCATION_ANALYSIS_TIMEOUT_SECONDS", 300),
+    "ANALYSIS_LEASE_SECONDS": env_int("AI_ALLOCATION_ANALYSIS_LEASE_SECONDS", 120),
+    "ANALYSIS_MAX_ATTEMPTS": env_int("AI_ALLOCATION_ANALYSIS_MAX_ATTEMPTS", 3),
+    "ANALYSIS_STALE_SECONDS": env_int("AI_ALLOCATION_ANALYSIS_STALE_SECONDS", 600),
     #: Default approval lifetime and the hard ceiling. An approval without an
     #: expiry is not executable, and one lasting forever would be an unbounded
     #: permission over a plan the portfolio has since outgrown.

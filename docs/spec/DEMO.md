@@ -243,7 +243,8 @@ authenticated workflow the review asked for, and one real recorded provider run.
 
 ```text
 POST /api/decision-runs/          202 + run_id + status_url (idempotent; no trade)
-GET  /api/decision-runs/<run>/status/
+GET  /api/decision-runs/<run>/status/   queued/running/succeeded/failed/cancelled/timed_out
+POST /api/decision-runs/<run>/cancel/   cancel an open submission
 GET  /api/portfolio-plans/
 GET  /api/portfolio-plans/<plan>/
 POST /api/portfolio-plans/<plan>/approve/    exact plan_version + expiry; no trade
@@ -256,6 +257,15 @@ The review screen shows current holdings/weights, requested vs constrained
 targets, cash and sector effects, funding, cost estimates, rejected
 alternatives, limitations, provenance (live provider vs **stub — no model
 call**), and the exact version/expiry an approval covers.
+
+**The analysis runs in a worker.** The `POST` returns from the durable
+`queued` row; it does not call the model. Run the Celery worker (the compose
+`worker` service or `celery -A config worker`) and poll the status URL. If a
+worker dies, `python manage.py repair_allocation_submissions` reports the stuck
+row and changes nothing (dry run); `--execute` times it out, fails an
+unreconciled provider call, or re-queues a worker that died before the paid call.
+A cancelled or timed-out submission has no plan, and only an approved plan can
+reach `apply`.
 
 **The recorded run, without making another call.** Read
 [`fixtures/fix08-live-allocation.v1.json`](fixtures/fix08-live-allocation.v1.json).

@@ -474,6 +474,24 @@ export interface RunSummary {
     no_trade: boolean;
     attempt?: Record<string, unknown> | null;
   } | null;
+  /**
+   * The export endpoint publishes the full metadata envelope. These are kept
+   * on the imported run unchanged rather than being re-declared field by
+   * field: the export is the shape, and the viewer must not maintain a second,
+   * drifted copy of it.
+   */
+  status_label?: string | null;
+  cost?: Record<string, unknown> | null;
+  failure?: Record<string, unknown> | null;
+  provenance?: Record<string, unknown> | null;
+  protocol?: Record<string, unknown> | null;
+  snapshot_id?: string | null;
+  model_hash?: string | null;
+  config_hash?: string | null;
+  prompt_hash?: string | null;
+  created_at?: string | null;
+  stage_states?: Record<string, unknown> | null;
+  error_detail?: string | null;
 }
 
 export type AgentRole = 'bull' | 'bear';
@@ -628,6 +646,16 @@ export interface DecisionDetailPayload {
   outcome_schedule?: OutcomeSchedule | null;
   /** False for legacy/sequential runs that never had a rebuttal stage. */
   has_rebuttals: boolean;
+  /*
+   * Sections the authenticated detail endpoint publishes and the export
+   * carries verbatim. They may be absent from an older capture, so every one
+   * is optional; when present the browser keeps the producer's object rather
+   * than projecting it into a narrower local type.
+   */
+  verdict?: Record<string, unknown> | null;
+  snapshot?: Record<string, unknown> | null;
+  limitations?: Array<{ source?: string; text?: string }>;
+  redaction?: Record<string, unknown> | null;
 }
 
 /** One persisted pipeline event, ordered by `seq`. */
@@ -639,6 +667,9 @@ export interface RunEvent {
   agent_role: string | null;
   occurred_at: string;
   payload: Record<string, unknown>;
+  /** Present on the export endpoint; absent from the event-window response. */
+  schema_version?: string;
+  persisted_at?: string | null;
 }
 
 /** `GET /api/decision-runs/` envelope. */

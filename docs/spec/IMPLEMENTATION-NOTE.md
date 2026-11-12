@@ -480,3 +480,85 @@ The committed evidence is still what the earlier phases produced: the three
 synthetic decision fixtures, the synthetic Phase 3 experiment report and the
 synthetic Phase 4 paper allocation. No live run was added, and no number in the
 new documents is quoted from a live database.
+
+## P1 remediation — export portability and recoverable analysis jobs (steps 5 and 6)
+
+The acceptance review made two P1 findings: a detail export from a real run
+could not be imported by the built viewer (the browser canonical serialiser
+hashed `90` where Python hashed `90.0`, so every payload containing a JSON float
+failed its checksum), and `POST /api/decision-runs/` called the provider before
+returning `202`, so a slow model blocked the request and a process death left no
+recovery path. Both are fixed here. The FIX-08 statement that submission executes
+inline is superseded by §6 below.
+
+### 5 — exported runs are portable
+
+| Requirement | Where it is enforced | Evidence |
+| --- | --- | --- |
+| The browser importer supports every field the authenticated endpoint emits | `frontend/viewer/bundle.ts` starts from the producer's objects and only normalises the fields the replay joins on; the full run envelope, cost/failure/protocol/stage-state blocks, `guard_evaluations`, `superseded_outcomes`, `outcome_schedule`, `snapshot`, `verdict`, `limitations` and per-event extras are preserved. The verified document is kept as `raw_export`. | `exportParity.test.ts` (`imports the committed sample unchanged`, `preserves every guard evaluation…`), `ViewerExportRoundTrip.test.tsx` |
+| One canonical serialisation in both runtimes | `core.decision_json.canonical_export_json` and `frontend/viewer/bundle.ts:canonicalJson`: keys sorted by UTF-16 code unit, compact UTF-8, ECMAScript number formatting (so `90.0` is `90`), `Decimal` as normalised fixed-point text, JSON.stringify-style string escaping. | `docs/spec/fixtures/canonical-json.v1.json` read by `test_p1_export_portability.py` **and** `exportParity.test.ts` |
+| The digest covers the stored payload, not a re-serialised copy; edits fail and versions are named | `build_export_bundle` normalises to the served primitives (`export_json_safe`) before hashing and returns that exact document; `verify_export_bundle` recomputes from the parsed document; `importDecisionExport` verifies the parsed file. Unsupported versions raise/report the field name and value. | `ExportSampleVerificationTests`, `ExportEndpointShapeTests`, export tests in `exportParity.test.ts` |
+| Guards, superseded outcomes and the synthetic fixtures survive | The exporter already published the full collections; the importer now keeps them instead of projecting them away. `docs/spec/fixtures/decision-run-export.v1.json` carries two guard checks and a superseded outcome; the three committed synthetic fixtures still import under 1.0. | `test_the_sample_preserves_the_two_guard_case_and_superseded_outcome`, `ViewerRunView — guard replay`, `committed synthetic fixtures…` |
+| The endpoint, not only the fixture loader, is tested | The sample is captured from `GET /api/decision-runs/<id>/export/`; `scripts/build_export_sample.py` regenerates it; the Python suite compares a fresh endpoint export's recursive shape with the committed sample and the Vitest suite imports those bytes. | `ExportEndpointShapeTests.test_the_endpoint_shape_matches_the_committed_sample` |
+
+A second real-run export defect was reproduced while building the sample:
+`outcome_payload` passed a stored ISO `reference_at` string to `utc_iso`, which
+assumes a datetime, so an outcome written with a string measurement basis made
+the export endpoint return HTTP 500. It now passes an already-serialised string
+through unchanged.
+
+Divergences recorded rather than absorbed:
+
+1. **A capture without `schema_version` is still accepted.** Captures produced
+   before this change have only `bundle_version`; when `schema_version` is
+   absent the viewer treats it as the bundle version. A capture *with* the field
+   is checked by name. This keeps old files importable without weakening the
+   version refusal for new ones.
+2. **Decimal strings are opaque to the digest.** A `Decimal` is converted to the
+   declared fixed-point form before it is served, but a value that is already a
+   string remains exactly that string. Normalising arbitrary strings would make
+   a text edit that changed a digit disappear from the checksum.
+3. **JSON numbers are normalised, not tagged.** `90.0` and `90` are the same
+   JSON number and hash the same; a change to `91` does not. The alternative -
+   a tagged decimal encoding - would change the API's field types.
+
+### 6 — portfolio analysis is a recoverable job
+
+| Requirement | Where it is enforced | Evidence |
+| --- | --- | --- |
+| `202` after only the durable record | `submit_analysis` writes `AllocationSubmission` with `queued_at`, `deadline_at`, `max_attempts` and returns; `DecisionRunListView.post` dispatches `tasks.run_allocation_submission_task` after the row is committed. No provider call is in the request. | `test_6a_the_response_returns_before_the_model_is_called` |
+| Explicit ownership, attempts, durable idempotency key, visible state | `claim_submission` uses a row lock, lease, owner and incrementing `attempt_count`; `idempotency_key` + `request_hash` remain the unique durable key; `submission_as_dict` publishes status, owner, attempts, deadline and terminal time. | `test_6a…`, `test_6b_a_crash_after_the_provider_result_resumes_without_a_second_spend` |
+| Atomic, monotonic transitions; result before side effects | Provider result and model metadata are persisted at `_checkpoint_provider_result` before `create_plan`; plan and `succeeded` are committed in one locked transaction that re-checks terminality, owner, cancellation and deadline. A terminal row is never reopened. | `test_6b…`, `test_6c_a_cancelled_running_submission_cannot_attach_its_persisted_result`, `test_6b_a_timed_out_submission_creates_no_plan_and_applies_no_trade` |
+| Six distinct states and a pollable status | `AllocationSubmissionStatus`: `queued`, `running`, `succeeded`, `failed`, `cancelled`, `timed_out`. `GET …/status/` publishes `terminal`, `terminal_at`, `failure_reason`, `attempt_count`, `claimed_by`, `deadline_at`, plan link and `Retry-After` while open. | status endpoint tests in `test_p1_allocation_jobs.py` |
+| Cancellation cannot later trade | `POST …/cancel/`; the final locked step refuses a cancelled row, so no plan exists for `apply`. Cancelling a terminal row is 409. | `test_6c_a_cancelled_queued_submission_never_runs`, `test_6c_a_cancelled_running_submission_cannot_attach_its_persisted_result` |
+| Contract preserved | 202 still returns `run_id` and status URL; key reuse with a different body is still 409; submission still creates no ledger row. | `test_submission_returns_202…`, `test_reusing_a_key_with_a_different_payload_is_a_409` |
+| Repair path, dry run by default | `python manage.py repair_allocation_submissions`; `--execute` applies. It times out a past-deadline row, fails an unreconciled provider call, or re-queues a worker that died before the paid call. JSON on stdout; summary on stderr. | `test_6d_the_repair_command_reports_a_stuck_worker_without_changing_it`, `test_6d_a_lost_worker_before_the_paid_call_is_requeued`, `test_6d_an_unreconciled_provider_call_is_failed_not_retried` |
+
+Divergences recorded rather than absorbed:
+
+1. **A crash *during* the provider call is unreconciled.** The worker persists
+   `provider_call_started_at` before the call and the validated result after it.
+   If the process dies in between, the repair path marks the submission `failed`
+   with `provider_call_unreconciled` instead of calling the provider again: the
+   first call may already have been billed, and a silent second spend would be
+   worse than a typed failure. The 6B retry case therefore resumes from a
+   persisted provider result; the in-flight-call case is the documented failure.
+2. **A resumed attempt rebuilds the brief from current state.** The persisted
+   provider result is reused, but quotes, classifications and limits are read
+   again when the plan is created. The plan records the proposal's
+   `portfolio_version` and sets `revalidation_required` when the freshly
+   evaluated version differs, so a changed portfolio cannot be silently applied
+   under the old proposal; an operator must revalidate and approve.
+3. **The endpoint now needs a worker.** A queued submission with no worker stays
+   `queued` with a deadline and a `Retry-After` status; it is not executed
+   inline as it was in FIX-08. That is the point of the change, but it is a
+   deployment requirement, and the repair command exists for the case where the
+   worker or broker is absent.
+4. **No second scheduler was introduced.** The worker is the existing Celery
+   application (`tasks.py`), using the existing broker and worker configuration.
+   The repair command is a management command, not a beat schedule: a repair
+   that runs automatically could re-queue a row an operator is investigating.
+5. **Attempts are bounded and not auto-retried.** A broker redelivery does not
+   increment the attempt count unless it can claim a lease; `max_attempts`
+   (default 3) bounds repair re-queues. Exhaustion is `failed` with
+   `attempts_exhausted`.

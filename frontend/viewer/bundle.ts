@@ -128,25 +128,68 @@ export function sha256Hex(input: string): string {
 /* Canonical JSON + checksum                                            */
 /* ------------------------------------------------------------------ */
 
-function sortedValue(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sortedValue);
-  if (value !== null && typeof value === 'object') {
-    const record = value as Record<string, unknown>;
-    const sorted: Record<string, unknown> = {};
-    for (const key of Object.keys(record).sort()) sorted[key] = sortedValue(record[key]);
-    return sorted;
+/** The canonicalisation declared by the Python exporter. Kept in words so a
+ * reviewer can compare the two implementations without reading both. */
+export const CANONICALISATION_DESCRIPTION =
+  'JSON with keys sorted by UTF-16 code unit, compact separators, no insignificant ' +
+  'whitespace, UTF-8; JSON numbers formatted like ECMAScript Number::toString ' +
+  '(so 90.0 is 90); Decimal values as normalised fixed-point strings without an ' +
+  'exponent or trailing fractional zeros; strings escaped as JSON.stringify escapes them';
+
+function canonicalNumber(value: number): string {
+  if (!Number.isFinite(value)) {
+    throw new BundleValidationError(
+      'checksum',
+      'The payload contains a non-finite number, which has no canonical JSON form.',
+    );
   }
-  return value;
+  if (Object.is(value, -0)) return '0';
+  // JSON.stringify uses Number::toString, the exact form the Python exporter
+  // emulates. This is the line that makes 90.0 and 90 hash as "90".
+  return JSON.stringify(value);
 }
 
-/** Sorted-key, compact JSON — the canonical form the checksum covers. */
+function canonicalString(value: string): string {
+  return JSON.stringify(value);
+}
+
+function canonicalValue(value: unknown): string {
+  if (value === null) return 'null';
+  if (typeof value === 'string') return canonicalString(value);
+  if (typeof value === 'number') return canonicalNumber(value);
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  if (Array.isArray(value)) return `[${value.map(canonicalValue).join(',')}]`;
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    // Default sort compares UTF-16 code units, which is the ordering the
+    // Python side implements explicitly.
+    const keys = Object.keys(record).sort();
+    return `{${keys
+      .map((key) => `${canonicalString(key)}:${canonicalValue(record[key])}`)
+      .join(',')}}`;
+  }
+  throw new BundleValidationError(
+    'checksum',
+    `A ${typeof value} value has no canonical JSON form and cannot be imported.`,
+  );
+}
+
+/**
+ * Sorted-key, compact JSON — the canonical form the checksum covers.
+ *
+ * This must match `core.decision_json.canonical_export_json` exactly. The
+ * shared vector fixture `docs/spec/fixtures/canonical-json.v1.json` is the
+ * contract: both this suite and the Django suite read the same file, so a
+ * change to either implementation without the other fails a test.
+ */
 export function canonicalJson(value: unknown): string {
-  return JSON.stringify(sortedValue(value));
+  return canonicalValue(value);
 }
 
 export interface BundleChecksum {
   algorithm?: string;
   scope?: string;
+  canonicalisation?: string;
   value?: string;
 }
 
@@ -234,6 +277,13 @@ export interface ViewerRun {
   detail: DecisionDetailPayload;
   events: RunEvent[];
   checksum?: BundleChecksum;
+  /**
+   * The verified export document, unchanged. Kept so a field this view does not
+   * render yet is still preserved for an audit; it is the single shape the
+   * endpoint emits, not a second schema.
+   */
+  raw_export?: Record<string, unknown>;
+  exported_at?: string | null;
 }
 
 export interface ViewerBundle {
@@ -380,7 +430,11 @@ function validateRunSummary(value: unknown, label: string): RunSummary {
   if (!isRecord(value)) throw new BundleValidationError('shape', `${label} has no run object.`);
   const id = text(value['id']);
   if (!id) throw new BundleValidationError('shape', `${label} has no run id.`);
-  return {
+  // Start from the producer's object and only normalise the fields the replay
+  // joins on. Any field the endpoint adds later survives the import without a
+  // browser change; that is what keeps this from becoming a second schema.
+  const summary: RunSummary = {
+    ...(value as unknown as RunSummary),
     id,
     ticker: text(value['ticker']) ?? 'UNKNOWN',
     status: normalizedStatus(value['status']),
@@ -401,6 +455,7 @@ function validateRunSummary(value: unknown, label: string): RunSummary {
         : null,
     fixture_id: text(value['fixture_id']),
   };
+  return summary;
 }
 
 function validateRunEvents(value: unknown, label: string): RunEvent[] {
@@ -419,6 +474,7 @@ function validateRunEvents(value: unknown, label: string): RunEvent[] {
       );
     }
     events.push({
+      ...(raw as unknown as RunEvent),
       event_id: eventId,
       seq,
       type: text(raw['type']) ?? 'unknown',
@@ -485,6 +541,12 @@ function validateViewerRun(value: unknown, index: number): ViewerRun {
         ? (detailRaw['outcome_schedule'] as unknown as OutcomeSchedule)
         : null,
     has_rebuttals: Boolean(detailRaw['has_rebuttals']),
+    verdict: isRecord(detailRaw['verdict']) ? detailRaw['verdict'] : null,
+    snapshot: isRecord(detailRaw['snapshot']) ? detailRaw['snapshot'] : null,
+    limitations: Array.isArray(detailRaw['limitations'])
+      ? (detailRaw['limitations'] as Array<{ source?: string; text?: string }>)
+      : [],
+    redaction: isRecord(detailRaw['redaction']) ? detailRaw['redaction'] : null,
   };
 
   return {
@@ -506,6 +568,7 @@ function validateViewerRun(value: unknown, index: number): ViewerRun {
       ? {
           algorithm: text(value['checksum']['algorithm']) ?? 'sha256',
           scope: text(value['checksum']['scope']) ?? undefined,
+          canonicalisation: text(value['checksum']['canonicalisation']) ?? undefined,
           value: text(value['checksum']['value']) ?? undefined,
         }
       : undefined,
@@ -539,9 +602,19 @@ function normalizeExportEvent(value: unknown, index: number): RunEvent {
   if (!isRecord(value)) {
     throw new BundleValidationError('shape', `Export event ${index + 1} is not an object.`);
   }
+  const sequence = numberOrNull(value['seq'] ?? value['sequence']);
+  if (sequence === null || sequence < 0) {
+    throw new BundleValidationError(
+      'shape',
+      `Export event ${index + 1} has no finite sequence number.`,
+    );
+  }
+  // Preserve schema_version/persisted_at and any future event field alongside
+  // the names the replay reads. The export's own event shape is the contract.
   return {
+    ...(value as unknown as RunEvent),
     event_id: text(value['event_id']) ?? `export-event-${index + 1}`,
-    seq: numberOrNull(value['seq'] ?? value['sequence']) ?? index + 1,
+    seq: sequence,
     type: text(value['type'] ?? value['event_type']) ?? 'unknown',
     stage: text(value['stage']),
     agent_role: text(value['agent_role']),
@@ -552,23 +625,33 @@ function normalizeExportEvent(value: unknown, index: number): RunEvent {
 
 function importDecisionExport(raw: Record<string, unknown>): ImportedBundle {
   const version = assertSupportedVersion(raw['bundle_version'], 'bundle version');
+  // A capture made before schema_version was separated from bundle_version is
+  // still a 1.0 document; when the field is present it is checked by name.
+  const schemaVersion =
+    raw['schema_version'] === undefined
+      ? version
+      : assertSupportedVersion(raw['schema_version'], 'schema version');
   verifyChecksum(raw, 'the decision-run export');
 
   const run = validateRunSummary(raw['run'], 'the exported run');
   const verdict = isRecord(raw['verdict']) ? raw['verdict'] : {};
-  const guardEvaluations = guardCollectionFrom(
-    raw['guard_evaluations'] ?? raw['guards'],
-  );
+  const guardEvaluations = guardCollectionFrom(raw['guard_evaluations'] ?? raw['guards']);
   const guardRaw = raw['guard_comparison'] ?? guardEvaluations[guardEvaluations.length - 1] ?? null;
   const guard = isRecord(guardRaw) ? (guardRaw as unknown as GuardComparison) : null;
   const claims = flattenCases(raw['cases']);
   const rebuttals = flattenObjectList(raw['rebuttals']);
   const events = Array.isArray(raw['events'])
-    ? mergeRunEvents([], raw['events'].map((event, index) => normalizeExportEvent(event, index)))
+    ? mergeRunEvents(
+        [],
+        raw['events'].map((event, index) => normalizeExportEvent(event, index)),
+      )
     : [];
+  const redaction = isRecord(raw['redaction']) ? raw['redaction'] : null;
 
   const detail: DecisionDetailPayload = {
     run,
+    // The flat consumer contract, derived from the same nested verdict the
+    // authenticated detail endpoint serves alongside it.
     action: text(verdict['action']),
     rationale: text(verdict['concise_rationale']),
     decisive_claim_ids: stringArray(verdict['decisive_claim_ids']),
@@ -586,19 +669,27 @@ function importDecisionExport(raw: Record<string, unknown>): ImportedBundle {
     outcome_schedule: isRecord(raw['outcome_schedule'])
       ? (raw['outcome_schedule'] as unknown as OutcomeSchedule)
       : null,
+    // has_rebuttals follows the recorded collection, not a declared summary: a
+    // bundle cannot claim a debate it does not carry.
     has_rebuttals: rebuttals.length > 0,
+    verdict: isRecord(raw['verdict']) ? raw['verdict'] : null,
+    snapshot: isRecord(raw['snapshot']) ? raw['snapshot'] : null,
+    limitations: Array.isArray(raw['limitations'])
+      ? (raw['limitations'] as Array<{ source?: string; text?: string }>)
+      : [],
+    redaction,
   };
 
   const sourceLabel = sourceLabelFromMode(run.mode);
   return {
     kind: 'decision-run-export',
     bundleVersion: version,
-    schemaVersion: version,
+    schemaVersion,
     generatedAt: text(raw['exported_at']),
     sourceLabel,
     description:
       'Imported AlphaAgent decision-run export. The source label is derived from the run provenance; the viewer cannot independently re-authenticate a recording.',
-    honesty: isRecord(raw['redaction']) ? raw['redaction'] : null,
+    honesty: redaction,
     runs: [
       {
         run_id: run.id,
@@ -607,7 +698,7 @@ function importDecisionExport(raw: Record<string, unknown>): ImportedBundle {
         provenance: {
           label: sourceLabel,
           note:
-            text(raw['redaction'] && isRecord(raw['redaction']) ? raw['redaction']['evidence_body_policy'] : null) ??
+            text(redaction ? redaction['evidence_body_policy'] : null) ??
             'Imported from the authenticated export endpoint. Evidence bodies follow the export redaction policy.',
           fixture_id: run.fixture_id ?? null,
           protocol_version: run.protocol_version,
@@ -615,10 +706,13 @@ function importDecisionExport(raw: Record<string, unknown>): ImportedBundle {
         },
         detail,
         events,
+        exported_at: text(raw['exported_at']),
+        raw_export: raw,
         checksum: isRecord(raw['checksum'])
           ? {
               algorithm: text(raw['checksum']['algorithm']) ?? 'sha256',
               scope: text(raw['checksum']['scope']) ?? undefined,
+              canonicalisation: text(raw['checksum']['canonicalisation']) ?? undefined,
               value: text(raw['checksum']['value']) ?? undefined,
             }
           : undefined,

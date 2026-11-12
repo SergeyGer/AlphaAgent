@@ -1049,3 +1049,39 @@ def evaluate_decision_outcomes_task(self) -> dict[str, Any]:
 
     logger.info("evaluate_decision_outcomes_task done: %s", counts)
     return {"status": "ok", **counts}
+
+
+# ---------------------------------------------------------------------------
+# Portfolio analysis worker (P1 step 6)
+# ---------------------------------------------------------------------------
+@shared_task(
+    bind=True,
+    name="tasks.run_allocation_submission_task",
+    max_retries=0,
+    acks_late=True,
+)
+def run_allocation_submission_task(self, submission_id: str) -> dict[str, Any]:
+    """Run one durable portfolio-analysis submission.
+
+    The HTTP endpoint only writes ``AllocationSubmission`` and publishes this
+    task; it never calls a model. The task is deliberately not auto-retried:
+    `process_submission` owns the attempt counter, owner lease and provider
+    checkpoint, so a redelivery that does not own a live lease is a no-op and a
+    retry after a lost worker is a deliberate repair decision rather than a
+    broker retry that could spend twice.
+    """
+    # Local import keeps the task module importable without importing the whole
+    # allocation service (which imports the worker module for dispatch).
+    from services.allocation_submission import process_submission
+
+    request = getattr(self, "request", None)
+    task_id = str(getattr(request, "id", "") or "eager")
+    hostname = str(getattr(request, "hostname", "") or "worker")
+    owner = f"celery:{hostname}:{task_id}"[:128]
+    submission = process_submission(submission_id, owner=owner)
+    return {
+        "submission_id": str(submission.id),
+        "status": submission.status,
+        "attempt_count": submission.attempt_count,
+        "plan_id": str(submission.plan_id) if submission.plan_id else None,
+    }

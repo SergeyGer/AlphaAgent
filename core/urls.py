@@ -12,6 +12,7 @@ Decision runs
     GET  /api/decision-runs/                   the caller's decision runs
     POST /api/decision-runs/                   idempotent portfolio analysis submission
     GET  /api/decision-runs/<id>/status/        submission status + plan link
+    POST /api/decision-runs/<id>/cancel/        cancel an open submission
     GET  /api/decision-runs/<id>/              metadata, stages, cost, failure
     GET  /api/decision-runs/<id>/detail/       cases, rebuttals, verdict, guard
     GET  /api/decision-runs/<id>/events/       ordered event window (after_seq)
@@ -57,6 +58,7 @@ from core.allocation_views import (
     PlanRevalidateView,
 )
 from core.decision_views import (
+    DecisionRunCancelView,
     DecisionRunDetailView,
     DecisionRunEventsView,
     DecisionRunExportView,
@@ -141,6 +143,11 @@ urlpatterns = [
         "decision-runs/<str:run_id>/status/",
         DecisionRunStatusView.as_view(),
         name="decision-run-status",
+    ),
+    path(
+        "decision-runs/<str:run_id>/cancel/",
+        DecisionRunCancelView.as_view(),
+        name="decision-run-cancel",
     ),
     path(
         "decision-runs/<str:run_id>/detail/",
