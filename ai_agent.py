@@ -98,6 +98,8 @@ __all__ = [
     "HeuristicDecisionEngine",
     "LLMProviderError",
     "TradeProposal",
+    "estimate_cost",
+    "parse_proposal",
     "run_alpha_agent",
 ]
 
