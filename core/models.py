@@ -31,6 +31,8 @@ __all__ = [
     "ZERO_USD",
     "AgentDecisionLog",
     "AgentRole",
+    "AllocationSubmission",
+    "AllocationSubmissionStatus",
     "Asset",
     "CashFlow",
     "CashFlowType",
@@ -63,6 +65,8 @@ __all__ = [
     "OutboxStatus",
     "OutcomeMaturity",
     "OutcomeRecord",
+    "PlanApproval",
+    "PlanApprovalDecision",
     "PlanLegPriority",
     "PlanLegStatus",
     "PlanSide",
@@ -880,8 +884,12 @@ class TelegramLink(models.Model):
 # core/allocation_models.py for why the sector lookup is explicit rather than
 # inferred and why a plan leg has a one-to-one ledger row.
 from core.allocation_models import (  # noqa: E402
+    AllocationSubmission,
+    AllocationSubmissionStatus,
     InstrumentClassification,
     InstrumentClassificationSource,
+    PlanApproval,
+    PlanApprovalDecision,
     PlanLegPriority,
     PlanLegStatus,
     PlanSide,

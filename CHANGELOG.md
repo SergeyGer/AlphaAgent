@@ -7,6 +7,49 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- **FIX-08 [P1] — the portfolio advisory product, with one real recorded model run.**
+  The allocation service existed but nothing could submit a plan, review it, approve
+  it or execute it, and the documented command used a stub client.
+
+  - **`POST /api/decision-runs/`** — authenticated submission returning 202 with a run
+    id and status URL. An idempotency key plus a canonical request hash means a repeat
+    returns the same run and a changed body under the same key is a 409. A submission
+    never writes a ledger row.
+  - **A provider-backed CIO adapter** (`BudgetedAllocationClient`) over the real
+    protocol seam, with the budget enforcement from FIX-07: deadline, token caps,
+    retries and a monetary ceiling, and the five cost quantities kept apart. Stub mode
+    is selectable only by name; live mode requires a configured provider.
+  - **Review and approval** — `GET /api/portfolio-plans/` and `/<id>/` return holdings
+    and weights, requested versus constrained allocation, cash and sector effects,
+    funding, costs, rejected alternatives and data-quality limits. Approval binds the
+    exact plan version, permission hash and expiry; a material change bumps the
+    version and requires a new approval; rejection and cancellation write audit rows.
+  - **A review screen** at `#/plans`, using the existing panels and palette. A stub
+    plan is labelled "Stub — no model call", and apply is a separate confirmed act.
+
+  **One real model call was made and recorded** as
+  `docs/spec/fixtures/fix08-live-allocation.v1.json`: `mode: "live"`,
+  `source: "anthropic"`, `model: "claude-haiku-5-5"`,
+  `run_kind: "real_recorded_model_run"`, `synthetic_response: false`. One call, no
+  retries, five thousand and five input tokens against three thousand and twenty
+  output, a price-table estimate of `$0.002010`, and a billed cost of `null` because
+  the provider reports tokens rather than dollars. The plan came back proposed with
+  two sell legs, approval pending and **zero ledger rows** — the submission never
+  trades.
+
+  The artifact also records what it is not: `input_data_is_synthetic: true`, because
+  the brief is operator-supplied demonstration data rather than realised history. A
+  real model answering a synthetic brief is labelled as exactly that.
+
+  **36 new backend tests and 11 frontend tests**, covering the 202 and status URL, key
+  reuse, the 409, declared-not-dropped tickers, missing classification and price
+  policies, approval binding and expiry, apply without approval refused, apply through
+  the shared execution service, and rejection and cancellation audit rows.
+
+## [1.2.0] — 2026-11-12
+
 ### Fixed
 
 - **FIX-07 [P1] — cost and deadline semantics, and the experiment execution path.**

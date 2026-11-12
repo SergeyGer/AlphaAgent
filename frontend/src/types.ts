@@ -680,3 +680,302 @@ export interface Toast {
   kind: 'success' | 'error' | 'info';
   message: string;
 }
+
+/* ------------------------------------------------------------------ */
+/* Advisory portfolio plans (FIX-08)                                   */
+/* ------------------------------------------------------------------ */
+
+export type PlanStatus =
+  | 'proposed'
+  | 'applied'
+  | 'no_change'
+  | 'failed'
+  | 'superseded'
+  | 'cancelled'
+  | 'rejected';
+
+export type PlanApprovalState =
+  | 'pending'
+  | 'approved'
+  | 'expired'
+  | 'invalidated'
+  | 'rejected'
+  | 'cancelled'
+  | 'consumed'
+  | 'not_required';
+
+export interface PlanWeightsRow {
+  ticker: string;
+  is_cash: boolean;
+  current_weight: Decimal | null;
+  requested_weight: Decimal | null;
+  constrained_weight: Decimal | null;
+  change_from_current: Decimal | null;
+  requested_vs_constrained: Decimal | null;
+  executed_weight: Decimal | null;
+  action: string | null;
+  rationale: string | null;
+  claim_ids: string[];
+}
+
+export interface PlanSectorEffectRow {
+  sector: string;
+  current_weight: Decimal | null;
+  target_weight: Decimal | null;
+  change: Decimal | null;
+}
+
+export interface PlanHolding {
+  ticker: string;
+  quantity: Decimal;
+  avg_cost: Decimal;
+  price: Decimal | null;
+  price_source?: string | null;
+  market_value_usd: Decimal | null;
+  weight: Decimal | null;
+  sector: string | null;
+  asset_class: string | null;
+  classification_source: string | null;
+}
+
+export interface PlanLegView {
+  leg_id: number;
+  sequence: number;
+  ticker: string;
+  side: 'BUY' | 'SELL' | string;
+  quantity: Decimal;
+  price: Decimal;
+  notional_usd: Decimal;
+  estimated_cost_usd: Decimal;
+  priority: string;
+  sector: string | null;
+  asset_class: string | null;
+  status: string;
+  transaction_id: number | null;
+  applied_at: string | null;
+  reason: string;
+  signed_cash_effect_usd: Decimal;
+}
+
+export interface PlanApprovalView {
+  state: PlanApprovalState;
+  executable: boolean;
+  required: boolean;
+  plan_version: number;
+  approved_version: number | null;
+  approval_hash: string | null;
+  approved_at: string | null;
+  approved_by: string | null;
+  approved_by_id: number | null;
+  expires_at: string | null;
+  seconds_remaining: number | null;
+  decided_at: string | null;
+  note: string;
+  reason: string;
+}
+
+export interface PlanApprovalHistoryRow {
+  approval_id: number;
+  decision: 'approved' | 'rejected' | 'cancelled' | string;
+  plan_version: number;
+  approval_hash: string | null;
+  decided_at: string | null;
+  decided_by: string | null;
+  expires_at: string | null;
+  note: string;
+}
+
+export interface PlanProvenanceView {
+  provider: string | null;
+  model: string | null;
+  mode: string;
+  synthetic_response: boolean;
+  label: string;
+  prompt_template_version: string | null;
+  protocol_version: string | null;
+  prompt_hash: string | null;
+  parameters: Record<string, unknown>;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  cost_usd: Decimal | null;
+  cost_reported: boolean | null;
+  token_accounting: string | null;
+  adapter: Record<string, unknown> | null;
+  calls: Array<Record<string, unknown>>;
+  note: string | null;
+}
+
+export interface PlanCashEffect {
+  current_cash_weight: Decimal | null;
+  requested_cash_weight: Decimal | null;
+  constrained_cash_weight: Decimal | null;
+  current_cash_usd: Decimal | null;
+  target_cash_usd: Decimal | null;
+  min_cash_usd: Decimal | null;
+  change_usd: Decimal | null;
+  buffer_status: 'within_policy' | 'breach' | 'unknown' | string;
+  note: string;
+}
+
+export interface PlanSectorEffects {
+  rows: PlanSectorEffectRow[];
+  asset_class_target: Record<string, Decimal>;
+  unclassified_target_weight: Decimal | null;
+  unclassified_target_tickers: string[];
+  current_coverage: Record<string, unknown>;
+  target_coverage_status: 'complete' | 'incomplete' | string;
+  note: string;
+}
+
+export interface PlanDataQuality {
+  flags?: Array<{ code: string; severity: string; detail: string }>;
+  limitations?: string[];
+  declared_policies?: Array<Record<string, unknown>>;
+  risk_statistics?: {
+    status: string | null;
+    method_version: string | null;
+    history_source: string | null;
+    observation_window: Record<string, string> | null;
+    min_observations: number | null;
+    missing_pairs: Array<Record<string, unknown>>;
+    quality_flags: string[];
+    annualisation: string | null;
+    note: string | null;
+  };
+  sector_coverage?: Record<string, unknown>;
+  source?: Record<string, string>;
+  [key: string]: unknown;
+}
+
+export interface PlanReview {
+  plan_id: string;
+  portfolio_id: number;
+  status: PlanStatus;
+  reviewable: boolean;
+  plan_version: number;
+  review_fingerprint: string;
+  created_at: string | null;
+  updated_at: string | null;
+  applied_at: string | null;
+  execution_mode: string;
+  protocol_version: string;
+  policy_version: string;
+  proposal_portfolio_version: string;
+  evaluated_portfolio_version: string;
+  brief_hash: string | null;
+  approval_hash: string | null;
+  data_sufficiency: string | null;
+  objective: string;
+  rationale: string;
+  actions: Array<Record<string, unknown>>;
+  holdings: PlanHolding[];
+  weights: PlanWeightsRow[];
+  requested_target_weights: Record<string, Decimal>;
+  constrained_target_weights: Record<string, Decimal>;
+  cash_effect: PlanCashEffect;
+  sector_effects: PlanSectorEffects;
+  funding: Record<string, unknown>;
+  costs: {
+    estimated_cost_usd: Decimal;
+    estimated_turnover_pct: Decimal | null;
+    cost_model: Record<string, unknown>;
+    per_leg_estimated_cost_usd: Record<string, Decimal>;
+    recorded_fee_note: string;
+    fees_recorded_in_ledger: boolean;
+  };
+  estimated_turnover_pct: Decimal | null;
+  rejected_alternatives: Array<{ ticker: string | null; reason: string }>;
+  unresolved_uncertainties: string[];
+  deviations: Array<{ code: string; detail?: string; [key: string]: unknown }>;
+  constraints: Record<string, unknown>;
+  data_quality: PlanDataQuality;
+  limits: Record<string, unknown>;
+  legs: PlanLegView[];
+  provenance: PlanProvenanceView;
+  submission: {
+    run_id: string;
+    mode: string;
+    status: string;
+    synthetic_response: boolean;
+    provider: string | null;
+    model: string | null;
+    request_hash: string;
+  } | null;
+  approval: PlanApprovalView;
+  approval_history: PlanApprovalHistoryRow[];
+  execution: {
+    status: string;
+    applied_at: string | null;
+    applied_by: string | null;
+    applied_approval_version: number | null;
+    executed_target_weights: Record<string, Decimal>;
+    reasons: Array<Record<string, unknown>>;
+    transaction_ids: number[];
+    failure_code: string | null;
+    failure_detail: string | null;
+  };
+  revalidation: {
+    required: boolean;
+    count: number;
+    revalidated_at: string | null;
+  };
+  review_actions: {
+    can_approve: boolean;
+    can_reject: boolean;
+    can_cancel: boolean;
+    can_apply: boolean;
+    can_revalidate: boolean;
+    default_apply_mode: string;
+  };
+  immutability: {
+    plan_version: number;
+    approval_version: number | null;
+    approval_required: boolean;
+    requires_expiry: boolean;
+    note: string;
+  };
+}
+
+export interface PlanSummary {
+  plan_id: string;
+  portfolio_id: number;
+  status: PlanStatus;
+  plan_version: number;
+  protocol_version: string;
+  provider: string | null;
+  model: string | null;
+  synthetic_response: boolean;
+  approval_state: PlanApprovalState;
+  approval_expires_at: string | null;
+  objective: string;
+  requested_weights: Record<string, Decimal>;
+  constrained_weights: Record<string, Decimal>;
+  estimated_cost_usd: Decimal;
+  data_sufficiency: string | null;
+  revalidation_required: boolean;
+  created_at: string | null;
+  applied_at: string | null;
+}
+
+export interface PlanListResponse {
+  count: number;
+  results: PlanSummary[];
+}
+
+export interface PlanDecisionResponse {
+  approval: PlanApprovalHistoryRow;
+  review: PlanReview;
+}
+
+export interface PlanApplyResponse {
+  application: {
+    plan_id: string;
+    status: PlanStatus;
+    already_applied: boolean;
+    mode: string;
+    transaction_ids: number[];
+    legs: Array<Record<string, unknown>>;
+  };
+  input: Record<string, unknown>;
+  review: PlanReview;
+}

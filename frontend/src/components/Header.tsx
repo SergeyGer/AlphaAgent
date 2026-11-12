@@ -116,6 +116,15 @@ export function Header({
             onReconnect={connection.reconnect}
           />
 
+          <a
+            href="#/plans"
+            title="Review advisory portfolio plans and approve an exact version"
+            className="inline-flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-950/60 px-2 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-300 transition-colors hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60"
+          >
+            <span className="hidden sm:inline">Plans</span>
+            <span className="sm:hidden" aria-hidden="true">P</span>
+          </a>
+
           <IconButton
             label={runAgentBusy ? 'Queueing' : 'Run agent'}
             onClick={onRunAgent}

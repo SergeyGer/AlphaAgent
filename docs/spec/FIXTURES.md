@@ -219,3 +219,32 @@ A captured example of the command's compact output is kept at
 [`phase4-allocation.v1.output.json`](fixtures/phase4-allocation.v1.output.json).
 Like the Phase 3 report snapshot, it is an example output, is not loaded by any
 command, and can be regenerated.
+
+
+## FIX-08 recorded provider run
+
+[`fix08-live-allocation.v1.json`](fixtures/fix08-live-allocation.v1.json) is a
+**real recorded model run**, not a fixture response. One Anthropic CIO call was
+made through `services.allocation_provider.BudgetedAllocationClient` on
+2026-11-12 with model `claude-haiku-5-5`; the artifact records the exact prompt
+(and its hash), the prompt-template version and parameters, the validated
+response, token counts, price-table cost estimate, the proposed plan and its
+review payload. It says `mode: "live"`, `source: "anthropic"`,
+`run_kind: "real_recorded_model_run"`, `synthetic_response: false`.
+
+The artifact requires one honest qualification, which it states itself: the
+**input brief** is operator-supplied demonstration data, not market history
+([`fix08-live-input.v1.json`](fixtures/fix08-live-input.v1.json) declares
+`input_data_is_synthetic: true`, `realised_history: false`). The response is a
+real sample from the provider; the data it reasoned over is authored.
+
+```bash
+# One real call, no retry and no stub fallback. Refuses to overwrite by default.
+python manage.py record_live_allocation
+```
+
+If the call fails, the command writes a failure artifact and exits non-zero; it
+never substitutes a deterministic answer. The provider reported 5005 input and
+3020 output tokens; billed cost is `null` (the adapter receives tokens, not
+dollars) and the price-table estimate is `$0.002010`. The plan is `proposed`,
+unapproved and untraded.

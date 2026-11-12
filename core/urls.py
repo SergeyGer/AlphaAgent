@@ -10,10 +10,21 @@ Portfolio
 
 Decision runs
     GET  /api/decision-runs/                   the caller's decision runs
+    POST /api/decision-runs/                   idempotent portfolio analysis submission
+    GET  /api/decision-runs/<id>/status/        submission status + plan link
     GET  /api/decision-runs/<id>/              metadata, stages, cost, failure
     GET  /api/decision-runs/<id>/detail/       cases, rebuttals, verdict, guard
     GET  /api/decision-runs/<id>/events/       ordered event window (after_seq)
     GET  /api/decision-runs/<id>/export/       redacted versioned JSON bundle
+
+Portfolio plans (FIX-08)
+    GET  /api/portfolio-plans/                 advisory plans for review
+    GET  /api/portfolio-plans/<id>/            requested vs constrained review payload
+    POST /api/portfolio-plans/<id>/approve/    approve an exact version + expiry
+    POST /api/portfolio-plans/<id>/reject/     reject with a reason
+    POST /api/portfolio-plans/<id>/cancel/     cancel with an audit event
+    POST /api/portfolio-plans/<id>/revalidate/ re-derive after a material change
+    POST /api/portfolio-plans/<id>/apply/      explicit execution through the guard
 
 Experiments
     GET  /api/experiments/<id>/report/         versioned report, built from stored output
@@ -36,12 +47,22 @@ from __future__ import annotations
 from django.urls import path
 from rest_framework.authtoken.views import obtain_auth_token
 
+from core.allocation_views import (
+    PlanApplyView,
+    PlanApproveView,
+    PlanCancelView,
+    PlanDetailView,
+    PlanListView,
+    PlanRejectView,
+    PlanRevalidateView,
+)
 from core.decision_views import (
     DecisionRunDetailView,
     DecisionRunEventsView,
     DecisionRunExportView,
     DecisionRunListView,
     DecisionRunMetadataView,
+    DecisionRunStatusView,
 )
 from core.event_views import EventCatchUpView, EventDeliveryMetricsView
 from core.experiment_views import ExperimentReportView
@@ -117,6 +138,11 @@ urlpatterns = [
         name="decision-run-detail",
     ),
     path(
+        "decision-runs/<str:run_id>/status/",
+        DecisionRunStatusView.as_view(),
+        name="decision-run-status",
+    ),
+    path(
         "decision-runs/<str:run_id>/detail/",
         DecisionRunDetailView.as_view(),
         name="decision-run-detail-rich",
@@ -130,6 +156,38 @@ urlpatterns = [
         "decision-runs/<str:run_id>/export/",
         DecisionRunExportView.as_view(),
         name="decision-run-export",
+    ),
+    # -- advisory portfolio plans (FIX-08) -------------------------------
+    path("portfolio-plans/", PlanListView.as_view(), name="portfolio-plan-list"),
+    path(
+        "portfolio-plans/<str:plan_id>/",
+        PlanDetailView.as_view(),
+        name="portfolio-plan-detail",
+    ),
+    path(
+        "portfolio-plans/<str:plan_id>/approve/",
+        PlanApproveView.as_view(),
+        name="portfolio-plan-approve",
+    ),
+    path(
+        "portfolio-plans/<str:plan_id>/reject/",
+        PlanRejectView.as_view(),
+        name="portfolio-plan-reject",
+    ),
+    path(
+        "portfolio-plans/<str:plan_id>/cancel/",
+        PlanCancelView.as_view(),
+        name="portfolio-plan-cancel",
+    ),
+    path(
+        "portfolio-plans/<str:plan_id>/revalidate/",
+        PlanRevalidateView.as_view(),
+        name="portfolio-plan-revalidate",
+    ),
+    path(
+        "portfolio-plans/<str:plan_id>/apply/",
+        PlanApplyView.as_view(),
+        name="portfolio-plan-apply",
     ),
     # -- durable event delivery (FIX-06) ----------------------------------
     path("events/catch-up/", EventCatchUpView.as_view(), name="event-catch-up"),

@@ -1,0 +1,50 @@
+{
+  "fixture_version": 1,
+  "schema_version": "fix08.live_allocation_input.v1",
+  "label": "Operator-supplied demonstration inputs for one real provider CIO call",
+  "input_data_classification": "operator_supplied_demonstration",
+  "realised_history": false,
+  "synthetic_input_data": true,
+  "note": "These holdings, prices and classifications are authored inputs for a single recorded provider call. They are not realised market history and are not presented as one. The model response produced from them is real and is recorded separately in fix08-live-allocation.v1.json.",
+  "portfolio": {
+    "balance_usd": "5000.00",
+    "risk_profile": "medium",
+    "max_trade_allocation_pct": "99.99",
+    "max_portfolio_exposure_pct": "90.00",
+    "max_ticker_concentration_pct": "30.00",
+    "max_sector_concentration_pct": "40.00",
+    "max_turnover_pct": "40.00",
+    "min_cash_buffer_pct": "10.00",
+    "daily_loss_limit_usd": "500.00"
+  },
+  "holdings": [
+    {"ticker": "AAPL", "amount": "40", "avg_cost": "180.00"},
+    {"ticker": "MSFT", "amount": "10", "avg_cost": "400.00"},
+    {"ticker": "JPM", "amount": "15", "avg_cost": "150.00"}
+  ],
+  "quotes": {
+    "AAPL": "190.00",
+    "MSFT": "420.00",
+    "JPM": "160.00",
+    "NVDA": "120.00"
+  },
+  "classifications": [
+    {"ticker": "AAPL", "sector": "technology", "asset_class": "equity"},
+    {"ticker": "MSFT", "sector": "technology", "asset_class": "equity"},
+    {"ticker": "JPM", "sector": "financials", "asset_class": "equity"},
+    {"ticker": "NVDA", "sector": "technology", "asset_class": "equity"}
+  ],
+  "candidates": [
+    {
+      "ticker": "NVDA",
+      "action": "BUY",
+      "rationale": "Operator-supplied candidate for the recording. No completed decision run or claim catalog exists for it in this demo account, so the brief must mark its evidence as insufficient rather than invent a claim.",
+      "strongest_objection": "There is no validated evidence record for this candidate.",
+      "thesis": "",
+      "invalidation_condition": "",
+      "claims": []
+    }
+  ],
+  "price_history": null,
+  "price_history_note": "No history is fetched or authored. Correlation and covariance are not computed and are reported as not_available with the declared label_only policy."
+}

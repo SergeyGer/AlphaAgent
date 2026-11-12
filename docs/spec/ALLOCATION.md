@@ -244,3 +244,169 @@ performance.
 | Duplicate submission/apply is idempotent | `PlanLifecycleTests.test_repeating_a_submission_key_returns_the_existing_plan`, `test_applying_a_plan_is_atomic_and_a_second_apply_is_idempotent`, `ConcurrencyTests.test_duplicate_concurrent_apply_adds_no_duplicate_ledger_row` |
 | A changed version requires revalidation | `PlanLifecycleTests.test_a_changed_portfolio_version_requires_revalidation` |
 | A failed leg halts and rolls back | `PlanLifecycleTests.test_a_failed_leg_halts_the_plan_and_writes_no_ledger_row`, `PaperCommandTests.test_the_command_shows_a_leg_failure_and_writes_no_ledger_row` |
+
+
+## 9. Authenticated submission and advisory review (FIX-08)
+
+The acceptance review found that the documented command still used the stub and
+a synthetic paper account, and that no authenticated submission, plan review,
+approval or expiry existed. This section is the definition-of-record for that
+workflow.
+
+### 9.1 Submission
+
+`POST /api/decision-runs/` is authenticated and scoped to the caller's
+portfolio. Body:
+
+```json
+{
+  "portfolio_id": 7,
+  "tickers": ["AAPL", "MSFT"],
+  "mode": "live",
+  "protocol_version": "portfolio_allocation.v1",
+  "idempotency_key": "review-2026-11-12-1"
+}
+```
+
+* `mode` is `live` (provider adapter) or `stub` (explicit; tests/demos). A live
+  request may not carry `stub_response`. Stub mode may carry a scripted
+  `stub_response`; without one it submits a deterministic hold request, both
+  labelled stub.
+* `protocol_version` must equal `portfolio_allocation.v1`.
+* The row is written **before** the model call. `request_hash` covers the
+  canonical request body, so the same key and body returns the first submission
+  even if the model would answer differently, and the same key with a different
+  body is **409**.
+* Response: **202** with `run_id`, `status_url`, `status_path`, `plan_id`,
+  `plan_url`, `idempotent_replay`, and the current submission status. The status
+  endpoint is `GET /api/decision-runs/<run_id>/status/`.
+* Submission is executed inline in the request because the project cannot
+  assume a Celery worker for one portfolio call; a queued task with no worker
+  would leave the status at `accepted` forever. The row is committed first, so a
+  crash mid-call is visible as `running`.
+* Submission creates a `proposed` plan and **no ledger row**. A failed analysis
+  is stored as `failed` with a typed error and replayed on retry of the same key;
+  it is never retried automatically and never replaced by a stub.
+
+Why the record is an `AllocationSubmission`, not a `DecisionRun`: the existing
+`DecisionRun` is per instrument (one ticker, one debate, one guard record). A
+portfolio allocation is one decision over the whole portfolio and one plan.
+Recording it as N decision runs would duplicate the portfolio call or invent a
+ticker. The route is the one the review proposed; the status URL points at the
+submission record.
+
+### 9.2 Explicit data setup
+
+Prices come from `services.market_data`; classifications come only from
+`InstrumentClassification`. The submission gathers and records provenance:
+
+* a missing held price may fall back to the recorded average cost, labelled
+  `average_cost_fallback` and reported as `prices_marked_at_cost`;
+* a missing candidate price stays missing; the projection sends any target in
+  that name to cash with an `unpriceable_target` deviation;
+* missing classifications are reported as `incomplete` coverage and are never
+  inferred from a ticker;
+* price history is **not fetched** by the endpoint, so `risk_statistics` is
+  `not_available`, with the declared `missing_correlation_history` policy. If a
+  caller needs correlations, it supplies history to the brief builder
+  explicitly.
+
+The review payload carries these as `data_quality.limitations`, not as prose
+buried in a log. The live recording command reads the same explicit inputs from
+[`fixtures/fix08-live-input.v1.json`](fixtures/fix08-live-input.v1.json) and
+labels them `operator_supplied_demonstration`.
+
+### 9.3 Review and approval endpoints
+
+| Route | Purpose |
+| --- | --- |
+| `GET /api/portfolio-plans/` | Caller's plans, newest first, with approval state |
+| `GET /api/portfolio-plans/<id>/` | Full review payload |
+| `POST /api/portfolio-plans/<id>/approve/` | Bind an exact version + expiry |
+| `POST /api/portfolio-plans/<id>/reject/` | Reject with a required reason |
+| `POST /api/portfolio-plans/<id>/cancel/` | Withdraw with an audit row |
+| `POST /api/portfolio-plans/<id>/revalidate/` | Re-derive after a material change |
+| `POST /api/portfolio-plans/<id>/apply/` | Explicit execution through the guard |
+
+The review payload contains the required review surface: current holdings and
+weights, **requested versus constrained** target weights, cash effect, sector
+effect including the unclassified part, funding path, estimated costs (with the
+NULL-fee disclosure), rejected alternatives, unresolved uncertainties,
+deterministic deviations, data-quality limitations and declared policies, the
+model provenance and whether the response was a real provider decision or a
+stub, the exact plan version and permission hash, the current approval with its
+expiry, the audit history, and the execution state with transaction ids.
+
+### 9.4 Approval binding and expiry
+
+`approve_plan` requires `plan_version` and an expiry (`expires_at` or
+`expires_in_seconds`, at least 60 seconds and at most
+`ALLOCATION_CONFIG["MAX_APPROVAL_TTL_SECONDS"]`, default 7 days). It stores two
+records: mutable current-approval fields on the plan (fast checks) and an
+immutable `PlanApproval` row (audit). Approval writes no trade.
+
+Approval is bound to:
+
+* `plan_version` — bumped by `revalidate_plan`;
+* `approval_hash` — the hash of limits, classifications, cost assumptions and
+  the requested allocation;
+* `evaluated_portfolio_version` — approval is refused if the portfolio moved
+  after evaluation;
+* `expires_at` — checked again inside `apply_plan` under the plan lock.
+
+`revalidate_plan` increments `plan_version`, clears the current approval and
+records an `approval_invalidated` deviation. The old `PlanApproval` row remains
+readable; it simply no longer matches, so a materially changed plan cannot
+execute under the old approval. An approval is also refused if the plan is
+flagged for revalidation or the portfolio version changed.
+
+Rejection and cancellation create both a `PlanApproval` audit row and a durable
+event (`portfolio.plan.rejected` / `portfolio.plan.cancelled`). A repeated
+cancellation is idempotent and creates no second audit row.
+
+### 9.5 Execution
+
+`POST /api/portfolio-plans/<id>/apply/` is the only endpoint that can write a
+ledger row. It requires a current, unexpired approval for the exact version,
+passes an `ApprovalReference` into `apply_plan`, and lets the shared
+`services.execution` guard revalidate and write every leg atomically. `live`
+mode supplies current quotes; `paper` mode uses the plan's own marks and says so.
+
+### 9.6 The recorded live example
+
+[`fixtures/fix08-live-allocation.v1.json`](fixtures/fix08-live-allocation.v1.json)
+is a **real recorded provider run**: one Anthropic call through the budgeted
+adapter, `mode: "live"`, `source: "anthropic"`, model `claude-haiku-5-5`, the
+exact prompt (and its hash), the validated response, the plan review, token
+counts and cost provenance. It is explicitly **not synthetic**:
+`synthetic_response: false`, `run_kind: real_recorded_model_run`. The input
+brief is the one labelled exception: the holdings/prices/classifications are
+operator-supplied demonstration data, and the artifact says so
+(`input_data_is_synthetic: true`). The model output is a real sample; it would
+not be regenerated by asking again.
+
+The provider reported 5005 input and 3020 output tokens. The billed cost is
+`null` because the adapter receives tokens, not dollars; the price-table estimate
+is `$0.002010`. The call failed no validation, wrote no ledger row, and left the
+plan `proposed` and unapproved.
+
+### 9.7 FIX-08 tests that hold the gate
+
+| Rule | Test |
+| --- | --- |
+| Authenticated; another user's portfolio is a 404 | `SubmissionApiTests.test_submission_requires_authentication`, `test_another_users_portfolio_is_a_404_not_a_403` |
+| 202 + run/status URL, no trade | `test_submission_returns_202_a_run_id_and_a_status_url_without_a_trade` |
+| Same key + body replays; same key + different body is 409 | `test_repeating_the_same_key_and_body_returns_the_same_run_without_a_second_plan`, `test_reusing_a_key_with_a_different_payload_is_a_409` |
+| Typed payload validation | `test_payload_validation_is_typed` |
+| Stub is explicit and labelled | `test_explicit_stub_mode_without_a_scripted_response_is_a_deterministic_hold` |
+| Failure is recorded and replayed, not retried or stubbed | `test_a_failed_analysis_is_recorded_and_replayed_not_retried` |
+| Review surface completeness | `ReviewAndApprovalTests.test_review_shows_holdings_weights_requested_vs_constrained_cash_sector_costs` |
+| Approval version/hash/expiry | `test_approval_binds_the_exact_version_hash_and_expiry`, `test_approval_demands_an_expiry_and_a_version` |
+| No approval, no execution | `test_apply_without_approval_is_refused_and_writes_no_ledger_row` |
+| Approved plan executes through the shared service | `test_approved_plan_applies_through_the_shared_execution_service` |
+| Expired approval cannot execute | `test_an_expired_approval_cannot_execute` |
+| Material change bumps version and requires new approval | `test_a_material_change_bumps_the_version_and_requires_new_approval` |
+| Rejection/cancellation audit rows and events | `test_rejection_and_cancellation_write_audit_rows_and_events` |
+| Provider adapter budgets and usage | `ProviderAdapterTests.*`, `LiveSubmissionIntegrationTests.*` |
+| Recorded artifact labels and numbers | `RecordedLiveArtifactTests.*` |
+| The UI never presents a stub as a real decision | `frontend/src/components/PortfolioPlansPage.test.tsx` |

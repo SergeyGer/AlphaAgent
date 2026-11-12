@@ -9,6 +9,8 @@ cannot be probed for ownership (API-04). The response envelope is the same
 Routes (mounted under ``/api/`` by ``core/urls.py``)::
 
     GET /api/decision-runs/                       list, caller's portfolios only
+    POST /api/decision-runs/                      idempotent portfolio analysis submission
+    GET /api/decision-runs/<id>/status/           submission status + plan link
     GET /api/decision-runs/<id>/                  metadata, stages, cost, failure
     GET /api/decision-runs/<id>/detail/           cases, rebuttals, verdict, guard
     GET /api/decision-runs/<id>/events/?after_seq=N  ordered event window
@@ -22,6 +24,7 @@ from uuid import UUID, uuid4
 
 from django.db.models import Max
 from django.http import Http404
+from django.urls import reverse
 from rest_framework import generics, status
 from rest_framework.exceptions import APIException
 from rest_framework.permissions import IsAuthenticated
@@ -29,6 +32,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from core.allocation_models import AllocationSubmission
 from core.decision_models import DecisionRun
 from core.decision_serializers import (
     DecisionRunSerializer,
@@ -37,6 +41,13 @@ from core.decision_serializers import (
     build_run_detail,
     build_run_metadata,
 )
+from core.models import Portfolio
+from services.allocation_submission import (
+    AllocationSubmissionConflict,
+    AllocationSubmissionError,
+    submission_as_dict,
+    submit_analysis,
+)
 
 __all__ = [
     "DecisionRunDetailView",
@@ -44,6 +55,7 @@ __all__ = [
     "DecisionRunExportView",
     "DecisionRunListView",
     "DecisionRunMetadataView",
+    "DecisionRunStatusView",
 ]
 
 #: Default and maximum window for the events endpoint. The default matches
@@ -87,15 +99,62 @@ def _get_run(request: Request, run_id: str, *, with_detail: bool = False) -> Dec
 
 
 class DecisionRunListView(generics.ListAPIView):
-    """``GET /api/decision-runs/`` - the caller's runs, newest first.
+    """``GET``/``POST /api/decision-runs/``.
 
-    Filtering is deliberately the same style as the existing decision-log list:
-    an unknown value simply matches nothing rather than erroring, so a URL with a
-    stale filter still returns a well-formed empty result.
+    ``GET`` lists the caller's decision runs, newest first. Filtering is
+    deliberately the same style as the existing decision-log list: an unknown
+    value simply matches nothing rather than erroring, so a URL with a stale
+    filter still returns a well-formed empty result.
+
+    ``POST`` is the authenticated, idempotent portfolio-analysis submission
+    (FIX-08). It is not a decision-log write: it records an
+    ``AllocationSubmission`` and, when analysis completes, one
+    ``PortfolioPlan`` for the whole portfolio. The body carries
+    ``portfolio_id``, ``tickers``, ``mode``, ``protocol_version`` and an
+    ``idempotency_key``. The same key with the same body returns the first run;
+    the same key with a different body is **409**. The response is **202** with
+    a ``run_id`` and a status URL, and no trade is placed.
     """
 
     permission_classes = [IsAuthenticated]
     serializer_class = DecisionRunSerializer
+
+    def post(self, request: Request) -> Response:
+        raw_portfolio = request.data.get("portfolio_id") if isinstance(request.data, dict) else None
+        try:
+            portfolio_id = int(raw_portfolio)
+        except (TypeError, ValueError):
+            return _error(
+                status.HTTP_400_BAD_REQUEST,
+                "portfolio_id is required and must be an integer.",
+            )
+        portfolio = Portfolio.objects.filter(pk=portfolio_id, user=request.user).first()
+        if portfolio is None:
+            # Ownership is not probed: another user's portfolio is a 404.
+            raise Http404("Portfolio not found.")
+        try:
+            submission, created = submit_analysis(portfolio, data=request.data, user=request.user)
+        except AllocationSubmissionError as exc:
+            return _error(status.HTTP_400_BAD_REQUEST, exc.detail)
+        except AllocationSubmissionConflict as exc:
+            return _error(status.HTTP_409_CONFLICT, str(exc))
+
+        payload = submission_as_dict(submission)
+        status_url = reverse("core:decision-run-status", args=[submission.id])
+        payload["status_url"] = request.build_absolute_uri(status_url)
+        payload["status_path"] = status_url
+        payload["plan_url"] = (
+            request.build_absolute_uri(
+                reverse("core:portfolio-plan-detail", args=[submission.plan_id])
+            )
+            if submission.plan_id
+            else None
+        )
+        payload["idempotent_replay"] = not created
+        response = Response(payload, status=status.HTTP_202_ACCEPTED)
+        response["Location"] = status_url
+        response["Idempotency-Key"] = submission.idempotency_key
+        return response
 
     def get_queryset(self):
         queryset = DecisionRun.objects.filter(portfolio__user=self.request.user).order_by(
@@ -136,6 +195,51 @@ class DecisionRunMetadataView(APIView):
             logger.exception("Decision run metadata projection failed [%s]", correlation)
             raise _projection_failed(correlation) from None
         return Response(payload, status=status.HTTP_200_OK)
+
+
+class DecisionRunStatusView(APIView):
+    """``GET /api/decision-runs/<run_id>/status/`` - submission status.
+
+    The id in this URL is the ``run_id`` returned by ``POST /api/decision-runs/``
+    (an ``AllocationSubmission``), not a ``DecisionRun`` id. It is served under
+    the same prefix because that is where the submission was accepted; the
+    separate ``.../status/`` segment keeps the two id spaces from colliding.
+
+    The status is ``accepted``, ``running``, ``completed`` or ``failed``. A
+    completed submission always names the plan it produced; a failed one always
+    names its typed error. Neither case is a trade.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, run_id: str) -> Response:
+        try:
+            pk = UUID(str(run_id))
+        except (TypeError, ValueError, AttributeError) as exc:
+            raise Http404("Allocation submission not found.") from exc
+        submission = (
+            AllocationSubmission.objects.select_related("plan")
+            .filter(pk=pk, portfolio__user=request.user)
+            .first()
+        )
+        if submission is None:
+            raise Http404("Allocation submission not found.")
+        payload = submission_as_dict(submission)
+        payload["status_url"] = request.build_absolute_uri(
+            reverse("core:decision-run-status", args=[submission.id])
+        )
+        payload["plan_url"] = (
+            request.build_absolute_uri(
+                reverse("core:portfolio-plan-detail", args=[submission.plan_id])
+            )
+            if submission.plan_id
+            else None
+        )
+        payload["terminal"] = submission.is_terminal
+        response = Response(payload, status=status.HTTP_200_OK)
+        if not submission.is_terminal:
+            response["Retry-After"] = "1"
+        return response
 
 
 class DecisionRunDetailView(APIView):
