@@ -82,7 +82,7 @@ class Command(BaseCommand):
             "--limit",
             type=int,
             default=500,
-            help="Maximum decisions to inspect (default 500).",
+            help="Maximum due-pair work items to inspect (default 500).",
         )
         parser.add_argument(
             "--days",
@@ -156,6 +156,15 @@ class Command(BaseCommand):
 
     # -- inspection -------------------------------------------------------
     def _inspect(self, *, limit: int, days: int, now) -> dict:
+        """Find missing due pairs and wrong-basis scores, bounded by work.
+
+        ``--limit`` bounds the candidate work items, not the number of decision
+        rows that happen to be newest. The scan is oldest-first and stops once
+        it has collected ``limit`` candidates, so a recent completed decision
+        cannot fill the budget and hide an older due horizon. A completed or
+        terminal-unavailable work row, and a retry that is still in backoff, is
+        not a candidate: those are the same due-pair rules the scheduler uses.
+        """
         decisions = (
             AgentDecisionLog.objects.filter(
                 ticker__gt="",
@@ -163,14 +172,22 @@ class Command(BaseCommand):
                 created_at__lte=now,
             )
             .select_related("transaction")
-            .order_by("-created_at")
+            .order_by("created_at", "id")
         )
         total = decisions.count()
-        rows = list(decisions[:limit])
+        scan_cap = max(limit * 20, 1000)
         candidates: list[dict] = []
         unresolved: list[dict] = []
+        inspected = 0
+        scan_truncated = False
 
-        for decision in rows:
+        for decision in decisions.iterator(chunk_size=200):
+            if len(candidates) >= limit:
+                break
+            if inspected >= scan_cap:
+                scan_truncated = True
+                break
+            inspected += 1
             fill = resolve_linked_fill(decision)
             ticker = (decision.ticker or "").strip().upper()
             if fill is not None and (fill.ticker or "").strip().upper() != ticker:
@@ -207,19 +224,29 @@ class Command(BaseCommand):
             }
 
             for horizon in DecisionOutcome.HORIZONS:
+                if len(candidates) >= limit:
+                    break
                 _target, mature_at = horizon_timeline(reference_at, horizon)
                 if now < mature_at:
                     continue
                 existing = outcomes.get(horizon)
                 if existing is None:
                     evaluation = evaluations.get(horizon)
-                    if (
-                        evaluation is not None
-                        and evaluation.state == OutcomeEvaluationState.UNAVAILABLE
-                    ):
-                        # Already resolved as unavailable through the bounded
-                        # retry policy; re-running it would not be idempotent.
-                        continue
+                    if evaluation is not None:
+                        if evaluation.state in (
+                            OutcomeEvaluationState.UNAVAILABLE,
+                            OutcomeEvaluationState.EVALUATED,
+                        ):
+                            # Terminal, or already completed by the work ledger.
+                            # Re-running either would not be idempotent.
+                            continue
+                        if (
+                            evaluation.state == OutcomeEvaluationState.MATURED
+                            and evaluation.next_attempt_at is not None
+                            and evaluation.next_attempt_at > now
+                        ):
+                            # A deferred retry is not due for this batch.
+                            continue
                     candidates.append(
                         {
                             "kind": "missing_horizon",
@@ -261,9 +288,9 @@ class Command(BaseCommand):
                 )
 
         return {
-            "inspected": len(rows),
+            "inspected": inspected,
             "total_available": total,
-            "limit_reached": total > len(rows),
+            "limit_reached": len(candidates) >= limit or scan_truncated,
             "candidates": candidates,
             "unresolved": unresolved,
         }

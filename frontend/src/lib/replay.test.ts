@@ -9,11 +9,12 @@ import {
   lastEventSequence,
   missingSequenceCount,
   playbackDelayMs,
+  replayBoundary,
   replayTimingLabel,
   runLinkId,
   runStatusAtCursor,
 } from './decisionRuns';
-import { detail, detailRunEvents, manyRunEvents, runEvent } from '../test/decisionRunFixtures';
+import { detail, detailRunEvents, manyRunEvents, outcome, run, runEvent } from '../test/decisionRunFixtures';
 
 /**
  * FIX-04 — replay coherence.
@@ -245,5 +246,206 @@ describe('large logs', () => {
     const events = manyRunEvents(320);
     expect(lastContiguousSequence(events)).toBe(320);
     expect(missingSequenceCount(events, 320)).toBe(0);
+  });
+});
+
+
+describe('step 4A — outcome replay reads the event revision', () => {
+  function revisionEvents() {
+    return [
+      runEvent({
+        event_id: 'v1',
+        seq: 1,
+        type: 'decision.proposed',
+        payload: { action: 'BUY' },
+      }),
+      runEvent({
+        event_id: 'v2',
+        seq: 2,
+        type: 'outcome.recorded',
+        payload: {
+          event_schema: 'outcome.recorded.v1',
+          outcome_record_id: 'record-7',
+          horizon_days: 7,
+          method_version: 'attribution.v2',
+          maturity: 'evaluated',
+          revision: 1,
+          measurement_basis: 'execution_fill',
+          reference_at: '2026-11-10T14:00:00Z',
+          price_observed_at_decision: '2026-11-10T14:00:00Z',
+          price_observed_at: '2026-11-17T20:00:00Z',
+          benchmark_ticker: 'SPY',
+          values: {
+            price_at_decision: '100',
+            price_at_horizon: '102',
+            forward_return_pct: '2.0000',
+            decision_return_pct: '2.0000',
+            benchmark_return_pct: '1.0000',
+          },
+        },
+      }),
+      runEvent({
+        event_id: 'v3',
+        seq: 3,
+        type: 'outcome.recorded',
+        payload: {
+          event_schema: 'outcome.recorded.v1',
+          outcome_record_id: 'record-7',
+          horizon_days: 7,
+          method_version: 'attribution.v2',
+          maturity: 'evaluated',
+          revision: 2,
+          measurement_basis: 'execution_fill',
+          reference_at: '2026-11-10T14:00:00Z',
+          price_observed_at_decision: '2026-11-10T14:00:00Z',
+          price_observed_at: '2026-11-17T20:00:00Z',
+          benchmark_ticker: 'SPY',
+          values: {
+            price_at_decision: '100',
+            price_at_horizon: '104',
+            forward_return_pct: '4.0000',
+            decision_return_pct: '4.0000',
+            benchmark_return_pct: '1.0000',
+          },
+        },
+      }),
+    ];
+  }
+
+  function revisionDetail() {
+    return detail({
+      run: run({ status: 'completed' }),
+      outcomes: [
+        outcome({
+          id: 'record-7',
+          horizon_days: 7,
+          signal_score: '4.0000',
+          method_version: 'attribution.v2',
+        }),
+      ],
+      superseded_outcomes: [],
+    });
+  }
+
+  it('shows 2% before the correction and 4% after it, identically both ways', () => {
+    const events = revisionEvents();
+    const before = buildAsOfPresentation(revisionDetail(), events, 2);
+    expect(before?.detail.outcomes).toHaveLength(1);
+    expect(before?.detail.outcomes[0]?.signal_score).toBe('2.0000');
+    expect(before?.detail.outcomes[0]?.revision).toBe(1);
+    expect(before?.detail.outcomes[0]?.price_at_horizon).toBe('102');
+    expect(before?.detail.outcomes[0]?.measurement_basis?.basis).toBe('execution_fill');
+    expect(before?.detail.outcomes[0]?.price_observed_at).toBe('2026-11-17T20:00:00Z');
+
+    const after = buildAsOfPresentation(revisionDetail(), events, 3);
+    expect(after?.detail.outcomes[0]?.signal_score).toBe('4.0000');
+    expect(after?.detail.outcomes[0]?.revision).toBe(2);
+
+    // Seeking backward and forward again in the same session agrees.
+    const beforeAgain = buildAsOfPresentation(revisionDetail(), events, 2);
+    const afterAgain = buildAsOfPresentation(revisionDetail(), events, 3);
+    expect(JSON.stringify(beforeAgain)).toBe(JSON.stringify(before));
+    expect(JSON.stringify(afterAgain)).toBe(JSON.stringify(after));
+    expect(beforeAgain?.detail.outcomes[0]?.signal_score).toBe('2.0000');
+  });
+
+  it('does not borrow the current projection at an earlier cursor', () => {
+    const earlier = buildAsOfPresentation(revisionDetail(), revisionEvents(), 1);
+    expect(earlier?.detail.outcomes).toEqual([]);
+  });
+});
+
+describe('step 4B — completeness keeps future detail hidden', () => {
+  function body() {
+    const events = detailRunEvents();
+    return { events, page: detail({ run: run({ status: 'completed' }) }) };
+  }
+
+  it('treats a partial page as incomplete when the server reports a later tail', () => {
+    const { events, page } = body();
+    const partial = buildAsOfPresentation(
+      page,
+      events.filter((event) => event.seq <= 2),
+      2,
+      { latestSequence: 15, contiguousSequence: 2 },
+    );
+    expect(partial?.complete).toBe(false);
+    expect(partial?.atEnd).toBe(false);
+    expect(partial?.verdictVisible).toBe(false);
+    expect(partial?.guardVisible).toBe(false);
+    expect(partial?.detail.outcomes).toEqual([]);
+    expect(partial?.status).toBe('collecting');
+  });
+
+  it('clamps a gap or an out-of-order page to the contiguous sequence', () => {
+    const { events, page } = body();
+    const held = [events[4]!, events[0]!, events[1]!]; // 5, 1, 2 — a gap at 3, 4
+    const boundary = replayBoundary(held, { latestSequence: 15, contiguousSequence: 2 });
+    expect(boundary.complete).toBe(false);
+    expect(boundary.reachableSequence).toBe(2);
+
+    const scene = buildAsOfPresentation(page, held, 5, {
+      latestSequence: 15,
+      contiguousSequence: 2,
+    });
+    expect(scene?.cursorSeq).toBe(2);
+    expect(scene?.atEnd).toBe(false);
+    expect(scene?.detail.outcomes).toEqual([]);
+    expect(scene?.detail.rationale).toBeNull();
+  });
+
+  it('reveals the recovered tail only after the gap is filled', () => {
+    const { events, page } = body();
+    const recovered = buildAsOfPresentation(page, events, lastEventSequence(events), {
+      latestSequence: lastEventSequence(events),
+      contiguousSequence: lastEventSequence(events),
+    });
+    expect(recovered?.complete).toBe(true);
+    expect(recovered?.atEnd).toBe(true);
+    expect(recovered?.detail.outcomes).toHaveLength(3);
+  });
+});
+
+describe('step 4.3 — status.changed applies payload.to at its sequence', () => {
+  it('reads the destination status and not the status it came from', () => {
+    const events = [
+      runEvent({
+        event_id: 't1',
+        seq: 1,
+        type: 'status.changed',
+        payload: { from: 'queued', to: 'collecting' },
+      }),
+      runEvent({ event_id: 't2', seq: 2, type: 'claim.created', payload: { claim_id: 'c1' } }),
+      runEvent({
+        event_id: 't3',
+        seq: 3,
+        type: 'status.changed',
+        payload: { from: 'analysing', to: 'adjudicating' },
+      }),
+      runEvent({
+        event_id: 't4',
+        seq: 4,
+        type: 'status.changed',
+        payload: { from: 'adjudicating', to: 'validating' },
+      }),
+      runEvent({
+        event_id: 't5',
+        seq: 5,
+        type: 'status.changed',
+        payload: { from: 'validating', to: 'completed' },
+      }),
+    ];
+    expect(runStatusAtCursor(events, 1)).toBe('collecting');
+    expect(runStatusAtCursor(events, 2)).toBe('analysing');
+    expect(runStatusAtCursor(events, 3)).toBe('adjudicating');
+    expect(runStatusAtCursor(events, 4)).toBe('validating');
+    expect(runStatusAtCursor(events, 5)).toBe('completed');
+  });
+
+  it('keeps the legacy status field working', () => {
+    const events = [
+      runEvent({ event_id: 'l1', seq: 1, type: 'status.changed', payload: { status: 'completed' } }),
+    ];
+    expect(runStatusAtCursor(events, 1)).toBe('completed');
   });
 });

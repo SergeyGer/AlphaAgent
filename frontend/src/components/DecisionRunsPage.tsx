@@ -10,6 +10,7 @@ import {
   isTerminalRunStatus,
   lastEventSequence,
   presentText,
+  replayBoundary,
   runModeLabel,
   runStatusLabel,
 } from '../lib/decisionRuns';
@@ -191,12 +192,30 @@ export function DecisionRunView({ runId }: { runId: string }): ReactElement {
   const hasRebuttals = detail.data?.has_rebuttals ?? true;
   const navigation = useReplayNavigation(runId);
 
-  // While a gap is being recovered, the last *contiguous* event is the known
-  // cursor. Jumping to the highest held sequence would step past events the
-  // client has not received yet.
-  const maxSeq = events.catchingUp
-    ? events.contiguousSequence
-    : lastEventSequence(events.events);
+  // While a page or a gap is being recovered, only the last *contiguous* event
+  // is a safe cursor. Jumping to the highest held sequence would step past
+  // events the client has not received yet, and treating the page end as the
+  // run's tail would show a future verdict, guard or outcome.
+  const boundary = useMemo(
+    () =>
+      replayBoundary(events.events, {
+        latestSequence: events.serverLastSequence,
+        contiguousSequence: events.contiguousSequence,
+      }),
+    [events.contiguousSequence, events.events, events.serverLastSequence],
+  );
+  const maxSeq = boundary.reachableSequence;
+  const safeEvents = useMemo(
+    () =>
+      boundary.complete
+        ? events.events
+        : events.events.filter((event) => event.seq <= boundary.contiguousSequence),
+    [boundary.complete, boundary.contiguousSequence, events.events],
+  );
+  const missingEventCount =
+    boundary.latestSequence === null
+      ? events.remaining
+      : Math.max(events.remaining, boundary.latestSequence - boundary.contiguousSequence);
   const replayable =
     events.events.length > 0 && run !== null && isTerminalRunStatus(run.status);
 
@@ -230,6 +249,29 @@ export function DecisionRunView({ runId }: { runId: string }): ReactElement {
     return () => window.clearTimeout(timer);
   }, [detail.data, detail.refresh, events.events]);
 
+  // Reconnect and focus are explicit recovery points. The events hook resyncs
+  // from its contiguous tail on its own; the detail projection is refreshed here
+  // as well, because a completed run can receive a late horizon while the tab
+  // was hidden and there is no fallback poll left to notice it.
+  useEffect(() => {
+    if (token === null) return undefined;
+    const resync = (): void => {
+      events.refresh();
+      if (detail.data) detail.refresh();
+    };
+    const onVisibility = (): void => {
+      if (document.visibilityState === 'visible') resync();
+    };
+    window.addEventListener('online', resync);
+    window.addEventListener('offline', resync);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('online', resync);
+      window.removeEventListener('offline', resync);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [detail.data, detail.refresh, events.refresh, token]);
+
   // -- Cursor navigation -------------------------------------------------
   // The URL is the source of truth once a cursor exists. Without one, a stored
   // run opens at its tail; as new events arrive while the reader is already at
@@ -262,9 +304,19 @@ export function DecisionRunView({ runId }: { runId: string }): ReactElement {
   const presentation = useMemo(
     () =>
       replayable
-        ? buildAsOfPresentation(detail.data, events.events, cursorSeq)
+        ? buildAsOfPresentation(detail.data, events.events, cursorSeq, {
+            latestSequence: events.serverLastSequence,
+            contiguousSequence: events.contiguousSequence,
+          })
         : null,
-    [cursorSeq, detail.data, events.events, replayable],
+    [
+      cursorSeq,
+      detail.data,
+      events.contiguousSequence,
+      events.events,
+      events.serverLastSequence,
+      replayable,
+    ],
   );
 
   const scene: DecisionDetailScene | undefined = presentation
@@ -340,7 +392,7 @@ export function DecisionRunView({ runId }: { runId: string }): ReactElement {
           </p>
         ) : null}
 
-        {events.catchingUp || events.remaining > 0 ? (
+        {!boundary.complete || events.catchingUp || missingEventCount > 0 ? (
           <div
             data-state="event-stream-catching-up"
             role="status"
@@ -350,11 +402,11 @@ export function DecisionRunView({ runId }: { runId: string }): ReactElement {
               Event stream catching up
             </p>
             <p className="mt-1 text-sm leading-relaxed text-slate-300">
-              {events.remaining} event{events.remaining === 1 ? '' : 's'} up to the server tail
-              {events.serverLastSequence !== null ? ` (sequence ${events.serverLastSequence})` : ''}{' '}
-              {events.remaining === 1 ? 'is' : 'are'} still not held locally. Playback resumes from
+              {missingEventCount} event{missingEventCount === 1 ? '' : 's'} up to the server tail
+              {boundary.latestSequence !== null ? ` (sequence ${boundary.latestSequence})` : ''}{' '}
+              {missingEventCount === 1 ? 'is' : 'are'} still not held locally. Playback resumes from
               the last contiguous sequence
-              {events.contiguousSequence !== null ? ` (${events.contiguousSequence})` : ''} rather
+              {boundary.contiguousSequence > 0 ? ` (${boundary.contiguousSequence})` : ''} rather
               than skipping ahead.
             </p>
           </div>
@@ -378,7 +430,7 @@ export function DecisionRunView({ runId }: { runId: string }): ReactElement {
 
         {replayable ? (
           <ReplayControls
-            events={events.events}
+            events={safeEvents}
             hasRebuttals={hasRebuttals}
             cursorSeq={cursorSeq}
             onCursorSeqChange={navigation.setCursor}
@@ -388,7 +440,7 @@ export function DecisionRunView({ runId }: { runId: string }): ReactElement {
         ) : null}
 
         <DebateTimeline
-          events={events.events}
+          events={safeEvents}
           hasRebuttals={hasRebuttals}
           cursorSeq={replayable ? cursorSeq : undefined}
         />

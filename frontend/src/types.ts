@@ -640,6 +640,42 @@ export interface OutcomeView {
   /** Often null in Phase 1 — that is rendered as "Not available", never zero. */
   portfolio_impact: string | null;
   method_version: string;
+  /** True only when a score exists; unavailable and pending are not scores. */
+  is_scored?: boolean;
+  /*
+   * Recorded audit values. The detail endpoint publishes them and the replay
+   * reducer reconstructs them from the `outcome.recorded` event, so a replay at
+   * an earlier revision renders what that revision recorded rather than the
+   * mutable current projection.
+   */
+  price_at_decision?: string | null;
+  price_at_horizon?: string | null;
+  price_observed_at_decision?: string | null;
+  price_observed_at?: string | null;
+  price_source?: string | null;
+  forward_return_pct?: string | null;
+  decision_return_pct?: string | null;
+  benchmark_return_pct?: string | null;
+  benchmark_observed_at_decision?: string | null;
+  benchmark_price_observed_at?: string | null;
+  benchmark_price_source?: string | null;
+  measurement_basis?: {
+    basis?: string | null;
+    method_version?: string | null;
+    horizon_policy?: string | null;
+    reference_at?: string | null;
+    fill_id?: string | number | null;
+    fill_price?: string | null;
+    fill_timestamp?: string | null;
+    start_observation?: string | null;
+    end_observation?: string | null;
+    portfolio_performance?: boolean;
+    note?: string | null;
+  } | null;
+  revision?: number;
+  content_hash?: string | null;
+  unavailable_reason?: string | null;
+  evaluated_at?: string | null;
 }
 
 /** One horizon's scheduler state, used to decide whether to keep polling. */
