@@ -5,7 +5,7 @@ import { setToken } from '../api/client';
 import { AuthProvider } from '../hooks/useAuth';
 import type { DecisionRunEventsState } from '../hooks/useDecisionRuns';
 import type { AsyncResource } from '../hooks/useAsyncResource';
-import { detail, detailRunEvents, guard, run, runEvent } from '../test/decisionRunFixtures';
+import { detail, detailRunEvents, guard, outcome, run, runEvent } from '../test/decisionRunFixtures';
 import type { DecisionDetailPayload, RunEvent } from '../types';
 import { DecisionRunView } from './DecisionRunsPage';
 
@@ -329,6 +329,76 @@ describe('DecisionRunView — late outcomes', () => {
     // once without a manual reload.
     expect(control.events.events.filter((event) => event.event_id === 'late-outcome-1')).toHaveLength(1);
     expect(screen.getAllByRole('article', { name: '7-day horizon outcome' })).toHaveLength(1);
+  });
+
+  it('shows an exhausted horizon as unavailable with its reason and a single event', async () => {
+    const events = detailRunEvents();
+    control.detail = makeDetail({
+      outcomes: [detail().outcomes[0]!],
+      outcome_schedule: pendingSchedule,
+    });
+    control.events = makeEvents(events);
+    const { rerender } = renderView();
+    await waitFor(() => expect(control.detailRefresh).toHaveBeenCalled());
+
+    const lateOutcome = runEvent({
+      event_id: 'late-unavailable-1',
+      seq: 16,
+      type: 'outcome.recorded',
+      stage: 'completed',
+      occurred_at: '2026-11-10T14:10:07Z',
+      payload: {
+        event_schema: 'outcome.recorded.v1',
+        outcome_record_id: 'record-7',
+        horizon_days: 7,
+        method_version: 'attribution.v2',
+        maturity: 'unavailable',
+        revision: 1,
+        measurement_basis: 'proposal_close',
+        unavailable_reason:
+          'no_session_at_or_after_target: No mark exists at or after the target.',
+        values: {
+          price_at_decision: null,
+          price_at_horizon: null,
+          forward_return_pct: null,
+          decision_return_pct: null,
+          benchmark_return_pct: null,
+        },
+      },
+    });
+    control.events = makeEvents([...events, lateOutcome], 16);
+    window.dispatchEvent(new Event('online'));
+
+    const evaluated = detail().outcomes.map((row) =>
+      row.horizon_days === 7
+        ? outcome({
+            id: 'record-7',
+            horizon_days: 7,
+            maturity: 'unavailable' as const,
+            signal_score: null,
+            method_version: 'attribution.v2',
+            unavailable_reason:
+              'no_session_at_or_after_target: No mark exists at or after the target.',
+          })
+        : row,
+    );
+    control.detail = makeDetail({
+      outcomes: evaluated,
+      outcome_schedule: { ...pendingSchedule, pending: false, next_due_at: null },
+    });
+    rerender(
+      <AuthProvider>
+        <DecisionRunView runId="run-20261110-0001" />
+      </AuthProvider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByText(/no_session_at_or_after_target/)).toBeInTheDocument(),
+    );
+    expect(screen.getAllByRole('article', { name: '7-day horizon outcome' })).toHaveLength(1);
+    expect(
+      control.events.events.filter((event) => event.event_id === 'late-unavailable-1'),
+    ).toHaveLength(1);
   });
 });
 

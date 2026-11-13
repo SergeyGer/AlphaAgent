@@ -5,6 +5,7 @@ import type {
   EvidenceItem,
   GuardComparison,
   OutcomeMaturity,
+  OutcomeView,
   RebuttalResponseType,
   RunEvent,
   RunMode,
@@ -574,6 +575,55 @@ export function missingSequenceCount(events: readonly RunEvent[], upTo: number |
   return missing;
 }
 
+/**
+ * What the client knows about the server's event tail.
+ *
+ * A page can stop before the run's last persisted event. `latestSequence` is
+ * the server's authoritative tail; `contiguousSequence` is the last unbroken
+ * local sequence starting at 1. Completeness is the second reaching the first -
+ * a local maximum is not evidence of completeness, and a gap is not the tail.
+ */
+export interface ReplayCompleteness {
+  latestSequence?: number | null;
+  contiguousSequence?: number | null;
+}
+
+export interface ReplayBoundary {
+  /** Authoritative server tail when reported, otherwise the local maximum. */
+  latestSequence: number | null;
+  /** Last unbroken local sequence; never claimed beyond the local events. */
+  contiguousSequence: number;
+  /** True only when the contiguous local history reaches the server tail. */
+  complete: boolean;
+  /** Highest sequence a replay scene may safely render right now. */
+  reachableSequence: number | null;
+}
+
+export function replayBoundary(
+  events: readonly RunEvent[],
+  completeness: ReplayCompleteness = {},
+): ReplayBoundary {
+  const localLast = lastEventSequence(events);
+  const localContiguous = lastContiguousSequence(events);
+  const reported = completeness.latestSequence;
+  const latestSequence =
+    reported === undefined
+      ? localLast
+      : typeof reported === 'number' && Number.isFinite(reported)
+        ? reported
+        : localLast;
+  const suppliedContiguous = completeness.contiguousSequence;
+  const contiguousSequence =
+    typeof suppliedContiguous === 'number' && Number.isFinite(suppliedContiguous)
+      ? Math.min(suppliedContiguous, localContiguous)
+      : localContiguous;
+  const complete = latestSequence === null ? true : contiguousSequence >= latestSequence;
+  const reachableSequence = complete
+    ? (latestSequence ?? localLast)
+    : Math.min(contiguousSequence, latestSequence ?? contiguousSequence);
+  return { latestSequence, contiguousSequence, complete, reachableSequence };
+}
+
 export function isAtReplayEnd(events: readonly RunEvent[], cursorSeq: number | null): boolean {
   const last = lastEventSequence(events);
   return last === null || cursorSeq === last;
@@ -884,6 +934,12 @@ function payloadStringValue(
   return null;
 }
 
+function payloadObject(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
 function earliest(map: Map<string, number>, key: string, seq: number): void {
   const previous = map.get(key);
   if (previous === undefined || seq < previous) map.set(key, seq);
@@ -894,6 +950,19 @@ const EXECUTION_EVENT_PATTERN = /^execution[._](recorded|rejected|failed)$/i;
 
 function isGuardEvent(event: RunEvent): boolean {
   return GUARD_EVENT_PATTERN.test((event?.type ?? '').trim());
+}
+
+/**
+ * The destination status of a ``status.changed`` event.
+ *
+ * The persisted event names the destination in ``payload.to``; older captures
+ * and hand-authored fixtures used ``payload.status``. ``payload.from`` is the
+ * status that was left, never the one the cursor should show, so it is
+ * deliberately not read.
+ */
+function statusChangedTarget(event: RunEvent): string | null {
+  if ((event?.type ?? '').trim().toLowerCase() !== 'status.changed') return null;
+  return payloadStringValue(event.payload, ['to', 'status'])?.toLowerCase() ?? null;
 }
 
 function indexEventVisibility(events: readonly RunEvent[]): SequenceIndex {
@@ -941,10 +1010,10 @@ function indexEventVisibility(events: readonly RunEvent[]): SequenceIndex {
     if (EXECUTION_EVENT_PATTERN.test(type)) {
       if (index.execution === null || seq < index.execution) index.execution = seq;
     }
-    const payloadStatus = payloadStringValue(payload, ['status'])?.toLowerCase() ?? null;
+    const payloadStatus = statusChangedTarget(event);
     if (
       /^run\.(completed|failed|cancelled)$/.test(type) ||
-      (type === 'status.changed' && payloadStatus !== null && isTerminalRunStatus(payloadStatus))
+      (payloadStatus !== null && isTerminalRunStatus(payloadStatus))
     ) {
       if (index.terminal === null || seq < index.terminal) index.terminal = seq;
     }
@@ -969,8 +1038,11 @@ export function runStatusAtCursor(
   for (const event of visible) {
     if (!event) continue;
     const type = (event.type ?? '').trim().toLowerCase();
-    const payloadStatus = payloadStringValue(event.payload, ['status'])?.toLowerCase() ?? null;
+    const payloadStatus = statusChangedTarget(event);
     if (type === 'status.changed' && payloadStatus !== null) {
+      // ``to`` is the destination and this event's sequence is where the run
+      // entered it. A later outcome or guard event may mention its own state,
+      // but it does not move this transition.
       status = payloadStatus as RunStatus;
     } else if (type === 'stage.started' && typeof event.stage === 'string') {
       const normalized = event.stage.trim().toLowerCase() as RunStatus;
@@ -1122,6 +1194,184 @@ export function resolveVisibleGuard(
   };
 }
 
+/**
+ * One outcome reconstructed from its `outcome.recorded` event.
+ *
+ * Replay must read the values the event recorded, not the mutable projection:
+ * a correction updates the single `OutcomeRecord` row in place, so a scene at
+ * revision 1 that looked up `detail.outcomes` would show revision 2's number.
+ * The payload carries the full values, basis and observation times.
+ */
+function outcomeFromEvent(event: RunEvent): OutcomeView | null {
+  const payload = event.payload ?? {};
+  const horizon = payloadStringValue(payload, ['horizon_days', 'horizonDays']);
+  if (horizon === null) return null;
+  const horizonDays = Number(horizon);
+  if (!Number.isFinite(horizonDays) || horizonDays <= 0) return null;
+  const values = payloadObject(payload['values']) ?? {};
+  const rawMaturity = (payloadStringValue(payload, ['maturity']) ?? 'evaluated').toLowerCase();
+  const maturity = (
+    ['pending', 'matured', 'evaluated', 'unavailable'].includes(rawMaturity)
+      ? rawMaturity
+      : 'evaluated'
+  ) as OutcomeMaturity;
+  const methodVersion = payloadStringValue(payload, ['method_version', 'methodVersion']) ?? 'unknown';
+  const decisionReturn =
+    payloadStringValue(values, ['decision_return_pct', 'decisionReturnPct']) ??
+    payloadStringValue(payload, ['decision_return_pct', 'decisionReturnPct']);
+  const basis =
+    payloadStringValue(payload, ['measurement_basis', 'measurementBasis']) ??
+    payloadStringValue(payloadObject(payload['measurement_basis']) ?? {}, ['basis']);
+  const revisionText = payloadStringValue(payload, ['revision']);
+  const revision = revisionText === null ? undefined : Number(revisionText);
+  const id =
+    payloadStringValue(payload, ['outcome_record_id', 'outcomeRecordId']) ??
+    payloadStringValue(payload, ['outcome_id', 'outcomeId', 'id']);
+  const basisObject = payloadObject(payload['measurement_basis']);
+  return {
+    id: id ?? undefined,
+    horizon_days: horizonDays,
+    maturity,
+    signal_score: maturity === 'evaluated' ? decisionReturn : null,
+    benchmark: payloadStringValue(payload, ['benchmark_ticker', 'benchmarkTicker', 'benchmark']),
+    portfolio_impact: null,
+    method_version: methodVersion,
+    is_scored: maturity === 'evaluated' && decisionReturn !== null,
+    price_at_decision:
+      payloadStringValue(values, ['price_at_decision', 'priceAtDecision']) ??
+      payloadStringValue(payload, ['price_at_decision', 'priceAtDecision']),
+    price_at_horizon:
+      payloadStringValue(values, ['price_at_horizon', 'priceAtHorizon']) ??
+      payloadStringValue(payload, ['price_at_horizon', 'priceAtHorizon']),
+    price_observed_at_decision: payloadStringValue(payload, [
+      'price_observed_at_decision',
+      'priceObservedAtDecision',
+    ]),
+    price_observed_at: payloadStringValue(payload, ['price_observed_at', 'priceObservedAt']),
+    price_source: payloadStringValue(payload, ['price_source', 'priceSource']),
+    forward_return_pct:
+      payloadStringValue(values, ['forward_return_pct', 'forwardReturnPct']) ??
+      payloadStringValue(payload, ['forward_return_pct', 'forwardReturnPct']),
+    decision_return_pct: decisionReturn,
+    benchmark_return_pct:
+      payloadStringValue(values, ['benchmark_return_pct', 'benchmarkReturnPct']) ??
+      payloadStringValue(payload, ['benchmark_return_pct', 'benchmarkReturnPct']),
+    benchmark_observed_at_decision: payloadStringValue(payload, [
+      'benchmark_observed_at_decision',
+      'benchmarkObservedAtDecision',
+    ]),
+    benchmark_price_observed_at: payloadStringValue(payload, [
+      'benchmark_price_observed_at',
+      'benchmarkPriceObservedAt',
+    ]),
+    benchmark_price_source: payloadStringValue(payload, [
+      'benchmark_price_source',
+      'benchmarkPriceSource',
+    ]),
+    measurement_basis: basis
+      ? {
+          basis,
+          method_version: methodVersion,
+          reference_at: payloadStringValue(payload, ['reference_at', 'referenceAt']),
+          fill_id: basisObject ? payloadStringValue(basisObject, ['fill_id', 'fillId']) : null,
+          fill_price: basisObject
+            ? payloadStringValue(basisObject, ['fill_price', 'fillPrice'])
+            : null,
+          fill_timestamp: basisObject
+            ? payloadStringValue(basisObject, ['fill_timestamp', 'fillTimestamp'])
+            : null,
+          portfolio_performance: false,
+        }
+      : null,
+    revision: revision !== undefined && Number.isFinite(revision) ? revision : undefined,
+    content_hash: payloadStringValue(payload, ['content_hash', 'contentHash']),
+    unavailable_reason: payloadStringValue(payload, [
+      'unavailable_reason',
+      'unavailableReason',
+      'reason',
+    ]),
+    evaluated_at: payloadStringValue(payload, ['evaluated_at', 'evaluatedAt']),
+  };
+}
+
+function outcomeKey(outcome: OutcomeView): string {
+  return `${outcome.horizon_days}:${outcome.method_version || 'unknown'}`;
+}
+
+function outcomeHasRecordedValues(outcome: OutcomeView): boolean {
+  return (
+    outcome.price_at_decision !== null ||
+    outcome.signal_score !== null ||
+    outcome.unavailable_reason !== null ||
+    outcome.maturity === 'unavailable' ||
+    outcome.maturity === 'pending' ||
+    outcome.maturity === 'matured'
+  );
+}
+
+/**
+ * Resolve each ``(horizon, method)`` to the latest event revision at the cursor.
+ *
+ * At the tail, a detail row with no event history is also shown (pending and
+ * matured horizons have no ``outcome.recorded`` event), but an event that
+ * recorded values always wins: it is the immutable record of that revision, not
+ * the mutable projection the row has since become.
+ */
+function resolveVisibleOutcomes(
+  detail: DecisionDetailPayload | null,
+  visibleEvents: readonly RunEvent[],
+  atEnd: boolean,
+): OutcomeView[] {
+  const current = Array.isArray(detail?.outcomes) ? detail.outcomes.filter(Boolean) : [];
+  const resolved = new Map<string, { seq: number; outcome: OutcomeView }>();
+  for (const event of sortEvents(visibleEvents)) {
+    const type = (event?.type ?? '').trim().toLowerCase();
+    if (!/^outcome[._](recorded|evaluated)$/.test(type)) continue;
+    const outcome = outcomeFromEvent(event);
+    if (!outcome) continue;
+    resolved.set(outcomeKey(outcome), { seq: event.seq, outcome });
+  }
+
+  if (atEnd) {
+    for (const row of current) {
+      const key = outcomeKey(row);
+      const recorded = resolved.get(key);
+      if (!recorded) {
+        // A sparse legacy event (id and horizon only) is a placeholder for the
+        // same horizon, not a second result. Replace it with the richer current
+        // row rather than showing the horizon twice.
+        let placeholderKey: string | null = null;
+        for (const [candidateKey, entry] of resolved) {
+          if (
+            entry.outcome.horizon_days === row.horizon_days &&
+            !outcomeHasRecordedValues(entry.outcome)
+          ) {
+            placeholderKey = candidateKey;
+            break;
+          }
+        }
+        if (placeholderKey !== null) resolved.delete(placeholderKey);
+        resolved.set(key, { seq: Number.POSITIVE_INFINITY, outcome: row });
+        continue;
+      }
+      // A legacy/fixture event that carried only an id and a horizon did not
+      // record values; there is no earlier revision to protect, so keep the
+      // richer current row. An event that recorded values always wins.
+      if (!outcomeHasRecordedValues(recorded.outcome) && outcomeHasRecordedValues(row)) {
+        resolved.set(key, { seq: recorded.seq, outcome: row });
+      }
+    }
+  }
+
+  return [...resolved.values()]
+    .sort((left, right) => {
+      const horizon = left.outcome.horizon_days - right.outcome.horizon_days;
+      if (horizon !== 0) return horizon;
+      return left.outcome.method_version.localeCompare(right.outcome.method_version);
+    })
+    .map((entry) => entry.outcome);
+}
+
 export interface AsOfPresentation {
   /** The detail payload reduced to what was persisted at `cursorSeq`. */
   detail: DecisionDetailPayload;
@@ -1129,6 +1379,10 @@ export interface AsOfPresentation {
   /** True when the cursor is at (or beyond) the stored tail. */
   atEnd: boolean;
   atStart: boolean;
+  /** False while a page or a sequence gap means the local log is incomplete. */
+  complete: boolean;
+  latestSequence: number | null;
+  contiguousSequence: number;
   status: RunStatus;
   verdictVisible: boolean;
   guardVisible: boolean;
@@ -1152,29 +1406,46 @@ export interface AsOfPresentation {
  * verdict, the guard and the timeline.
  *
  * `cursorSeq === undefined` means "no replay is active": the final payload is
- * returned unchanged. A numeric cursor filters every stage-backed section by
- * the persisted event that produced it, so the scene cannot show a verdict
- * before the decision was recorded. `cursorSeq === null` is the start of the
- * replay and shows only the run shell.
+ * returned unchanged **only when the event history is complete**. A numeric
+ * cursor filters every stage-backed section by the persisted event that produced
+ * it, so the scene cannot show a verdict before the decision was recorded.
+ * `cursorSeq === null` is the start of the replay and shows only the run shell.
  *
- * At the very end of the log the stored detail is authoritative; there is no
- * future left to hide. Before that point, content with no corresponding event is
- * withheld rather than guessed at. A summary that is intentionally pinned by
- * the caller is returned separately as `finalSummary` and never injected into
- * the scene.
+ * Completeness comes from the server's reported tail and the last unbroken
+ * local sequence. A partial page or an internal gap is not the end of the run:
+ * the cursor is clamped to the contiguous sequence and `atEnd` stays false
+ * until the missing events are recovered, so a partial page cannot reveal a
+ * future verdict, guard evaluation or outcome.
+ *
+ * Outcome rows are resolved from each visible `outcome.recorded` event's
+ * recorded values and latest revision; the mutable detail projection is used
+ * only for a horizon with no event history (a pending or legacy row).
  */
 export function buildAsOfPresentation(
   detail: DecisionDetailPayload | null,
   events: readonly RunEvent[],
   cursorSeq: number | null | undefined,
+  completeness: ReplayCompleteness = {},
 ): AsOfPresentation | null {
   if (!detail || !detail.run) return null;
 
   const eventList = Array.isArray(events) ? events.filter(Boolean) : [];
   const last = lastEventSequence(eventList);
-  const atEnd = cursorSeq === undefined ? true : last === null || (cursorSeq ?? -1) >= last;
-  const atStart = cursorSeq === null;
-  const visibleEvents = eventsUpTo(eventList, cursorSeq);
+  const boundary = replayBoundary(eventList, completeness);
+  let effectiveCursor: number | null | undefined = cursorSeq;
+  if (!boundary.complete) {
+    const ceiling =
+      boundary.reachableSequence !== null && boundary.reachableSequence > 0
+        ? boundary.reachableSequence
+        : null;
+    if (cursorSeq === undefined || cursorSeq === null) effectiveCursor = ceiling;
+    else effectiveCursor = ceiling === null ? null : Math.min(cursorSeq, ceiling);
+  }
+  const atEnd =
+    boundary.complete &&
+    (cursorSeq === undefined || last === null || (effectiveCursor ?? -1) >= last);
+  const atStart = effectiveCursor === null;
+  const visibleEvents = eventsUpTo(eventList, effectiveCursor);
   const index = indexEventVisibility(visibleEvents);
   const resolvedGuard = resolveVisibleGuard(detail, visibleEvents, atEnd);
   const executionVisible = atEnd || index.execution !== null;
@@ -1218,18 +1489,11 @@ export function buildAsOfPresentation(
 
   const guardVisible = resolvedGuard.visible;
 
-  const visibleOutcomes = atEnd
-    ? outcomes
-    : outcomes.filter((outcome) => {
-        const id = presentText((outcome as { id?: string }).id);
-        if (id !== null && index.outcome.has(id)) return true;
-        // Some producers omit outcome ids from the event payload; the horizon
-        // is then the only join key available, and it still has to be recorded.
-        const horizon = typeof outcome?.horizon_days === 'number' ? String(outcome.horizon_days) : null;
-        return horizon !== null && index.outcome.has(`horizon:${horizon}`);
-      });
+  const visibleOutcomes = resolveVisibleOutcomes(detail, visibleEvents, atEnd);
 
-  const status = atEnd ? detail.run.status : runStatusAtCursor(eventList, cursorSeq ?? null);
+  const status = atEnd
+    ? detail.run.status
+    : runStatusAtCursor(eventList, effectiveCursor ?? null);
   const terminalStatus = isTerminalRunStatus(status);
 
   const reduced = {
@@ -1267,9 +1531,12 @@ export function buildAsOfPresentation(
 
   return {
     detail: reduced,
-    cursorSeq: cursorSeq ?? null,
+    cursorSeq: effectiveCursor ?? null,
     atEnd,
     atStart,
+    complete: boundary.complete,
+    latestSequence: boundary.latestSequence,
+    contiguousSequence: boundary.contiguousSequence,
     status,
     verdictVisible,
     guardVisible,
@@ -1289,7 +1556,7 @@ export function buildAsOfPresentation(
       claims: claims.length - visibleClaims.length,
       rebuttals: rebuttals.length - visibleRebuttals.length,
       evidence: evidence.length - visibleEvidence.length,
-      outcomes: outcomes.length - visibleOutcomes.length,
+      outcomes: Math.max(0, outcomes.length - visibleOutcomes.length),
     },
     finalSummary: firstSentence(detail.rationale),
   };

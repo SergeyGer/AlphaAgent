@@ -454,8 +454,8 @@ class RecommendationDecisionView(APIView):
             "User %s %sd recommendation %s -> %s",
             log_safe(request.user.username),
             self.decision,
-            pk,
-            outcome.recommendation.status,
+            outcome.recommendation.pk,
+            log_safe(outcome.recommendation.status),
         )
         return Response(payload, status=status.HTTP_200_OK)
 

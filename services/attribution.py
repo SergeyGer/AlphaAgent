@@ -44,6 +44,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
+from django.db.models import Count, Q
 from django.utils import timezone
 
 from core.decision_json import content_hash, utc_iso
@@ -712,25 +713,32 @@ def _write_outcome(
 
 
 def _outcome_event_payload(
-    outcome: DecisionOutcome,
+    outcome: DecisionOutcome | None,
     record: OutcomeRecord,
     *,
     decision: AgentDecisionLog,
     now: datetime,
+    reason: str | None = None,
+    attempt_count: int | None = None,
 ) -> dict:
     """The versioned values of one recorded outcome.
 
     The payload carries the values themselves, not just a pointer: a correction
     can update the projection row, and an event consumer replaying the log must
-    still be able to read what was recorded at this revision.
+    still be able to read what was recorded at this revision. An unavailable
+    horizon has no score but still records its state, basis, observation times
+    and reason, so a replay at that event cannot borrow a later result.
     """
     return {
         "event_schema": "outcome.recorded.v1",
         "outcome_id": str(record.id),
         "outcome_record_id": str(record.id),
-        "decision_outcome_id": outcome.id,
+        "decision_outcome_id": outcome.id if outcome is not None else None,
         "decision_id": decision.id,
         "run_id": str(record.decision.run_id),
+        "ticker": decision.ticker,
+        "action": outcome.action if outcome is not None else None,
+        "benchmark_ticker": BENCHMARK_TICKER,
         "horizon_days": record.horizon_days,
         "method_version": record.method_version,
         "maturity": record.maturity,
@@ -745,6 +753,8 @@ def _outcome_event_payload(
         "benchmark_price_source": record.benchmark_price_source or None,
         "revision": record.revision,
         "content_hash": record.content_hash,
+        "unavailable_reason": record.unavailable_reason or reason or None,
+        "attempt_count": attempt_count,
         "values": {
             "price_at_decision": _decimal_text(record.price_at_decision),
             "price_at_horizon": _decimal_text(record.price_at_horizon),
@@ -757,15 +767,18 @@ def _outcome_event_payload(
 
 def _publish_outcome_event(
     decision: AgentDecisionLog,
-    outcome: DecisionOutcome,
+    outcome: DecisionOutcome | None,
     record: OutcomeRecord | None,
     *,
     now: datetime,
+    reason: str | None = None,
+    attempt_count: int | None = None,
 ) -> None:
     """Append the versioned outcome event and its outbox row.
 
     ``append_event`` writes the ordered ``RunEvent`` and a queued notification in
-    the caller's transaction. The dedupe key contains the revision and content
+    the caller's transaction, so a material result and the news of it commit or
+    roll back together. The dedupe key contains the state, revision and content
     hash, so a retry of identical values returns the first event (one timeline
     entry) while a genuine correction produces a second, differently keyed event.
     """
@@ -774,10 +787,17 @@ def _publish_outcome_event(
     run = _run_for_decision(decision)
     if run is None:
         return
-    payload = _outcome_event_payload(outcome, record, decision=decision, now=now)
+    payload = _outcome_event_payload(
+        outcome,
+        record,
+        decision=decision,
+        now=now,
+        reason=reason,
+        attempt_count=attempt_count,
+    )
     dedupe_key = (
         f"outcome_recorded:{decision.id}:{record.horizon_days}:{record.method_version}:"
-        f"{record.revision}:{record.content_hash[:32]}"
+        f"{record.maturity}:{record.revision}:{record.content_hash[:32]}"
     )
     append_event(
         run,
@@ -835,7 +855,7 @@ def _mark_attempt_failure(
             "updated_at",
         ]
     )
-    _update_projection(
+    projection = _update_projection(
         decision,
         horizon_days=evaluation.horizon_days,
         maturity=maturity,
@@ -843,6 +863,23 @@ def _mark_attempt_failure(
         reference=reference,
         now=now,
     )
+    if (
+        maturity == OutcomeMaturity.UNAVAILABLE
+        and projection is not None
+        and projection.maturity == OutcomeMaturity.UNAVAILABLE
+    ):
+        # ``pending -> unavailable`` is a material outcome change even though no
+        # score exists: an open view must learn that the horizon will not be
+        # scored, and that it is waiting on a price that will never arrive. The
+        # event and outbox row share the result's transaction.
+        _publish_outcome_event(
+            decision,
+            None,
+            projection,
+            now=now,
+            reason=reason,
+            attempt_count=attempts,
+        )
     return "unpriced"
 
 
@@ -1109,23 +1146,176 @@ def evaluate_decision_horizons(
     return counts
 
 
+def _pending_horizon_reason(horizon_days: int, target: datetime, mature_at: datetime) -> str:
+    return (
+        f"Horizon +{horizon_days}d targets {utc_iso(target)} and matures at "
+        f"{utc_iso(mature_at)} under {HORIZON_POLICY}."
+    )
+
+
+def _seed_outcome_work(reference_now: datetime, *, limit: int, decision_ids) -> tuple[int, int]:
+    """Create the work ledger rows for decisions the scheduler has not seen.
+
+    Seeding is discovery, not measurement: it creates one row per
+    ``(decision, horizon, method)`` that has no result yet and writes the
+    pending projection for a horizon that has not matured. The row's
+    ``next_attempt_at`` is the maturity instant, so the indexed due-pair query
+    below is the only thing that decides what is worked on this tick.
+
+    The scan is oldest-first and bounded. A historic backlog therefore cannot
+    be starved by newer decisions, and a tick's *work* is still bounded by
+    ``limit`` rather than by how many decisions happened to be discovered.
+    """
+    cutoff = reference_now - timedelta(days=min(DecisionOutcome.HORIZONS))
+    candidates = (
+        AgentDecisionLog.objects.filter(ticker__gt="", created_at__lte=cutoff)
+        .annotate(
+            current_work=Count(
+                "outcome_evaluations",
+                filter=Q(outcome_evaluations__method_version=OUTCOME_METHOD_VERSION),
+            )
+        )
+        .filter(current_work__lt=len(DecisionOutcome.HORIZONS))
+        .order_by("created_at", "id")
+    )
+    if decision_ids is not None:
+        candidates = candidates.filter(id__in=list(decision_ids))
+    candidates = candidates[:limit]
+
+    seeded = 0
+    failed = 0
+    for decision in candidates:
+        try:
+            with transaction.atomic():
+                reference = resolve_measurement_reference(decision)
+                existing_work = set(
+                    OutcomeEvaluation.objects.filter(
+                        decision=decision, method_version=OUTCOME_METHOD_VERSION
+                    ).values_list("horizon_days", flat=True)
+                )
+                existing_outcomes = {
+                    row.horizon_days: row
+                    for row in DecisionOutcome.objects.filter(
+                        decision=decision, horizon_days__in=DecisionOutcome.HORIZONS
+                    )
+                }
+                run = _run_for_decision(decision)
+                projections = (
+                    {
+                        row.horizon_days: row
+                        for row in OutcomeRecord.objects.filter(
+                            decision=run.decision,
+                            method_version=OUTCOME_METHOD_VERSION,
+                            horizon_days__in=DecisionOutcome.HORIZONS,
+                        )
+                    }
+                    if run is not None
+                    else {}
+                )
+                for horizon in DecisionOutcome.HORIZONS:
+                    if horizon in existing_work:
+                        continue
+                    outcome = existing_outcomes.get(horizon)
+                    if outcome is not None:
+                        # A pre-v2 score is a result already. Adopt it into the
+                        # work ledger instead of measuring the same horizon again.
+                        _mark_legacy_evaluated(decision, outcome=outcome, now=reference_now)
+                        continue
+                    projection = projections.get(horizon)
+                    if projection is not None and projection.maturity in (
+                        OutcomeMaturity.EVALUATED,
+                        OutcomeMaturity.UNAVAILABLE,
+                    ):
+                        # A completed detail projection is a current result even
+                        # when no Phase 0 row exists (imported runs, or a
+                        # projection written before the work ledger).
+                        OutcomeEvaluation.objects.get_or_create(
+                            decision=decision,
+                            horizon_days=horizon,
+                            method_version=OUTCOME_METHOD_VERSION,
+                            defaults={
+                                "state": projection.maturity,
+                                "reason": projection.unavailable_reason or "",
+                                "next_attempt_at": None,
+                                "max_attempts": MAX_PRICE_ATTEMPTS,
+                                "reference_basis": projection.measurement_basis or "",
+                                "reference_at": projection.reference_at,
+                                "outcome_record": projection,
+                            },
+                        )
+                        continue
+                    target, mature_at = horizon_timeline(reference.reference_at, horizon)
+                    _work, created = OutcomeEvaluation.objects.get_or_create(
+                        decision=decision,
+                        horizon_days=horizon,
+                        method_version=OUTCOME_METHOD_VERSION,
+                        defaults={
+                            "state": OutcomeEvaluationState.PENDING,
+                            "next_attempt_at": mature_at,
+                            "max_attempts": MAX_PRICE_ATTEMPTS,
+                            "reference_basis": reference.basis,
+                            "reference_at": reference.reference_at,
+                            "fill": reference.fill,
+                        },
+                    )
+                    if not created:
+                        continue
+                    seeded += 1
+                    if mature_at > reference_now:
+                        _update_projection(
+                            decision,
+                            horizon_days=horizon,
+                            maturity=OutcomeMaturity.PENDING,
+                            reason=_pending_horizon_reason(horizon, target, mature_at),
+                            reference=reference,
+                            now=reference_now,
+                        )
+        except Exception as exc:
+            failed += 1
+            logger.warning(
+                "Skipping malformed decision id=%s while seeding attribution work: %s",
+                decision.id,
+                type(exc).__name__,
+            )
+            continue
+    return seeded, failed
+
+
+def _due_outcome_work(reference_now: datetime, *, limit: int, decision_ids):
+    """The due ``(decision, horizon, method)`` pairs, oldest maturity first.
+
+    This is the fairness fix: the query filters on the work row's state and
+    ``next_attempt_at`` *before* the limit is applied. Evaluated rows, terminal
+    unavailable rows and deferred retries are not candidates at all, so they
+    cannot consume a slot that a due pair needs. The existing
+    ``(state, next_attempt_at)`` index serves the filter and the ordering.
+    """
+    rows = OutcomeEvaluation.objects.filter(
+        method_version=OUTCOME_METHOD_VERSION,
+        state__in=(OutcomeEvaluationState.PENDING, OutcomeEvaluationState.MATURED),
+    ).filter(Q(next_attempt_at__isnull=True) | Q(next_attempt_at__lte=reference_now))
+    if decision_ids is not None:
+        rows = rows.filter(decision_id__in=list(decision_ids))
+    return list(
+        rows.select_related("decision").order_by("next_attempt_at", "created_at", "id")[:limit]
+    )
+
+
 def evaluate_pending(*, now=None, limit: int = 500, decision_ids=None) -> dict[str, int]:
-    """Score every matured horizon that does not yet have a result.
+    """Score due horizons, bounding work rather than candidate decisions.
 
-    The unit of work is ``(decision, horizon, method)`` rather than the decision:
-    a one-day score must not prevent the seven- and thirty-day horizons from
-    being evaluated later. The selection is therefore per missing horizon, and
-    the work ledger stores the pending/unavailable state so a price that is not
-    available yet is visible and retried under a bound instead of being
-    permanently skipped.
+    The unit of work is ``(decision, horizon, method)``. A recent decision that
+    is already fully scored is not a candidate at all: the due-pair query
+    excludes evaluated rows, terminal unavailable rows and deferred retries
+    before it applies ``limit``. An older decision whose day-7 and day-30
+    horizons are due therefore cannot be starved by newer completed records.
 
-    Idempotent: an existing evaluated horizon is skipped, overlapping runs
-    contend on the work row's unique key, and a retry that produces the same
-    values does not append a second event. Safe to run on every Beat tick.
+    Discovery of never-seen decisions creates the work rows; the same
+    ``(decision, horizon, method)`` unique key, the row lock in
+    ``_attempt_horizon`` and the content-hash event key make a retry or an
+    overlapping tick idempotent. Safe to run on every Beat tick.
     """
     reference = now or timezone.now()
-    horizons = DecisionOutcome.HORIZONS
-    oldest_needed = reference - timedelta(days=min(horizons))
     counts = {
         "scored": 0,
         "skipped": 0,
@@ -1133,22 +1323,27 @@ def evaluate_pending(*, now=None, limit: int = 500, decision_ids=None) -> dict[s
         "unpriced": 0,
         "failed": 0,
         "decisions": 0,
+        "seeded": 0,
     }
 
-    candidates = AgentDecisionLog.objects.filter(
-        created_at__lte=oldest_needed, ticker__gt=""
-    ).order_by("-created_at")
-    if decision_ids is not None:
-        candidates = candidates.filter(id__in=list(decision_ids))
-    # No lower age bound: a day-one score on an old decision must not hide its
-    # later matured horizons. The ``limit`` bounds one tick's work; the backfill
-    # command remains the bounded repair path for a large historic backlog.
-    candidates = candidates.select_related("transaction")[:limit]
+    seeded, seed_failed = _seed_outcome_work(
+        reference, limit=max(int(limit), 1), decision_ids=decision_ids
+    )
+    counts["seeded"] = seeded
+    counts["failed"] += seed_failed
 
-    for decision in candidates:
+    groups: dict[int, tuple[AgentDecisionLog, list[int]]] = {}
+    for row in _due_outcome_work(reference, limit=max(int(limit), 1), decision_ids=decision_ids):
+        decision, horizons = groups.setdefault(row.decision_id, (row.decision, []))
+        horizons.append(row.horizon_days)
+        groups[row.decision_id] = (decision, horizons)
+
+    for decision, horizons in groups.values():
         counts["decisions"] += 1
         try:
-            decision_counts = evaluate_decision_horizons(decision, now=reference)
+            decision_counts = evaluate_decision_horizons(
+                decision, now=reference, horizons=sorted(horizons)
+            )
         except Exception as exc:
             counts["failed"] += 1
             logger.warning(
@@ -1161,12 +1356,15 @@ def evaluate_pending(*, now=None, limit: int = 500, decision_ids=None) -> dict[s
             counts[key] = counts.get(key, 0) + value
 
     logger.info(
-        "Decision attribution: scored=%s skipped=%s pending=%s unpriced=%s failed=%s",
+        "Decision attribution: scored=%s skipped=%s pending=%s unpriced=%s failed=%s "
+        "seeded=%s work=%s",
         counts["scored"],
         counts["skipped"],
         counts["pending"],
         counts["unpriced"],
         counts["failed"],
+        counts["seeded"],
+        counts["decisions"],
     )
     return counts
 

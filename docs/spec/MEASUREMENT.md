@@ -140,6 +140,13 @@ Each horizon has its own `OutcomeEvaluation` row keyed by decision, horizon and
 method version. The scheduler selects per horizon, so a day-one score does not
 make days seven and thirty ineligible; the row carries `pending`, `matured`,
 `unavailable` or `evaluated`, an attempt count, `next_attempt_at` and a reason.
+
+The batch limit applies to **due pairs**, not to candidate decisions. The due
+query filters the work ledger on `state` and `next_attempt_at` before applying
+the limit, so an evaluated horizon, a terminal-unavailable horizon and a retry
+still in backoff cannot consume a slot; an older decision with day 7 and day 30
+due is selected even when newer decisions are already complete. A decision the
+ledger has never seen is seeded oldest-first, and only a due pair is measured.
 `build_scorecard` publishes the state counts and the basis counts beside the
 aggregate. The aggregate explicitly says `portfolio_performance: false` and
 `summable: false`: this is a per-decision signal diagnostic, not the account's
@@ -147,8 +154,17 @@ realised return.
 
 `manage.py backfill_outcome_records` recovers older rows that were scored from
 the proposal close or a missing horizon. It is a dry run by default, preserves
-the older `attribution.v1` row and prior revisions, and logs an unresolvable fill
-rather than guessing.
+the older `attribution.v1` row and prior revisions, logs an unresolvable fill
+rather than guessing, follows the same due-pair rules (terminal unavailable and
+backoff deferred pairs are skipped), and bounds candidate work rather than
+decision rows.
+
+A `pending -> unavailable` transition writes the versioned
+`outcome.recorded.v1` event and its outbox row in the same transaction as the
+projection. The payload records `maturity: unavailable`, the reason and the
+attempt count, with every value `null`: an unavailable horizon is a measured
+absence, not a 0% return. The decision detail therefore shows the reason and a
+completed run can receive the late update without reopening its status.
 
 The tests that hold this section:
 
@@ -157,6 +173,8 @@ The tests that hold this section:
 | The fill, not the proposal close, is the start price | `test_p1_attribution_remediation.py::test_the_unmocked_start_price_is_the_recorded_fill_not_the_proposal_close` |
 | A HOLD has a proposal basis and no fabricated fill | `test_a_hold_keeps_a_proposal_basis_and_has_no_fabricated_fill` |
 | A day-one score does not block 7 or 30 | `test_a_day_one_score_does_not_prevent_days_seven_and_thirty` |
+| Newer completed decisions do not starve an older due pair | `test_p1_step3_fair_scheduling.py::test_3a_the_older_decisions_due_horizons_are_scheduled` |
+| Deferred, evaluated and unavailable pairs do not consume slots | `test_p1_step3_fair_scheduling.py::test_3b_deferred_evaluated_and_unavailable_pairs_do_not_consume_slots` |
 | The scorecard publishes the signal-diagnostic basis | `test_the_scorecard_publishes_that_this_is_a_signal_diagnostic` |
 | The backfill preserves provenance and is idempotent | `test_apply_recovers_horizons_preserves_provenance_and_is_idempotent` |
 

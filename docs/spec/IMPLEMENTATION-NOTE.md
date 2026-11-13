@@ -590,6 +590,63 @@ later horizon had matured.
 | A completed run stays completed | Status remains `completed` and execution state remains `executed` while an outcome is appended; the detail view polls only while measurement work remains | `test_a_completed_run_keeps_its_execution_state_and_records_the_late_outcome` |
 | Event failure rolls back the result | A failed event write rolls back the outcome and projection | `test_an_event_write_failure_rolls_back_the_result_and_projection` |
 
+### Steps 3 and 4, acceptance-review follow-up
+
+The first repair selected each horizon independently but still chose **candidate
+decisions** by recency before checking whether a horizon needed work. The review
+reproduced the consequence: with `limit=3` and three newer decisions that were
+already scored, the batch returned `{'scored': 0, 'skipped': 9, 'decisions': 3}`
+and an older decision with day 1 present and days 7 and 30 due stayed at `[1]`.
+
+Replay had the matching revision problem. Guard ids resolved, but an outcome was
+looked up in the current detail projection: at the cursor for revision 1 the
+screen showed revision 2's 4% rather than the 2% that revision recorded. A
+partial page (sequences 1 and 2 while the server tail was 10) reported
+`atEnd: true`, `verdictVisible: true` and three outcomes, and the status reducer
+read `payload.status` while real `status.changed` events carry the destination in
+`payload.to`. Exhausting every pricing retry left `state: unavailable,
+attempts: 3, record: True, events: 0`.
+
+The evidence is in `core/tests/test_p1_step3_fair_scheduling.py`,
+`core/tests/test_p1_step4_replay_and_unavailable.py`,
+`frontend/src/lib/replay.test.ts` and
+`frontend/src/components/DecisionRunsPage.test.tsx`.
+
+| Requirement | Where it is enforced | Evidence |
+| --- | --- | --- |
+| The batch limit bounds work, not candidate decisions | `_due_outcome_work` filters `OutcomeEvaluation` on `state` and `next_attempt_at` (the existing index) **before** `limit`; `_seed_outcome_work` creates only missing `(decision, horizon, method)` rows. Completed, terminal-unavailable and deferred pairs are never selected. | `test_3a_the_older_decisions_due_horizons_are_scheduled`, `test_3b_deferred_evaluated_and_unavailable_pairs_do_not_consume_slots` |
+| Overlapping ticks and a repeated backfill stay idempotent | The unique work key, row lock, content hash and event dedupe key hold under two concurrent ticks; the backfill reports candidates by work item, oldest-first, and a second apply changes nothing. | `test_3c_overlapping_ticks_and_a_repeated_backfill_are_idempotent` |
+| Replay resolves each horizon and method to its event revision | `outcomeFromEvent` reads `values`, `measurement_basis`, the observation times and `revision`; `resolveVisibleOutcomes` keeps the latest event at or before the cursor and never substitutes the mutable projection for an event that recorded values. | `frontend/src/lib/replay.test.ts` (`step 4A — outcome replay reads the event revision`) |
+| A partial page or a gap is not a complete tail | `replayBoundary` compares the server's `latest_sequence` with `lastContiguousSequence`; `buildAsOfPresentation` clamps the cursor to the contiguous sequence and keeps `atEnd` false, hiding future verdict, guard and outcomes. | `step 4B — completeness keeps future detail hidden` |
+| `status.changed` reads its destination at its sequence | `statusChangedTarget` prefers `payload.to` and falls back to legacy `payload.status`; `payload.from` is never applied. | `step 4.3 — status.changed applies payload.to at its sequence` |
+| `pending -> unavailable` is a durable event | `_mark_attempt_failure` publishes the same versioned `outcome.recorded.v1` payload and outbox row in the transaction that writes the unavailable projection, with the reason and attempt count; a failed event write rolls both back. | `test_4c_exhausted_pricing_writes_one_event_one_outbox_row_and_a_reason`, `test_4c_a_failed_unavailable_event_rolls_back_the_state_and_projection` |
+| A completed run keeps accepting late outcomes | Status stays `completed`, execution state stays `executed`, the detail payload carries the unavailable reason, and reconnect/focus refresh the detail projection; polling stops once the schedule reports no work. | `test_4c_exhausted_pricing...`, `frontend/src/components/DecisionRunsPage.test.tsx` (`shows an exhausted horizon as unavailable with its reason and a single event`) |
+
+Divergences recorded rather than absorbed:
+
+1. **Discovery is separate from work.** A decision the scheduler has never seen
+   has no work row yet, so `_seed_outcome_work` creates the rows oldest-first and
+   the due query picks the work. The seed pass is bounded by `limit` decisions;
+   the measurement batch is still bounded by `limit` pairs. A very large historic
+   backlog therefore takes several ticks to enter the queue, but no due pair is
+   permanently starved by newer completed records.
+2. **The backfill's `--limit` now bounds candidate work items, not decision
+   rows.** It scans inside `--days` oldest-first and stops at `limit` candidates
+   (with a larger scan cap so a completed decision cannot monopolise the run).
+   This changes the meaning of the flag from the earlier implementation; the
+   JSON still reports `decisions_inspected` and `limit_reached`.
+3. **Replay completeness is supplied by the caller.** `buildAsOfPresentation`
+   accepts `{latestSequence, contiguousSequence}`; without them it falls back to
+   the local log, which is all an offline or older producer can know. The run
+   screen passes the event hook's server tail and contiguous cursor.
+4. **Pending and matured rows have no `outcome.recorded` event.** At the complete
+   tail the detail projection is still used for those rows; a row with an event
+   history always resolves from its event, so the mutable projection cannot
+   override a recorded revision.
+5. **An unavailable event carries null values, not zeros.** Its payload records
+   `maturity: unavailable`, the reason, the attempt count and the basis; a
+   consumer must not read the absent score as a 0% return.
+
 ## P1 remediation — export portability and recoverable analysis jobs (steps 5 and 6)
 
 The acceptance review made two P1 findings: a detail export from a real run

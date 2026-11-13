@@ -609,7 +609,13 @@ function outcomeValue(value: string | null | undefined): string {
   return presentText(value) ?? 'Not available';
 }
 
-function OutcomeCard({ outcome }: { outcome: OutcomeView }): ReactElement {
+function OutcomeCard({
+  outcome,
+  replay = false,
+}: {
+  outcome: OutcomeView;
+  replay?: boolean;
+}): ReactElement {
   const maturity = (outcome?.maturity ?? '').trim().toLowerCase() as OutcomeMaturity | '';
   const horizonDays =
     typeof outcome?.horizon_days === 'number' && Number.isFinite(outcome.horizon_days)
@@ -635,6 +641,15 @@ function OutcomeCard({ outcome }: { outcome: OutcomeView }): ReactElement {
   } else {
     explanation = 'Outcome state is not recognised by this version.';
   }
+  const recordedReason = presentText(outcome?.unavailable_reason);
+  const basis = outcome?.measurement_basis ?? null;
+  const basisLabel = presentText(basis?.basis);
+  const referenceAt = presentText(basis?.reference_at);
+  const entryPrice = presentText(outcome?.price_at_decision);
+  const horizonPrice = presentText(outcome?.price_at_horizon);
+  const observedFrom = presentText(outcome?.price_observed_at_decision);
+  const observedTo = presentText(outcome?.price_observed_at);
+  const decisionReturn = presentText(outcome?.decision_return_pct);
 
   return (
     <article
@@ -663,10 +678,51 @@ function OutcomeCard({ outcome }: { outcome: OutcomeView }): ReactElement {
             <dt className="text-slate-400">Portfolio impact</dt>
             <dd className="text-right text-slate-200">{outcomeValue(outcome?.portfolio_impact)}</dd>
           </div>
+          {replay ? (
+            <>
+              <div className="flex items-baseline justify-between gap-2">
+                <dt className="text-slate-400">Decision return</dt>
+                <dd className="text-right text-slate-200">{outcomeValue(decisionReturn)}</dd>
+              </div>
+              <div className="flex items-baseline justify-between gap-2">
+                <dt className="text-slate-400">Entry → horizon</dt>
+                <dd className="text-right font-mono text-xs text-slate-200">
+                  {outcomeValue(entryPrice)} → {outcomeValue(horizonPrice)}
+                </dd>
+              </div>
+              <div className="flex items-baseline justify-between gap-2">
+                <dt className="text-slate-400">Observed</dt>
+                <dd className="text-right text-xs text-slate-300">
+                  {observedFrom ? formatRunTimestamp(observedFrom) : 'Unknown'}
+                  {' → '}
+                  {observedTo ? formatRunTimestamp(observedTo) : 'Unknown'}
+                </dd>
+              </div>
+              <div className="flex items-baseline justify-between gap-2">
+                <dt className="text-slate-400">Basis</dt>
+                <dd className="text-right text-xs text-slate-300">
+                  {basisLabel ?? 'Not recorded'}
+                  {referenceAt ? ` from ${formatRunTimestamp(referenceAt)}` : ''}
+                </dd>
+              </div>
+              <div className="flex items-baseline justify-between gap-2">
+                <dt className="text-slate-400">Revision</dt>
+                <dd className="text-right font-mono text-xs text-slate-200">
+                  {outcome?.revision ?? 'Not recorded'}
+                </dd>
+              </div>
+            </>
+          ) : null}
         </dl>
       ) : (
         <p className="mt-2 text-sm leading-relaxed text-slate-400">{explanation}</p>
       )}
+
+      {recordedReason && maturity !== 'evaluated' ? (
+        <p className="mt-2 break-words text-xs leading-relaxed text-slate-400">
+          {recordedReason}
+        </p>
+      ) : null}
 
       <p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-slate-400">
         Method {presentText(outcome?.method_version) ?? 'not recorded'}
@@ -1285,6 +1341,7 @@ export function DecisionDetail({
               <OutcomeCard
                 key={`${outcome?.horizon_days ?? 'horizon'}-${index}`}
                 outcome={outcome}
+                replay={Boolean(scene?.active)}
               />
             ))}
           </div>
