@@ -75,6 +75,9 @@ from services.cost_accounting import (  # noqa: E402
 from services.cost_accounting import (  # noqa: E402
     price_table_cost as price_table_cost,
 )
+from services.cost_accounting import (  # noqa: E402
+    pricing_version as pricing_version,
+)
 from services.debate_protocol import (  # noqa: E402
     HEURISTIC_PROTOCOL_VERSION,
     DebateProtocol,
@@ -337,6 +340,14 @@ class AgentRunResult:
     output_tokens: int = 0
     cached_input_tokens: int = 0
     cache_write_tokens: int = 0
+    #: The measured and estimated splits behind ``input_tokens``/``output_tokens``.
+    #: Kept apart so a mixed reply is not relabelled as wholly provider-reported,
+    #: and so settlement can record what was observed and what was inferable.
+    measured_input_tokens: int = 0
+    measured_output_tokens: int = 0
+    estimated_input_tokens: int = 0
+    estimated_output_tokens: int = 0
+    tokens_measured: bool = False
     #: The **billed** charge, when a provider reported one. ``None`` means the
     #: charge is unknown - not zero. Nothing in this module may fill it with a
     #: price-table estimate; that value belongs in ``estimated_cost_usd``.
@@ -347,7 +358,12 @@ class AgentRunResult:
     #: ``billed_provider_reported`` | ``price_table_estimate`` |
     #: ``unknown_pricing`` | ``unknown``.
     cost_basis: str = ""
+    #: Why ``api_cost_usd`` is null. Populated even when an estimate exists; the
+    #: estimate does not make the missing bill a zero.
     cost_unknown_reason: str = ""
+    #: The price table the estimate was calculated from, so a later rate edit
+    #: does not silently re-price history.
+    pricing_version: str = ""
     source: str = "crewai"  # crewai | heuristic_fallback
     error: str | None = None
     latency_ms: int = 0
@@ -1105,6 +1121,7 @@ class AlphaAgentOrchestrator:
                 cap,
             )
         bull_case, bear_case = _extract_debate(result)
+        measured_tokens = bool(usage.has_split or usage.total)
         return AgentRunResult(
             bull_case=bull_case,
             bear_case=bear_case,
@@ -1115,6 +1132,11 @@ class AlphaAgentOrchestrator:
             output_tokens=usage.output_tokens,
             cached_input_tokens=usage.cached_read_tokens,
             cache_write_tokens=usage.cache_write_tokens,
+            measured_input_tokens=usage.input_tokens if measured_tokens else 0,
+            measured_output_tokens=usage.output_tokens if measured_tokens else 0,
+            estimated_input_tokens=0 if measured_tokens else usage.input_tokens,
+            estimated_output_tokens=0 if measured_tokens else usage.output_tokens,
+            tokens_measured=measured_tokens,
             # The legacy crew path never reports a provider charge, so the billed
             # figure stays null. The price-table number is published beside it and
             # labelled; presenting it as ``api_cost_usd`` was the defect.
@@ -1124,6 +1146,7 @@ class AlphaAgentOrchestrator:
             cost_unknown_reason=(
                 UNKNOWN_PROVIDER_COST if priced_cost is not None else UNKNOWN_MODEL_PRICING
             ),
+            pricing_version=pricing_version() if priced_cost is not None else "",
             source="crewai",
             latency_ms=int((time.monotonic() - started) * 1000),
         )
@@ -1249,6 +1272,33 @@ class AlphaAgentOrchestrator:
         )
         usage = outcome.usage
         run = outcome.run
+        # Carry every cost quantity the protocol recorded, not only the billed
+        # one. The real adapter reports tokens and no dollars; dropping the
+        # price-table estimate here made settlement record the call as unknown
+        # even though the estimate existed.
+        billed = usage.cost_usd
+        estimated = usage.price_table_cost_usd if usage.price_table_cost_complete else None
+        if billed is not None:
+            cost_basis = "billed_provider_reported"
+        elif estimated is not None:
+            cost_basis = "price_table_estimate"
+        elif usage.calls or usage.timed_out_calls:
+            cost_basis = "unknown"
+        else:
+            cost_basis = ""
+        unknown_reason = ""
+        if billed is None:
+            unknown_reason = (
+                usage.billed_cost_unknown_reason
+                or usage.price_table_unknown_reason
+                or (
+                    UNKNOWN_MODEL_PRICING
+                    if usage.price_table_unpriced_calls
+                    else UNKNOWN_PROVIDER_COST
+                )
+            )
+        measured_input = usage.measured_input_tokens
+        measured_output = usage.measured_output_tokens
         return AgentRunResult(
             proposal=proposal,
             reasoning=adjudication.reasoning,
@@ -1259,7 +1309,19 @@ class AlphaAgentOrchestrator:
             output_tokens=usage.output_tokens,
             cached_input_tokens=0,
             cache_write_tokens=0,
-            api_cost_usd=usage.cost_usd,
+            measured_input_tokens=measured_input,
+            measured_output_tokens=measured_output,
+            estimated_input_tokens=usage.estimated_input_tokens,
+            estimated_output_tokens=usage.estimated_output_tokens,
+            # A mixed reply is not relabelled as measured just because some
+            # calls reported counts; the split fields above carry the detail.
+            tokens_measured=bool(measured_input or measured_output)
+            and not (usage.estimated_input_tokens or usage.estimated_output_tokens),
+            api_cost_usd=billed,
+            estimated_cost_usd=estimated,
+            cost_basis=cost_basis,
+            cost_unknown_reason=(unknown_reason[:64] if unknown_reason else ""),
+            pricing_version=usage.pricing_version,
             source="crewai",
             latency_ms=int((time.monotonic() - started) * 1000),
             decision_run_id=str(run.id) if run is not None else None,
@@ -1406,6 +1468,7 @@ class CrewAIStageClient:
             reported=measured,
             tokens_measured=measured,
             price_table_cost_usd=priced,
+            pricing_version=pricing_version() if priced is not None else "",
             cost_unknown_reason=(
                 UNKNOWN_PROVIDER_COST
                 if measured

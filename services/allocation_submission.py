@@ -58,8 +58,8 @@ from core.log_safety import log_safe
 from core.models import Asset, Portfolio
 from services.allocation_provider import allocation_budget, build_allocation_client
 from services.budget import (
+    allocation_call_key,
     check_and_reserve,
-    logical_call_key,
     mark_unknown,
     reconcile_report,
     reserve_bound_for_run,
@@ -1493,6 +1493,41 @@ def dispatch_submission(submission: AllocationSubmission) -> bool:
         return False
 
 
+def _paid_attempt_identity(submission: AllocationSubmission) -> tuple[str, int, str, str]:
+    """Resolve and durably pin the billable-attempt identity.
+
+    Returns ``(reservation_key, paid_attempt, owner, request_key)``. The key is
+    derived from the submission's primary key and the attempt ordinal, not from
+    the caller's idempotency key: two portfolios may submit the same user key,
+    and a retried worker must replay its own reservation rather than hold a
+    second one. The key is persisted before the first reservation so a retry
+    after a crash sees the same identity.
+    """
+    owner = f"portfolio:{submission.portfolio_id}"
+    request_key = submission.request_hash or ""
+    if submission.reservation_key:
+        return submission.reservation_key, submission.paid_attempt or 1, owner, request_key
+    paid_attempt = max(1, int(submission.attempt_count or 1))
+    candidate = allocation_call_key(submission.pk, paid_attempt)
+    updated = AllocationSubmission.objects.filter(pk=submission.pk, reservation_key="").update(
+        reservation_key=candidate, paid_attempt=paid_attempt
+    )
+    if updated:
+        submission.reservation_key = candidate
+        submission.paid_attempt = paid_attempt
+        return candidate, paid_attempt, owner, request_key
+    stored = (
+        AllocationSubmission.objects.filter(pk=submission.pk)
+        .values_list("reservation_key", "paid_attempt")
+        .first()
+    )
+    if stored and stored[0]:
+        submission.reservation_key = stored[0]
+        submission.paid_attempt = stored[1] or paid_attempt
+        return submission.reservation_key, submission.paid_attempt, owner, request_key
+    return candidate, paid_attempt, owner, request_key
+
+
 def process_submission(
     submission: AllocationSubmission | str,
     *,
@@ -1552,21 +1587,38 @@ def process_submission(
             # submission writes no provider_started checkpoint and makes no call.
             ledger_key = None
             if submission.mode == "live":
-                ledger_key = logical_call_key("allocation", submission.idempotency_key)
+                (
+                    ledger_key,
+                    paid_attempt,
+                    reservation_owner,
+                    request_key,
+                ) = _paid_attempt_identity(submission)
                 reserve = check_and_reserve(
                     call_key=ledger_key,
                     upper_bound_usd=reserve_bound_for_run("allocation"),
                     provider=getattr(client, "provider", "") or "",
                     model=getattr(client, "model", "") or "",
                     stage="portfolio_analysis",
-                    metadata={"submission_id": str(submission.id)},
+                    owner=reservation_owner,
+                    request_key=request_key,
+                    scope="allocation",
+                    scope_key=str(submission.portfolio_id),
+                    metadata={
+                        "submission_id": str(submission.id),
+                        "portfolio_id": submission.portfolio_id,
+                        "request_hash": request_key,
+                        "idempotency_key": submission.idempotency_key,
+                        "paid_attempt": paid_attempt,
+                    },
                 )
                 if not reserve.allowed:
-                    return _finish_submission(
-                        submission.pk,
-                        status=AllocationSubmissionStatus.FAILED,
-                        code=reserve.reason,
-                        detail=(
+                    if reserve.reason == "ai_spend_reservation_conflict":
+                        detail = (
+                            "The reservation identity already belongs to a different "
+                            "owner or request. The provider was not called."
+                        )
+                    else:
+                        detail = (
                             f"The daily AI spend ceiling would be exceeded: committed "
                             f"${reserve.committed_usd} plus a reserved upper bound of "
                             f"${reserve.upper_bound_usd} against a ${reserve.limit_usd} "
@@ -1574,7 +1626,12 @@ def process_submission(
                             f"${reserve.estimated_spend_usd}, reserved "
                             f"${reserve.reserved_usd}, unknown-cost runs "
                             f"{reserve.unknown_cost_runs}). The provider was not called."
-                        ),
+                        )
+                    return _finish_submission(
+                        submission.pk,
+                        status=AllocationSubmissionStatus.FAILED,
+                        code=reserve.reason,
+                        detail=detail,
                         owner=owner,
                         now=timezone.now(),
                     )

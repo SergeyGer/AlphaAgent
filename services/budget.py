@@ -61,15 +61,20 @@ __all__ = [
     "MICRO_CENT",
     "BudgetState",
     "SpendDecision",
+    "allocation_call_key",
     "budget_state",
     "check_and_reserve",
     "cost_state",
+    "experiment_call_key",
     "logical_call_key",
+    "mark_attempt_dispatched",
     "mark_unknown",
     "reconcile_decision_run",
     "reconcile_report",
     "reserve_bound_for_run",
+    "scope_state",
     "settle_call",
+    "settle_confirmed_charge",
     "spend_limit",
     "spend_today",
     "utc_day",
@@ -84,6 +89,14 @@ MICRO_CENT = Decimal("0.000001")
 #: branch on it without parsing a message.
 REASON_RESERVE_EXCEEDED = "ai_spend_reserve_exceeded"
 REASON_CEILING_ALREADY_REACHED = "ai_spend_ceiling"
+#: The call key already belongs to a different owner or request. Replaying it
+#: would let one portfolio spend another's reservation.
+REASON_RESERVATION_CONFLICT = "ai_spend_reservation_conflict"
+#: The attempt would cross the experiment's registered cumulative ceiling.
+REASON_EXPERIMENT_EXCEEDED = "ai_spend_experiment_exceeded"
+#: The reservation exists but a previous worker already dispatched it. Calling
+#: again would spend twice for one logical attempt.
+REASON_ALREADY_DISPATCHED = "ai_spend_attempt_already_dispatched"
 
 
 def _money(value) -> Decimal:
@@ -123,6 +136,52 @@ def logical_call_key(prefix: str, identity: str | int | None) -> str:
     if not token:
         token = f"anonymous-{hashlib.sha256(prefix.encode('utf-8')).hexdigest()[:16]}"
     return f"{prefix}:{token}"[:255]
+
+
+def allocation_call_key(submission_id, paid_attempt: int = 1) -> str:
+    """The reservation identity for one portfolio-analysis paid attempt.
+
+    Built from the durable submission, not the caller's idempotency key: the
+    uniqueness constraint on ``AllocationSubmission`` is ``(portfolio, key)``, so
+    two portfolios may legitimately submit the same key and must not share a
+    reservation. The attempt ordinal is durable too, so a worker that retries
+    replays its own row rather than reserving a second one.
+    """
+    token = str(submission_id).strip() or "unknown"
+    try:
+        ordinal = max(1, int(paid_attempt or 1))
+    except (TypeError, ValueError):
+        ordinal = 1
+    return logical_call_key("allocation", f"{token}:attempt-{ordinal}")
+
+
+def experiment_call_key(
+    *,
+    namespace: str,
+    arm: str,
+    opportunity_key: str,
+    attempt: int,
+    identity_hash: str = "",
+) -> str:
+    """The reservation identity for one billable experiment attempt.
+
+    The namespace scopes the execution; the attempt identity keeps two model or
+    budget configurations of the same arm/opportunity apart. The run key is
+    deterministic, so a redelivered attempt replays its reservation.
+    """
+    ordinal = max(1, int(attempt or 1))
+    token = ":".join(
+        part
+        for part in (
+            str(namespace or "").strip(),
+            str(arm or "").strip(),
+            str(opportunity_key or "").strip(),
+            f"attempt-{ordinal}",
+            str(identity_hash or "").strip(),
+        )
+        if part
+    )
+    return logical_call_key("experiment", token)
 
 
 def spend_limit() -> Decimal:
@@ -305,6 +364,14 @@ class SpendDecision:
     unknown_reserved_usd: Decimal = ZERO
     unknown_cost_runs: int = 0
     replay: bool = False
+    #: The allowance this call was booked against, and its cumulative figures.
+    #: Empty for the daily-wide callers that have no second ceiling.
+    scope: str = ""
+    scope_key: str = ""
+    scope_limit_usd: Decimal | None = None
+    scope_committed_usd: Decimal = ZERO
+    scope_remaining_usd: Decimal | None = None
+    dispatched: bool = False
 
     def as_dict(self) -> dict[str, str | int | bool | None]:
         return {
@@ -321,6 +388,16 @@ class SpendDecision:
             "unknown_reserved_usd": str(self.unknown_reserved_usd),
             "unknown_cost_runs": self.unknown_cost_runs,
             "replay": self.replay,
+            "scope": self.scope or None,
+            "scope_key": self.scope_key or None,
+            "scope_limit_usd": (
+                str(self.scope_limit_usd) if self.scope_limit_usd is not None else None
+            ),
+            "scope_committed_usd": (str(self.scope_committed_usd) if self.scope else None),
+            "scope_remaining_usd": (
+                str(self.scope_remaining_usd) if self.scope_remaining_usd is not None else None
+            ),
+            "dispatched": self.dispatched,
         }
 
 
@@ -346,9 +423,17 @@ def _decision(
     upper_bound: Decimal,
     totals: dict,
     replay: bool = False,
+    scope: str = "",
+    scope_key: str = "",
+    scope_limit_usd: Decimal | None = None,
 ) -> SpendDecision:
     limit = spend_limit()
     committed = totals["committed"]
+    scope_committed = ZERO
+    scope_remaining = None
+    if scope_limit_usd is not None and scope:
+        scope_committed = _aggregate_for_scope(scope, scope_key)["committed"]
+        scope_remaining = max(_money(scope_limit_usd) - scope_committed, ZERO).quantize(MICRO_CENT)
     return SpendDecision(
         allowed=allowed,
         call_key=call_key,
@@ -363,7 +448,55 @@ def _decision(
         unknown_reserved_usd=totals["unknown_reserved"],
         unknown_cost_runs=totals["unknown"],
         replay=replay,
+        scope=scope,
+        scope_key=scope_key,
+        scope_limit_usd=(_money(scope_limit_usd) if scope_limit_usd is not None else None),
+        scope_committed_usd=scope_committed,
+        scope_remaining_usd=scope_remaining,
     )
+
+
+def _identity_conflict(existing, *, owner: str, request_key: str) -> bool:
+    """True when a reused call key names a different owner or request.
+
+    A ledger key is an identity, not a cache key. Replaying it for another
+    portfolio or another request would hand that caller the first caller's
+    reservation and could authorise spend against a committed day.
+    """
+    metadata = existing.metadata or {}
+    existing_owner = str(metadata.get("owner") or "").strip()
+    existing_request = str(metadata.get("request_key") or "").strip()
+    owner_conflict = bool(owner and existing_owner and str(owner).strip() != existing_owner)
+    request_conflict = bool(
+        request_key and existing_request and str(request_key).strip() != existing_request
+    )
+    return owner_conflict or request_conflict
+
+
+def _adopt_identity(existing, *, owner: str, request_key: str, scope: str, scope_key: str) -> None:
+    """Fill identity fields on a row written before they existed.
+
+    A row with no stored owner cannot be proven to belong to this caller, so the
+    first caller to present an identity adopts it. Every later caller with a
+    different identity is then refused rather than replayed.
+    """
+    metadata = dict(existing.metadata or {})
+    changed = False
+    if owner and not str(metadata.get("owner") or "").strip():
+        metadata["owner"] = str(owner).strip()
+        changed = True
+    if request_key and not str(metadata.get("request_key") or "").strip():
+        metadata["request_key"] = str(request_key).strip()
+        changed = True
+    if scope and not existing.scope:
+        existing.scope = scope[:32]
+        changed = True
+    if scope_key and not existing.scope_key:
+        existing.scope_key = scope_key[:128]
+        changed = True
+    if changed:
+        existing.metadata = metadata
+        existing.save(update_fields=["metadata", "scope", "scope_key", "updated_at"])
 
 
 def check_and_reserve(
@@ -375,16 +508,25 @@ def check_and_reserve(
     stage: str = "",
     metadata: dict | None = None,
     now: datetime | None = None,
+    owner: str = "",
+    request_key: str = "",
+    scope: str = "",
+    scope_key: str = "",
+    scope_limit_usd=None,
 ) -> SpendDecision:
     """Reserve ``upper_bound_usd`` for one logical call, or refuse it.
 
     The check and the reservation are one transaction. The request is refused
-    when the **committed** total would exceed the ceiling on the reserved upper
-    bound - before a provider is called, so a refused request cannot spend.
+    when the **committed** total would exceed the daily ceiling on the reserved
+    upper bound - before a provider is called, so a refused request cannot spend.
+    When ``scope_limit_usd`` is supplied, the same projection is checked against
+    that scope's cumulative total as well (the experiment allowance).
 
     Replaying a ``call_key`` is idempotent: the existing row is returned, the
     same bound is not added a second time, and a replay is allowed even if the
-    day has since crossed the ceiling. That is the retry path, not a new spend.
+    day has since crossed the ceiling. That is the retry path, not a new spend -
+    but only for the same ``owner`` and ``request_key``. A key reused for a
+    different owner or request is refused, never replayed.
     """
     from core.models import AIUsageLedger
 
@@ -399,12 +541,37 @@ def check_and_reserve(
     moment = now
     day = utc_day(moment)
     enforced = bool(getattr(settings, "AI_SPEND_LIMIT_ENFORCED", True))
+    owner = str(owner or "").strip()[:128]
+    request_key = str(request_key or "").strip()[:128]
+    scope = str(scope or "").strip()[:32]
+    scope_key = str(scope_key or "").strip()[:128]
+    scope_limit = _money(scope_limit_usd) if scope_limit_usd is not None else None
 
     with transaction.atomic():
         _lock_day(day)
+        _lock_scope(scope, scope_key)
         existing = AIUsageLedger.objects.select_for_update().filter(call_key=key).first()
         if existing is not None:
             totals = _aggregate_for_day(day)
+            if _identity_conflict(existing, owner=owner, request_key=request_key):
+                return _decision(
+                    allowed=False,
+                    call_key=key,
+                    reason=REASON_RESERVATION_CONFLICT,
+                    upper_bound=existing.reserved_upper_bound_usd,
+                    totals=totals,
+                    replay=True,
+                    scope=existing.scope or scope,
+                    scope_key=existing.scope_key or scope_key,
+                    scope_limit_usd=scope_limit,
+                )
+            _adopt_identity(
+                existing,
+                owner=owner,
+                request_key=request_key,
+                scope=scope,
+                scope_key=scope_key,
+            )
             return _decision(
                 allowed=True,
                 call_key=key,
@@ -412,6 +579,9 @@ def check_and_reserve(
                 upper_bound=existing.reserved_upper_bound_usd,
                 totals=totals,
                 replay=True,
+                scope=existing.scope or scope,
+                scope_key=existing.scope_key or scope_key,
+                scope_limit_usd=scope_limit,
             )
 
         totals = _aggregate_for_day(day)
@@ -429,8 +599,30 @@ def check_and_reserve(
                 reason=reason,
                 upper_bound=upper_bound,
                 totals=totals,
+                scope=scope,
+                scope_key=scope_key,
+                scope_limit_usd=scope_limit,
             )
 
+        if scope_limit is not None and scope:
+            scope_totals = _aggregate_for_scope(scope, scope_key)
+            if (scope_totals["committed"] + upper_bound).quantize(MICRO_CENT) > scope_limit:
+                return _decision(
+                    allowed=False,
+                    call_key=key,
+                    reason=REASON_EXPERIMENT_EXCEEDED,
+                    upper_bound=upper_bound,
+                    totals=totals,
+                    scope=scope,
+                    scope_key=scope_key,
+                    scope_limit_usd=scope_limit,
+                )
+
+        row_metadata = dict(metadata or {})
+        if owner:
+            row_metadata["owner"] = owner
+        if request_key:
+            row_metadata["request_key"] = request_key
         _row, created = AIUsageLedger.objects.get_or_create(
             call_key=key,
             defaults={
@@ -438,11 +630,13 @@ def check_and_reserve(
                 "provider": (provider or "")[:64],
                 "model": (model or "")[:128],
                 "stage": (stage or "")[:64],
+                "scope": scope,
+                "scope_key": scope_key,
                 "state": "reserved",
                 "reserved_upper_bound_usd": upper_bound,
                 "reserved_usd": upper_bound,
                 "cost_basis": "reserved_upper_bound",
-                "metadata": dict(metadata or {}),
+                "metadata": row_metadata,
             },
         )
         totals = _aggregate_for_day(day)
@@ -453,7 +647,79 @@ def check_and_reserve(
             upper_bound=upper_bound,
             totals=totals,
             replay=not created,
+            scope=scope,
+            scope_key=scope_key,
+            scope_limit_usd=scope_limit,
         )
+
+
+def _lock_scope(scope: str, scope_key: str) -> None:
+    """Serialise reservations against one cumulative allowance (PostgreSQL).
+
+    The daily lock is not enough: two attempts can be booked on different days
+    and still cross one experiment ceiling. A second advisory lock, derived from
+    the scope key, closes that gap.
+    """
+    if connection.vendor != "postgresql" or not scope or not scope_key:
+        return
+    digest = hashlib.sha256(f"{scope}:{scope_key}".encode()).hexdigest()
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT pg_advisory_xact_lock(%s)", [int(digest[:15], 16)])
+
+
+def _aggregate_for_scope(scope: str, scope_key: str) -> dict:
+    """Aggregate the ledger rows belonging to one cumulative allowance."""
+    from django.db.models import Count, Q, Sum
+
+    from core.models import AIUsageLedger
+
+    rows = AIUsageLedger.objects.filter(scope=scope, scope_key=scope_key).aggregate(
+        billed=Sum("billed_usd", default=ZERO),
+        estimated=Sum("estimated_usd", default=ZERO, filter=Q(state="estimated")),
+        reserved=Sum("reserved_usd", default=ZERO),
+        unknown_reserved=Sum("reserved_usd", default=ZERO, filter=Q(state="unknown")),
+        unknown=Count("id", filter=Q(state="unknown")),
+        reserved_rows=Count("id", filter=Q(state="reserved")),
+        total=Count("id"),
+    )
+    billed = _money(rows["billed"])
+    estimated = _money(rows["estimated"])
+    reserved = _money(rows["reserved"])
+    return {
+        "billed": billed,
+        "estimated": estimated,
+        "reserved": reserved,
+        "unknown_reserved": _money(rows["unknown_reserved"]),
+        "unknown": int(rows["unknown"] or 0),
+        "reserved_rows": int(rows["reserved_rows"] or 0),
+        "total": int(rows["total"] or 0),
+        "committed": (billed + estimated + reserved).quantize(MICRO_CENT),
+        "unknown_amount_usd": None,
+    }
+
+
+def scope_state(scope: str, scope_key: str, *, limit_usd=None) -> dict:
+    """Cumulative spend for one allowance, with billed/estimated/unknown separate."""
+    totals = _aggregate_for_scope(scope, scope_key)
+    remaining = None
+    if limit_usd is not None:
+        remaining = max(_money(limit_usd) - totals["committed"], ZERO).quantize(MICRO_CENT)
+    return {
+        "scope": scope,
+        "scope_key": scope_key,
+        "rows": totals["total"],
+        "reserved_rows": totals["reserved_rows"],
+        "unknown_cost_runs": totals["unknown"],
+        "billed_usd": str(totals["billed"]),
+        "estimated_usd": str(totals["estimated"]),
+        "reserved_usd": str(totals["reserved"]),
+        "unknown_reserved_usd": str(totals["unknown_reserved"]),
+        "committed_usd": str(totals["committed"]),
+        "limit_usd": str(_money(limit_usd)) if limit_usd is not None else None,
+        "remaining_usd": str(remaining) if remaining is not None else None,
+        "unknown_amount_usd": None,
+        "basis": "lower_bound",
+    }
 
 
 def _aggregate_for_day(day: date) -> dict:
@@ -507,6 +773,41 @@ def _aggregate_for_day(day: date) -> dict:
     }
 
 
+def _token_split(
+    *,
+    input_tokens: int,
+    output_tokens: int,
+    measured_input_tokens: int | None,
+    measured_output_tokens: int | None,
+    estimated_input_tokens: int | None,
+    estimated_output_tokens: int | None,
+    tokens_measured: bool,
+) -> tuple[int, int, int, int]:
+    """Normalise measured/estimated token counts without pooling them."""
+    if measured_input_tokens is None and estimated_input_tokens is None:
+        measured_in = max(0, int(input_tokens or 0)) if tokens_measured else 0
+        estimated_in = 0 if tokens_measured else max(0, int(input_tokens or 0))
+    else:
+        measured_in = max(0, int(measured_input_tokens or 0))
+        estimated_in = max(0, int(estimated_input_tokens or 0))
+        if not measured_in and not estimated_in and input_tokens:
+            # A caller that supplies a total but an all-zero split did not
+            # actually know the split; fall back to the declared measurement
+            # basis rather than dropping the tokens.
+            measured_in = max(0, int(input_tokens or 0)) if tokens_measured else 0
+            estimated_in = 0 if tokens_measured else max(0, int(input_tokens or 0))
+    if measured_output_tokens is None and estimated_output_tokens is None:
+        measured_out = max(0, int(output_tokens or 0)) if tokens_measured else 0
+        estimated_out = 0 if tokens_measured else max(0, int(output_tokens or 0))
+    else:
+        measured_out = max(0, int(measured_output_tokens or 0))
+        estimated_out = max(0, int(estimated_output_tokens or 0))
+        if not measured_out and not estimated_out and output_tokens:
+            measured_out = max(0, int(output_tokens or 0)) if tokens_measured else 0
+            estimated_out = 0 if tokens_measured else max(0, int(output_tokens or 0))
+    return measured_in, measured_out, estimated_in, estimated_out
+
+
 def settle_call(
     *,
     call_key: str,
@@ -516,6 +817,12 @@ def settle_call(
     input_tokens: int = 0,
     output_tokens: int = 0,
     tokens_measured: bool = False,
+    measured_input_tokens: int | None = None,
+    measured_output_tokens: int | None = None,
+    estimated_input_tokens: int | None = None,
+    estimated_output_tokens: int | None = None,
+    pricing_version: str = "",
+    billed_cost_unknown_reason: str = "",
     metadata: dict | None = None,
     cost_basis: str = "",
 ) -> object:
@@ -524,7 +831,8 @@ def settle_call(
     A terminal row is returned unchanged: a redelivered result must not move a
     billed charge into an estimate, nor re-open an unknown charge. ``billed_usd``
     is only ever a provider-reported figure; a price-table number belongs in
-    ``estimated_usd``.
+    ``estimated_usd``. A later *confirmed* charge is applied by
+    :func:`settle_confirmed_charge`, which replaces the accounting amount once.
     """
     from django.utils import timezone
 
@@ -551,6 +859,16 @@ def settle_call(
         state = "unknown"
         basis = cost_basis or "unknown"
         reason = (unknown_reason or UNKNOWN_PROVIDER_COST)[:64]
+    measured_in, measured_out, estimated_in, estimated_out = _token_split(
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        measured_input_tokens=measured_input_tokens,
+        measured_output_tokens=measured_output_tokens,
+        estimated_input_tokens=estimated_input_tokens,
+        estimated_output_tokens=estimated_output_tokens,
+        tokens_measured=tokens_measured,
+    )
+    billed_reason = (billed_cost_unknown_reason or (reason if billed is None else ""))[:64]
 
     with transaction.atomic():
         row = AIUsageLedger.objects.select_for_update().filter(call_key=key).first()
@@ -562,10 +880,19 @@ def settle_call(
         row.billed_usd = billed
         row.estimated_usd = estimated
         row.unknown_reason = reason
+        row.billed_cost_unknown_reason = billed_reason
         row.cost_basis = basis
-        row.input_tokens = max(0, int(input_tokens or 0))
-        row.output_tokens = max(0, int(output_tokens or 0))
-        row.tokens_measured = bool(tokens_measured)
+        row.input_tokens = measured_in + estimated_in
+        row.output_tokens = measured_out + estimated_out
+        row.measured_input_tokens = measured_in
+        row.measured_output_tokens = measured_out
+        row.estimated_input_tokens = estimated_in
+        row.estimated_output_tokens = estimated_out
+        row.tokens_measured = bool(measured_in or measured_out) and not (
+            estimated_in or estimated_out
+        )
+        if pricing_version:
+            row.pricing_version = str(pricing_version)[:64]
         row.settled_at = timezone.now()
         if state == "unknown":
             # The charge is unknown, so the conservative bound stays held. It is
@@ -581,17 +908,178 @@ def settle_call(
                 "billed_usd",
                 "estimated_usd",
                 "unknown_reason",
+                "billed_cost_unknown_reason",
                 "cost_basis",
                 "reserved_usd",
                 "input_tokens",
                 "output_tokens",
+                "measured_input_tokens",
+                "measured_output_tokens",
+                "estimated_input_tokens",
+                "estimated_output_tokens",
                 "tokens_measured",
+                "pricing_version",
                 "metadata",
                 "settled_at",
                 "updated_at",
             ]
         )
     return row
+
+
+def settle_confirmed_charge(
+    *,
+    call_key: str,
+    billed_usd,
+    estimated_usd=None,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+    measured_input_tokens: int | None = None,
+    measured_output_tokens: int | None = None,
+    estimated_input_tokens: int | None = None,
+    estimated_output_tokens: int | None = None,
+    pricing_version: str = "",
+    metadata: dict | None = None,
+) -> object:
+    """Apply a provider-confirmed charge to an already-settled attempt.
+
+    The first settlement may have been a price-table estimate or an unresolved
+    outcome whose reservation was still held. A confirmed charge now arrives:
+    the **accounting amount is replaced**, not added. The previous state and
+    amount are kept in metadata for audit, the reservation is released, and the
+    row moves to ``billed`` exactly once. Repeating the same confirmation is a
+    no-op; a different amount after a billed row is refused rather than silently
+    rewriting a measurement.
+    """
+    from django.utils import timezone
+
+    from core.models import AIUsageLedger
+
+    key = str(call_key or "").strip()
+    if not key:
+        raise ValueError("call_key must not be empty.")
+    amount = _money(billed_usd)
+    tokens_supplied = any(
+        value not in (None, 0)
+        for value in (
+            input_tokens,
+            output_tokens,
+            measured_input_tokens,
+            measured_output_tokens,
+            estimated_input_tokens,
+            estimated_output_tokens,
+        )
+    )
+    measured_in, measured_out, estimated_in, estimated_out = _token_split(
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        measured_input_tokens=measured_input_tokens,
+        measured_output_tokens=measured_output_tokens,
+        estimated_input_tokens=estimated_input_tokens,
+        estimated_output_tokens=estimated_output_tokens,
+        tokens_measured=True,
+    )
+
+    with transaction.atomic():
+        row = AIUsageLedger.objects.select_for_update().filter(call_key=key).first()
+        if row is None:
+            raise ValueError(f"No reservation exists for call_key {key!r}.")
+        if row.state == "billed":
+            if _money(row.billed_usd) == amount:
+                return row
+            raise ValueError(
+                f"call_key {key!r} already has a different confirmed charge; "
+                "a second confirmation cannot replace a recorded bill."
+            )
+        if not tokens_supplied:
+            measured_in = row.measured_input_tokens
+            measured_out = row.measured_output_tokens
+            estimated_in = row.estimated_input_tokens
+            estimated_out = row.estimated_output_tokens
+        previous_state = row.state
+        previous_estimate = row.estimated_usd
+        previous_unknown_reason = row.unknown_reason
+        history = {
+            "previous_state": previous_state,
+            "previous_estimated_usd": str(previous_estimate)
+            if previous_estimate is not None
+            else None,
+            "previous_unknown_reason": previous_unknown_reason or None,
+            "confirmed_charge": True,
+        }
+        row.state = "billed"
+        row.billed_usd = amount
+        row.estimated_usd = None
+        row.unknown_reason = ""
+        row.billed_cost_unknown_reason = ""
+        row.cost_basis = "billed_provider_reported"
+        row.reserved_usd = ZERO
+        row.confirmed_at = timezone.now()
+        row.settled_at = row.settled_at or row.confirmed_at
+        row.revision = (row.revision or 0) + (0 if previous_state == "reserved" else 1)
+        row.input_tokens = measured_in + estimated_in
+        row.output_tokens = measured_out + estimated_out
+        row.measured_input_tokens = measured_in
+        row.measured_output_tokens = measured_out
+        row.estimated_input_tokens = estimated_in
+        row.estimated_output_tokens = estimated_out
+        row.tokens_measured = bool(measured_in or measured_out) and not (
+            estimated_in or estimated_out
+        )
+        if pricing_version:
+            row.pricing_version = str(pricing_version)[:64]
+        row.metadata = {**(row.metadata or {}), **history, **dict(metadata or {})}
+        row.save(
+            update_fields=[
+                "state",
+                "billed_usd",
+                "estimated_usd",
+                "unknown_reason",
+                "billed_cost_unknown_reason",
+                "cost_basis",
+                "reserved_usd",
+                "confirmed_at",
+                "revision",
+                "input_tokens",
+                "output_tokens",
+                "measured_input_tokens",
+                "measured_output_tokens",
+                "estimated_input_tokens",
+                "estimated_output_tokens",
+                "tokens_measured",
+                "pricing_version",
+                "metadata",
+                "settled_at",
+                "updated_at",
+            ]
+        )
+    return row
+
+
+def mark_attempt_dispatched(call_key: str) -> bool:
+    """Claim the right to make the one billable call for a reservation.
+
+    Returns ``True`` the first time and ``False`` on every replay. A worker that
+    reserved and then died before calling leaves ``dispatched_at`` unset, so the
+    next attempt may still dispatch; a worker that died after setting it stops
+    here rather than spending a second time for one logical attempt.
+    """
+    from django.utils import timezone
+
+    from core.models import AIUsageLedger
+
+    key = str(call_key or "").strip()
+    if not key:
+        raise ValueError("call_key must not be empty.")
+    with transaction.atomic():
+        row = AIUsageLedger.objects.select_for_update().filter(call_key=key).first()
+        if row is None:
+            raise ValueError(f"No reservation exists for call_key {key!r}.")
+        if row.dispatched_at is not None:
+            return False
+        row.dispatched_at = timezone.now()
+        row.save(update_fields=["dispatched_at", "updated_at"])
+    return True
 
 
 def mark_unknown(
@@ -611,6 +1099,18 @@ def mark_unknown(
     )
 
 
+def _usage_token_split(usage: dict) -> dict:
+    """Read measured/estimated token blocks from a usage payload."""
+    measured = usage.get("measured_tokens") or {}
+    estimated = usage.get("estimated_tokens") or {}
+    return {
+        "measured_input_tokens": int(measured.get("input") or 0),
+        "measured_output_tokens": int(measured.get("output") or 0),
+        "estimated_input_tokens": int(estimated.get("input") or 0),
+        "estimated_output_tokens": int(estimated.get("output") or 0),
+    }
+
+
 def reconcile_report(call_key: str, report: dict | None) -> object:
     """Reconcile a reservation from an allocation adapter's ``report()``.
 
@@ -624,42 +1124,47 @@ def reconcile_report(call_key: str, report: dict | None) -> object:
     estimated = usage.get("price_table_cost_usd")
     input_tokens = int(usage.get("input_tokens") or 0)
     output_tokens = int(usage.get("output_tokens") or 0)
+    split = _usage_token_split(usage)
+    measured_tokens = bool(split["measured_input_tokens"] or split["measured_output_tokens"])
+    reason = usage.get("billed_cost_unknown_reason") or ""
     metadata = {
         "adapter": (report or {}).get("adapter"),
         "cost_basis_from_report": usage.get("monetary_ceiling_basis"),
-        "billed_cost_unknown_reason": usage.get("billed_cost_unknown_reason"),
+        "billed_cost_unknown_reason": reason or None,
         "calls": int(usage.get("calls") or 0),
+    }
+    common = {
+        "call_key": call_key,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "tokens_measured": measured_tokens,
+        "measured_input_tokens": split["measured_input_tokens"],
+        "measured_output_tokens": split["measured_output_tokens"],
+        "estimated_input_tokens": split["estimated_input_tokens"],
+        "estimated_output_tokens": split["estimated_output_tokens"],
+        "pricing_version": str(usage.get("pricing_version") or ""),
+        "billed_cost_unknown_reason": reason,
     }
     if billed is not None:
         return settle_call(
-            call_key=call_key,
             billed_usd=billed,
             estimated_usd=estimated,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            tokens_measured=True,
             metadata=metadata,
             cost_basis="billed_provider_reported",
+            **common,
         )
     if estimated is not None:
         return settle_call(
-            call_key=call_key,
             estimated_usd=estimated,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            tokens_measured=True,
             metadata={**metadata, "billed_cost_reported": False},
             cost_basis="price_table_estimate",
+            **common,
         )
     return settle_call(
-        call_key=call_key,
-        unknown_reason=usage.get("billed_cost_unknown_reason")
-        or "allocation_provider_reported_no_cost",
-        input_tokens=input_tokens,
-        output_tokens=output_tokens,
-        tokens_measured=False,
+        unknown_reason=reason or "allocation_provider_reported_no_cost",
         metadata={**metadata, "billed_cost_reported": False},
         cost_basis="unknown",
+        **common,
     )
 
 
@@ -678,45 +1183,47 @@ def reconcile_decision_run(call_key: str, run_result) -> object:
     has_usage = bool(
         input_tokens or output_tokens or int(getattr(run_result, "tokens_used", 0) or 0)
     )
+    reason = str(getattr(run_result, "cost_unknown_reason", "") or "") or (
+        "" if billed is not None else UNKNOWN_PROVIDER_COST
+    )
     metadata = {
         "source": getattr(run_result, "source", "") or None,
         "cost_basis_from_run": getattr(run_result, "cost_basis", "") or None,
         "tokens_used": int(getattr(run_result, "tokens_used", 0) or 0),
+        "billed_cost_reported": billed is not None,
+    }
+    common = {
+        "call_key": call_key,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "measured_input_tokens": int(getattr(run_result, "measured_input_tokens", 0) or 0),
+        "measured_output_tokens": int(getattr(run_result, "measured_output_tokens", 0) or 0),
+        "estimated_input_tokens": int(getattr(run_result, "estimated_input_tokens", 0) or 0),
+        "estimated_output_tokens": int(getattr(run_result, "estimated_output_tokens", 0) or 0),
+        "tokens_measured": bool(getattr(run_result, "tokens_measured", False)),
+        "pricing_version": str(getattr(run_result, "pricing_version", "") or ""),
+        "billed_cost_unknown_reason": reason,
     }
     if billed is not None:
         return settle_call(
-            call_key=call_key,
             billed_usd=billed,
             estimated_usd=estimated,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            tokens_measured=bool(getattr(run_result, "tokens_measured", False)),
             metadata=metadata,
             cost_basis="billed_provider_reported",
+            **common,
         )
     if estimated is not None and has_usage:
         return settle_call(
-            call_key=call_key,
             estimated_usd=estimated,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            tokens_measured=True,
-            metadata={
-                **metadata,
-                "billed_cost_reported": False,
-                "estimate_source": "price_table",
-            },
+            metadata={**metadata, "estimate_source": "price_table"},
             cost_basis="price_table_estimate",
+            **common,
         )
-    reason = getattr(run_result, "cost_unknown_reason", "") or UNKNOWN_PROVIDER_COST
     return settle_call(
-        call_key=call_key,
         unknown_reason=reason,
-        input_tokens=input_tokens,
-        output_tokens=output_tokens,
-        tokens_measured=bool(getattr(run_result, "tokens_measured", False)),
-        metadata={**metadata, "billed_cost_reported": False},
+        metadata=metadata,
         cost_basis="unknown",
+        **common,
     )
 
 

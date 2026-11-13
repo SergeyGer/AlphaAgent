@@ -302,6 +302,14 @@ Provider/API spend is **external money**, not portfolio cash. It is reported in
   never written as a zero. The only measured zero is a run that made no model
   call at all (`cost_basis: "deterministic_no_model_call"`), where zero is
   exact by construction.
+* The daily ledger (`AIUsageLedger`) carries the same separation. Each row
+  records measured and estimated token splits, `billed_usd`, `estimated_usd`,
+  `pricing_version` (the price table digest), `billed_cost_unknown_reason` and
+  the allowance scope. A provider-reported charge reported **after** an estimate
+  or an unresolved outcome is applied by `settle_confirmed_charge`: the row
+  moves to `billed`, the estimate is replaced (kept only as metadata), the held
+  reservation is released, and `revision` increments once. Replaying the same
+  confirmation is a no-op; a different amount after a billed row is refused.
 * A failed or timed-out call's cost stays in the record when the client reported
   usage for it (`failed_attempt_usage`, `timeout_reconciled`); a timed-out call
   that could not be reconciled is counted in `unreconciled_timeout_calls` and
@@ -413,6 +421,32 @@ Version 3 records the resolved attempt identity, the benchmark observations and
 the fill-time validation inputs a rebuild needs. A version-2 archive was
 produced under the decision-time quantity semantics; the rebuild refuses it by
 name rather than rebuilding it as if the same arithmetic produced it.
+
+#### 3.1a.1 Spend allowances
+
+`run_experiment` passes the opportunity set's registered
+`pre_registration.cost_ceiling_usd` into the runner. The value lowers the
+protocol's monetary budget when it is stricter, and every billable
+`(arm, opportunity, attempt)` is reserved against three allowances before the
+provider is called:
+
+| Allowance | Source | Refusal |
+| --- | --- | --- |
+| Daily | `AI_DAILY_SPEND_LIMIT_USD` over the `AIUsageLedger` day | `ai_spend_reserve_exceeded` / `ai_spend_ceiling` |
+| Run | the resolved `ProtocolBudget.monetary_budget_usd` | the reservation bound above |
+| Experiment | the registered ceiling, accumulated over the execution namespace | `ai_spend_experiment_exceeded` |
+
+A refused attempt is a visible failed run with that stable code and a cost block
+saying the provider was not called; it stays in the denominator. The report
+publishes `execution.allowances` with the three ceilings and
+`execution.allowances.ledger` (rows, billed, estimated, reserved, committed,
+remaining) for the execution's `scope_key`. A scripted `--provider stub` client
+is not billable and does not reserve; a real or explicitly declared billable
+client is. The ledger key is the execution namespace, arm, opportunity, attempt
+ordinal and resolved attempt identity, and `mark_attempt_dispatched` records the
+one dispatch, so a replay cannot spend twice for one attempt. The allowance is
+an upper bound, not a forecast: a settled fraction-of-a-cent estimate does not
+free the whole bound for the next attempt.
 
 #### 3.1b Execution namespace and the registered metric
 

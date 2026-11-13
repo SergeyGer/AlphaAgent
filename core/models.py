@@ -443,6 +443,13 @@ class AIUsageLedger(models.Model):
     for an ``unknown`` charge: the operator cannot prove the call was free, so
     the conservative bound remains committed. ``reserved_upper_bound_usd``
     preserves the bound the run was authorised against, even after release.
+
+    Identity is explicit. ``scope``/``scope_key`` name the allowance a call was
+    booked against (a portfolio for an allocation, an experiment namespace for
+    an arm attempt), so a cumulative experiment ceiling can be checked without
+    reinterpreting the call key. ``pricing_version`` identifies the price table
+    the estimate came from, and ``billed_cost_unknown_reason`` records why the
+    billed field is null even when an estimate exists.
     """
 
     call_key = models.CharField(max_length=255, unique=True)
@@ -453,6 +460,12 @@ class AIUsageLedger(models.Model):
     provider = models.CharField(max_length=64, blank=True, default="")
     model = models.CharField(max_length=128, blank=True, default="")
     stage = models.CharField(max_length=64, blank=True, default="")
+    #: Which allowance the call belongs to (``decision``, ``allocation`` or
+    #: ``experiment``) and the durable key of that allowance (a portfolio id or
+    #: an experiment execution namespace). A scope can carry its own cumulative
+    #: ceiling in addition to the daily one.
+    scope = models.CharField(max_length=32, blank=True, default="")
+    scope_key = models.CharField(max_length=128, blank=True, default="", db_index=True)
     state = models.CharField(
         max_length=16, choices=AICostState.choices, default=AICostState.RESERVED
     )
@@ -463,10 +476,29 @@ class AIUsageLedger(models.Model):
     billed_usd = models.DecimalField(max_digits=14, decimal_places=6, null=True, blank=True)
     estimated_usd = models.DecimalField(max_digits=14, decimal_places=6, null=True, blank=True)
     unknown_reason = models.CharField(max_length=64, blank=True, default="")
+    #: Why the billed field is null, kept even when a price-table estimate was
+    #: recorded. ``unknown_reason`` is only populated for an ``unknown`` state.
+    billed_cost_unknown_reason = models.CharField(max_length=64, blank=True, default="")
     cost_basis = models.CharField(max_length=32, blank=True, default="")
+    #: Identifies the price table the estimate was calculated from. A rate edit
+    #: changes the version, so an old estimate can be told from a re-priced one.
+    pricing_version = models.CharField(max_length=64, blank=True, default="")
     input_tokens = models.IntegerField(default=0)
     output_tokens = models.IntegerField(default=0)
+    #: Measured and estimated token counts are stored separately as well as
+    #: summed: a mixed provider reply must not be relabelled as wholly measured.
+    measured_input_tokens = models.IntegerField(default=0)
+    measured_output_tokens = models.IntegerField(default=0)
+    estimated_input_tokens = models.IntegerField(default=0)
+    estimated_output_tokens = models.IntegerField(default=0)
     tokens_measured = models.BooleanField(default=False)
+    #: Set immediately before a billable provider call. A replayed reservation
+    #: that already dispatched must not dispatch a second time.
+    dispatched_at = models.DateTimeField(null=True, blank=True)
+    #: Set when a confirmed provider charge replaced an estimate or an unknown
+    #: outcome, and counting how many accounting updates the row has had.
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    revision = models.PositiveIntegerField(default=0)
     metadata = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)

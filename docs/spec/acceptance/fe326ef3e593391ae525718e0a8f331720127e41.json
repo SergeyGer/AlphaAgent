@@ -1,0 +1,143 @@
+{
+  "command": "venv/bin/python scripts/verify_application.py --record",
+  "commit": "fe326ef3e593391ae525718e0a8f331720127e41",
+  "counts": {
+    "backend_tests": 1029,
+    "frontend_tests": 289
+  },
+  "coverage": {
+    "complete": true,
+    "duplicates": [],
+    "failed": [],
+    "missing": [],
+    "passing_once": [
+      "backend-tests",
+      "frontend-tests",
+      "typecheck",
+      "build",
+      "lint",
+      "format",
+      "migration-check",
+      "smoke"
+    ],
+    "present": [
+      "backend-tests",
+      "frontend-tests",
+      "typecheck",
+      "build",
+      "lint",
+      "format",
+      "migration-check",
+      "smoke"
+    ],
+    "required": [
+      "backend-tests",
+      "frontend-tests",
+      "typecheck",
+      "build",
+      "lint",
+      "format",
+      "migration-check",
+      "smoke"
+    ],
+    "required_count": 8,
+    "skipped": [],
+    "stage_count": 8,
+    "unexpected": []
+  },
+  "digest_scope": "sha256 of compact sorted-key JSON containing the schema version, commit, tree_clean, verdict and each stage's id/status/exit_code/counts. Durations, timestamps, host paths, command output and the derived coverage are excluded so the same commit reproduces the same digest.",
+  "dirty_paths": [],
+  "output_digest": "1711183764f09fd59bdc9bf0c1b490cea803edfb10e22ad99adb329f51639558",
+  "recorded_at": "2026-11-13T18:24:17.867635Z",
+  "release_acceptance": true,
+  "required_stages": [
+    "backend-tests",
+    "frontend-tests",
+    "typecheck",
+    "build",
+    "lint",
+    "format",
+    "migration-check",
+    "smoke"
+  ],
+  "schema_version": "application.acceptance.v1",
+  "stage_count": 8,
+  "stages": [
+    {
+      "command": "/root/projects/AlphaAgent/venv/bin/python manage.py test core.tests --noinput",
+      "counts": {
+        "tests": 1029
+      },
+      "exit_code": 0,
+      "id": "backend-tests",
+      "status": "pass",
+      "title": "Backend tests (sequential, --noinput)"
+    },
+    {
+      "command": "/root/.nvm/versions/node/v22.23.3/bin/npm test -- --run",
+      "counts": {
+        "tests": 289
+      },
+      "exit_code": 0,
+      "id": "frontend-tests",
+      "status": "pass",
+      "title": "Frontend tests (Vitest, single run)"
+    },
+    {
+      "command": "/root/.nvm/versions/node/v22.23.3/bin/npx tsc --noEmit",
+      "counts": {},
+      "exit_code": 0,
+      "id": "typecheck",
+      "status": "pass",
+      "title": "Frontend type check"
+    },
+    {
+      "command": "/root/.nvm/versions/node/v22.23.3/bin/npm run build",
+      "counts": {},
+      "exit_code": 0,
+      "id": "build",
+      "status": "pass",
+      "title": "Frontend production build"
+    },
+    {
+      "command": "/root/projects/AlphaAgent/venv/bin/ruff check . --line-length 100",
+      "counts": {},
+      "exit_code": 0,
+      "id": "lint",
+      "status": "pass",
+      "title": "Ruff lint"
+    },
+    {
+      "command": "/root/projects/AlphaAgent/venv/bin/ruff format --check .",
+      "counts": {},
+      "exit_code": 0,
+      "id": "format",
+      "status": "pass",
+      "title": "Ruff format check"
+    },
+    {
+      "command": "/root/projects/AlphaAgent/venv/bin/python manage.py makemigrations --check --dry-run",
+      "counts": {},
+      "exit_code": 0,
+      "id": "migration-check",
+      "status": "pass",
+      "title": "No uncommitted model migrations"
+    },
+    {
+      "command": "HTTP GET http://127.0.0.1:8080/healthz/",
+      "counts": {
+        "http_status": 200
+      },
+      "exit_code": 0,
+      "id": "smoke",
+      "status": "pass",
+      "title": "HTTP smoke test against the running stack"
+    }
+  ],
+  "subject": "fix: paid attempts that reserve on their own identity, and a release gate that cannot be satisfied by four stages",
+  "tree_clean": true,
+  "usable_for_recording": true,
+  "verdict": "pass",
+  "verifier": "scripts/verify_application.py",
+  "verifier_version": "1.1"
+}

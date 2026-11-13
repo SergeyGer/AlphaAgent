@@ -48,7 +48,9 @@
   ],
   "subject": "fix: remediation steps 9 and 10 - the spend limiter and a verified application",
   "tree_clean": true,
-  "usable_for_recording": true,
+  "usable_for_recording": false,
+  "release_acceptance": false,
+  "superseded_reason": "This record covers four of the eight declared release stages and records frontend_tests: 0. Under the Step 10 release gate a record is usable only when each of the eight stages ran exactly once and passed, so this record is evidence of the backend and static checks at 03308ca, not a release acceptance. It is also not the merged release commit.",
   "verdict": "pass",
   "verifier": "scripts/verify_application.py",
   "verifier_version": "1.0"

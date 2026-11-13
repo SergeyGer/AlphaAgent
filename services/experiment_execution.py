@@ -58,8 +58,9 @@ What the report will not claim
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -77,7 +78,18 @@ from core.decision_models import (
     RunMode,
     RunSource,
 )
+from core.log_safety import log_safe
 from core.models import Portfolio
+from services.budget import (
+    check_and_reserve,
+    experiment_call_key,
+    mark_attempt_dispatched,
+    mark_unknown,
+    reserve_bound_for_run,
+    scope_state,
+    settle_call,
+    spend_limit,
+)
 from services.cost_accounting import UNKNOWN_PROVIDER_COST
 from services.debate_protocol import (
     BASELINE_PROTOCOL_VERSION,
@@ -119,6 +131,8 @@ from services.portfolio_accounting import (
     PriceMark,
     build_performance,
 )
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "ARCHIVE_FORMAT",
@@ -974,6 +988,123 @@ def _is_real_provider_client(client) -> bool:
     return client is not None and client.__class__.__name__ == "CrewAIStageClient"
 
 
+def _is_billable_client(client) -> bool:
+    """True when this attempt will make a paid provider call.
+
+    The real adapter is billable. A scripted client is not, unless it explicitly
+    declares ``billable = True`` (the allowance tests use that seam); inferring
+    billability from a class name would make every test double look like a
+    provider, and reserving against a call that cannot be billed would refuse
+    work that costs nothing.
+    """
+    if client is None:
+        return False
+    declared = getattr(client, "billable", None)
+    if declared is not None:
+        return bool(declared)
+    return _is_real_provider_client(client)
+
+
+def _blocked_attempt_cost(reason: str) -> dict:
+    """The cost block for an attempt refused before dispatch."""
+    cost = _cost_of_run(None)
+    cost["unknown_reason"] = reason
+    cost["note"] = "The attempt was refused before the provider was called."
+    return cost
+
+
+def _settle_experiment_usage(call_key: str, usage, *, arm: str, opportunity: str) -> None:
+    """Write one protocol usage block into the ledger without substituting values."""
+    metadata = {"arm": arm, "opportunity": opportunity}
+    common = {
+        "call_key": call_key,
+        "input_tokens": int(usage.input_tokens or 0),
+        "output_tokens": int(usage.output_tokens or 0),
+        "measured_input_tokens": int(usage.measured_input_tokens or 0),
+        "measured_output_tokens": int(usage.measured_output_tokens or 0),
+        "estimated_input_tokens": int(usage.estimated_input_tokens or 0),
+        "estimated_output_tokens": int(usage.estimated_output_tokens or 0),
+        "tokens_measured": bool(
+            (usage.measured_input_tokens or usage.measured_output_tokens)
+            and not (usage.estimated_input_tokens or usage.estimated_output_tokens)
+        ),
+        "pricing_version": str(getattr(usage, "pricing_version", "") or ""),
+        "billed_cost_unknown_reason": str(getattr(usage, "billed_cost_unknown_reason", "") or ""),
+        "metadata": metadata,
+    }
+    billed = usage.cost_usd
+    estimated = usage.price_table_cost_usd if usage.price_table_cost_complete else None
+    if billed is not None:
+        settle_call(
+            billed_usd=billed,
+            estimated_usd=estimated,
+            cost_basis="billed_provider_reported",
+            **common,
+        )
+    elif estimated is not None and usage.calls:
+        settle_call(estimated_usd=estimated, cost_basis="price_table_estimate", **common)
+    else:
+        settle_call(
+            unknown_reason=(
+                getattr(usage, "billed_cost_unknown_reason", "") or UNKNOWN_PROVIDER_COST
+            ),
+            cost_basis="unknown",
+            **common,
+        )
+
+
+def _settle_experiment_run(call_key: str, run: DecisionRun | None, *, error_code: str) -> None:
+    """Settle an attempt that failed after it was dispatched.
+
+    The run's recorded cost block is the authority when one exists. A run with no
+    usable cost leaves the reservation held and the row unknown with the failure
+    code, because the provider may already have billed it.
+    """
+    cost = _cost_of_run(run)
+    billed = _decimal_or_none(cost.get("billed_cost_usd"))
+    estimated = _decimal_or_none(cost.get("price_table_cost_usd"))
+    measured = cost.get("measured_tokens") or {}
+    estimated_tokens = cost.get("estimated_tokens") or {}
+    reason = cost.get("unknown_reason") or f"experiment_attempt_failed_{error_code}"[:64]
+    common = {
+        "call_key": call_key,
+        "input_tokens": int(measured.get("input") or 0) + int(estimated_tokens.get("input") or 0),
+        "output_tokens": int(measured.get("output") or 0)
+        + int(estimated_tokens.get("output") or 0),
+        "measured_input_tokens": int(measured.get("input") or 0),
+        "measured_output_tokens": int(measured.get("output") or 0),
+        "estimated_input_tokens": int(estimated_tokens.get("input") or 0),
+        "estimated_output_tokens": int(estimated_tokens.get("output") or 0),
+        "tokens_measured": bool(
+            (measured.get("input") or measured.get("output"))
+            and not (estimated_tokens.get("input") or estimated_tokens.get("output"))
+        ),
+        "pricing_version": "",
+        "billed_cost_unknown_reason": reason,
+        "metadata": {"error_code": error_code, "run_id": str(run.id) if run is not None else None},
+    }
+    if billed is not None:
+        settle_call(
+            billed_usd=billed,
+            estimated_usd=estimated,
+            cost_basis="billed_provider_reported",
+            **common,
+        )
+    elif estimated is not None:
+        settle_call(estimated_usd=estimated, cost_basis="price_table_estimate", **common)
+    else:
+        settle_call(unknown_reason=reason, cost_basis="unknown", **common)
+
+
+def _decimal_or_none(value) -> Decimal | None:
+    if value in (None, ""):
+        return None
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+
+
 def _client_for_arm(arm: str, *, client, provider_mode: str, portfolio: Portfolio):
     """Return ``(client, provider_mode_used, reason)`` for one arm."""
     if client is not None:
@@ -1020,6 +1151,7 @@ def _run_arm_once(
     provider_mode: str,
     identity: AttemptIdentity | None = None,
     budget: ProtocolBudget | None = None,
+    experiment_ceiling: Decimal | None = None,
     force: bool = False,
     namespace: str = "",
 ) -> ArmRun:
@@ -1058,6 +1190,69 @@ def _run_arm_once(
         result.cost = _cost_of_run(existing)
         result.reused = True
         return result
+
+    ledger_key = None
+    if arm != "V0" and _is_billable_client(client):
+        # A billable attempt is reserved before dispatch, against the daily
+        # ledger and the experiment's registered cumulative ceiling. A refusal
+        # here writes a visible failed run and never calls the provider.
+        run_upper_bound = (
+            budget.monetary_budget_usd
+            if budget is not None and budget.monetary_budget_usd is not None
+            else reserve_bound_for_run("decision")
+        )
+        ledger_key = experiment_call_key(
+            namespace=namespace,
+            arm=arm,
+            opportunity_key=opportunity.key,
+            attempt=attempt,
+            identity_hash=identity_hash,
+        )
+        try:
+            reserve = check_and_reserve(
+                call_key=ledger_key,
+                upper_bound_usd=run_upper_bound,
+                provider=getattr(client, "provider", "") or "",
+                model=getattr(client, "model", "") or "",
+                stage=f"experiment_{arm}",
+                owner=f"experiment:{namespace}",
+                request_key=identity_hash or fixture_id,
+                scope="experiment",
+                scope_key=namespace,
+                scope_limit_usd=experiment_ceiling,
+                metadata={
+                    "arm": arm,
+                    "opportunity": opportunity.key,
+                    "attempt": attempt,
+                    "fixture_id": fixture_id,
+                },
+            )
+        except Exception as exc:  # pragma: no cover - malformed budget/key is a result
+            result.status = "failed"
+            result.failure_code = "reservation_error"
+            result.failure_detail = f"{type(exc).__name__}: {exc}"[:2000]
+            result.cost = _blocked_attempt_cost("reservation_error")
+            return result
+        if not reserve.allowed:
+            result.status = "failed"
+            result.failure_code = reserve.reason
+            result.failure_detail = (
+                f"The {reserve.reason} allowance refused this attempt before dispatch "
+                f"(committed ${reserve.committed_usd} of a ${reserve.limit_usd} daily "
+                f"ceiling; experiment committed ${reserve.scope_committed_usd} of "
+                f"${reserve.scope_limit_usd}). The provider was not called."
+            )
+            result.cost = _blocked_attempt_cost(reserve.reason)
+            return result
+        if not mark_attempt_dispatched(ledger_key):
+            result.status = "failed"
+            result.failure_code = "ai_spend_attempt_already_dispatched"
+            result.failure_detail = (
+                "This attempt's reservation was already dispatched by an earlier worker; "
+                "it was not called a second time. The provider may already have billed it."
+            )
+            result.cost = _blocked_attempt_cost("ai_spend_attempt_already_dispatched")
+            return result
 
     context = build_decision_context(opportunity, snapshot, portfolio)
     try:
@@ -1113,6 +1308,25 @@ def _run_arm_once(
                     fixture_id=fixture_id,
                 )
             run = outcome.run
+            if ledger_key is not None:
+                try:
+                    _settle_experiment_usage(
+                        ledger_key,
+                        outcome.usage,
+                        arm=arm,
+                        opportunity=opportunity.key,
+                    )
+                except Exception as ledger_exc:  # pragma: no cover - accounting is best effort
+                    logger.exception(
+                        "Could not settle experiment usage %s: %s",
+                        log_safe(ledger_key),
+                        log_safe(ledger_exc),
+                    )
+                    mark_unknown(
+                        call_key=ledger_key,
+                        reason="experiment_usage_reconciliation_failed",
+                        metadata={"error_type": type(ledger_exc).__name__},
+                    )
         if run is not None:
             _populate_arm_run(result, run, opportunity)
             _identity_metadata(run, identity=identity, attempt=attempt, fixture_id=fixture_id)
@@ -1130,11 +1344,27 @@ def _run_arm_once(
         result.failure_code = exc.code
         result.failure_detail = exc.detail[:2000]
         result.cost = _cost_of_run(exc.run)
+        if ledger_key is not None:
+            try:
+                _settle_experiment_run(ledger_key, exc.run, error_code=exc.code)
+            except Exception:  # pragma: no cover - never mask the stage failure
+                logger.exception(
+                    "Could not settle failed experiment attempt %s", log_safe(ledger_key)
+                )
     except Exception as exc:  # pragma: no cover - defensive: a crashed arm is a result
         result.status = "failed"
         result.failure_code = "execution_error"
         result.failure_detail = f"{type(exc).__name__}: {exc}"[:2000]
         result.cost = _cost_of_run(result.run)
+        if ledger_key is not None:
+            try:
+                mark_unknown(
+                    call_key=ledger_key,
+                    reason="experiment_execution_error",
+                    metadata={"error_type": type(exc).__name__},
+                )
+            except Exception:  # pragma: no cover - never mask the original failure
+                logger.exception("Could not mark experiment usage unknown %s", log_safe(ledger_key))
     return result
 
 
@@ -2245,7 +2475,35 @@ def execute_opportunity_set(
     arm_runs: dict[str, list[ArmRun]] = {arm: [] for arm in ARM_ORDER}
     arm_mode: dict[str, str] = {}
     arm_identity: dict[str, AttemptIdentity] = {}
-    resolved_budget = budget or ProtocolBudget.from_settings()
+    # The experiment's registered ceiling is a real allowance, not a report
+    # field: it caps the protocol budget and every attempt is reserved against
+    # it before the provider is called.
+    experiment_ceiling = _decimal(
+        opportunity_set.pre_registration.get("cost_ceiling_usd"),
+        field_name="pre_registration.cost_ceiling_usd",
+    )
+    configured_budget = budget or ProtocolBudget.from_settings()
+    run_upper_bound = experiment_ceiling
+    if configured_budget.monetary_budget_usd is not None:
+        run_upper_bound = min(experiment_ceiling, configured_budget.monetary_budget_usd)
+    resolved_budget = replace(configured_budget, monetary_budget_usd=run_upper_bound)
+    allowances = {
+        "daily_limit_usd": str(spend_limit()),
+        "run_upper_bound_usd": str(run_upper_bound),
+        "experiment_ceiling_usd": str(experiment_ceiling),
+        "scope": namespace,
+        "scope_key": namespace,
+        "reservation_rule": (
+            "The run upper bound is reserved against the daily ledger and the "
+            "experiment's registered cumulative ceiling before dispatch."
+        ),
+        "strict_billed_ceiling": False,
+        "note": (
+            "These are allowances, not forecasts. A provider charge reported after "
+            "an attempt settles is not visible here; the report publishes unknown "
+            "costs rather than treating them as zero."
+        ),
+    }
     for arm in ("V0", "V1", "V2", "V3"):
         arm_client = None
         reason = ""
@@ -2305,6 +2563,7 @@ def execute_opportunity_set(
                     provider_mode=arm_mode[arm],
                     identity=identity,
                     budget=resolved_budget,
+                    experiment_ceiling=experiment_ceiling,
                     force=force,
                     namespace=namespace,
                 )
@@ -2353,6 +2612,7 @@ def execute_opportunity_set(
             "arms": {arm: arm_identity[arm].identity_hash for arm in ("V0", "V1", "V2", "V3")},
         }
     )
+    allowances["ledger"] = scope_state("experiment", namespace, limit_usd=experiment_ceiling)
     execution = {
         "execution_id": namespace,
         "execution_id_kind": "deterministic_namespace.v1",
@@ -2364,6 +2624,7 @@ def execute_opportunity_set(
         "provider_mode_requested": provider_mode,
         "provider_mode_used": provider_used,
         "started_at": utc_iso(started),
+        "allowances": allowances,
         "snapshots_used": {
             key: _snapshot_input(snapshot).as_dict() for key, snapshot in snapshots.items()
         },

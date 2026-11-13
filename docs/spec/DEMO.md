@@ -64,14 +64,15 @@ venv/bin/python scripts/verify_application.py --record
 It prints one line per stage plus `VERIFY_SUMMARY {json}` and exits non-zero if
 any stage fails. On a clean tree it writes
 `docs/spec/acceptance/<commit>.json`; `record_live_allocation` refuses to run
-from a dirty tree or without that record, and
+from a dirty tree or without a record that covers all eight release stages
+exactly once with a passing result, and
 `venv/bin/python manage.py check_recordings` confirms every committed recording
 names the record's commit and digest. The schema, refusal codes and the
 commit/record ordering are in [`ACCEPTANCE.md`](ACCEPTANCE.md); this page only
-quotes the commands. At HEAD `7969cd7` the committed record is the four-stage
-steps 9–10 record, not a full eight-stage pass; the gap and its evidence table
-are in [`ACCEPTANCE.md`](ACCEPTANCE.md) §5 and tracked as
-[#65](https://github.com/SergeyGer/AlphaAgent/issues/65).
+quotes the commands. A `--only` run writes a developer record marked
+`usable_for_recording: false`; the four-stage steps 9–10 record is not a release
+acceptance. The evidence table and the Step 11 manifest are in
+[`ACCEPTANCE.md`](ACCEPTANCE.md) §5–§6.
 
 ## 1. Offline Streamlit demo
 

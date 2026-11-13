@@ -30,10 +30,12 @@ from pathlib import Path
 from django.test import SimpleTestCase, TestCase
 
 from scripts.verify_application import (
+    REQUIRED_STAGE_IDS,
     GitState,
     RecordingRefused,
     Stage,
     build_result,
+    canonical_digest,
     main,
     run_command_stage,
     run_verification,
@@ -66,6 +68,60 @@ def stage_result(stage: Stage, status: str = "pass", exit_code: int = 0):
 
 def _failed(stage: Stage):
     return run_command_stage(py_stage(stage.id, "import sys; sys.exit(7)"), Path.cwd())
+
+
+def all_passing_stage_results(backend_tests: int = 928, frontend_tests: int = 275):
+    """One passing result for each of the eight release stages."""
+    results = []
+    for stage_id in REQUIRED_STAGE_IDS:
+        if stage_id == "backend-tests":
+            code = f"print('Ran {backend_tests} tests in 0.01s')"
+            parser = "unittest"
+        elif stage_id == "frontend-tests":
+            code = f"print('Tests  {frontend_tests} passed ({frontend_tests})')"
+            parser = "vitest"
+        else:
+            code = "print('ok')"
+            parser = ""
+        results.append(run_command_stage(py_stage(stage_id, code, parser=parser), Path.cwd()))
+    return results
+
+
+def eight_stage_records() -> list[dict]:
+    stages = [
+        {"id": stage_id, "status": "pass", "exit_code": 0, "counts": {}}
+        for stage_id in REQUIRED_STAGE_IDS
+    ]
+    for stage in stages:
+        if stage["id"] == "backend-tests":
+            stage["counts"] = {"tests": 928}
+        elif stage["id"] == "frontend-tests":
+            stage["counts"] = {"tests": 275}
+    return stages
+
+
+def eight_stage_digest(commit: str) -> str:
+    return canonical_digest(
+        {
+            "schema_version": "application.verification.v1",
+            "commit": commit,
+            "tree_clean": True,
+            "verdict": "pass",
+            "stages": eight_stage_records(),
+        }
+    )
+
+
+def eight_stage_record(commit: str) -> dict:
+    return {
+        "schema_version": "application.acceptance.v1",
+        "commit": commit,
+        "verdict": "pass",
+        "tree_clean": True,
+        "usable_for_recording": True,
+        "output_digest": eight_stage_digest(commit),
+        "stages": eight_stage_records(),
+    }
 
 
 class VerifierStageTests(SimpleTestCase):
@@ -147,16 +203,7 @@ class AcceptanceRecordTests(SimpleTestCase):
         self.git = GitState(commit=COMMIT_A, subject="test commit", dirty=False, dirty_paths=[])
 
     def _result(self, *, duration: float = 0.0):
-        stages = [
-            run_command_stage(
-                py_stage("backend-tests", "print('Ran 928 tests in 0.01s')", parser="unittest"),
-                Path.cwd(),
-            ),
-            run_command_stage(
-                py_stage("frontend-tests", "print('Tests  275 passed (275)')", parser="vitest"),
-                Path.cwd(),
-            ),
-        ]
+        stages = all_passing_stage_results()
         for stage in stages:
             stage.duration_seconds = duration
         return build_result(stages, git=self.git)
@@ -169,12 +216,12 @@ class AcceptanceRecordTests(SimpleTestCase):
         self.assertEqual(record["commit"], COMMIT_A)
         self.assertEqual(record["verdict"], "pass")
         self.assertEqual(record["counts"], {"backend_tests": 928, "frontend_tests": 275})
-        self.assertEqual(
-            [stage["id"] for stage in record["stages"]], ["backend-tests", "frontend-tests"]
-        )
+        self.assertEqual([stage["id"] for stage in record["stages"]], list(REQUIRED_STAGE_IDS))
         self.assertEqual(record["output_digest"], result.output_digest)
         self.assertTrue(record["tree_clean"])
         self.assertTrue(record["usable_for_recording"])
+        self.assertEqual(record["required_stages"], list(REQUIRED_STAGE_IDS))
+        self.assertTrue(record["coverage"]["complete"])
         self.assertEqual(record["schema_version"], "application.acceptance.v1")
 
         loaded = load_acceptance_record(COMMIT_A, directory=self.tmp / "acceptance")
@@ -250,20 +297,14 @@ class RecordingGuardTests(TestCase):
         self._git(root, "commit", "-q", "-m", "clean state")
         return self._git(root, "rev-parse", "HEAD")
 
-    def _record(self, root: Path, commit: str, *, digest: str = "d" * 64) -> None:
+    def _record(self, root: Path, commit: str, *, digest: str = "") -> None:
         directory = root / ".runtime" / "acceptance"
         directory.mkdir(parents=True, exist_ok=True)
+        record = eight_stage_record(commit)
+        if digest:
+            record["output_digest"] = digest
         (directory / f"{commit}.json").write_text(
-            json.dumps(
-                {
-                    "schema_version": "application.acceptance.v1",
-                    "commit": commit,
-                    "verdict": "pass",
-                    "tree_clean": True,
-                    "usable_for_recording": True,
-                    "output_digest": digest,
-                }
-            ),
+            json.dumps(record),
             encoding="utf-8",
         )
 
@@ -276,7 +317,7 @@ class RecordingGuardTests(TestCase):
         self.assertEqual(provenance["commit"], commit)
         self.assertTrue(provenance["verified"])
         self.assertTrue(provenance["usable_for_recording"])
-        self.assertEqual(provenance["acceptance_digest"], "d" * 64)
+        self.assertEqual(provenance["acceptance_digest"], eight_stage_digest(commit))
 
     def test_an_uncommitted_change_is_refused_before_recording(self):
         root = Path(tempfile.mkdtemp(prefix="p1-10c-dirty-"))
@@ -305,20 +346,13 @@ class RecordingPairingTests(TestCase):
         self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
         self.directory = self.root / "docs" / "spec" / "acceptance"
         self.directory.mkdir(parents=True)
+        self.record = eight_stage_record(COMMIT_A)
         (self.directory / f"{COMMIT_A}.json").write_text(
-            json.dumps(
-                {
-                    "schema_version": "application.acceptance.v1",
-                    "commit": COMMIT_A,
-                    "verdict": "pass",
-                    "tree_clean": True,
-                    "output_digest": "1" * 64,
-                }
-            ),
+            json.dumps(self.record),
             encoding="utf-8",
         )
         self.artifact = self.root / "demo.json"
-        self._write_artifact(COMMIT_A, "1" * 64)
+        self._write_artifact(COMMIT_A, self.record["output_digest"])
 
     def _write_artifact(self, commit: str, digest: str) -> None:
         self.artifact.write_text(

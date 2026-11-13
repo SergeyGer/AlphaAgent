@@ -1186,3 +1186,81 @@ Divergences recorded rather than absorbed:
    committed metric value is unchanged because the fixture has zero fees and
    quantities that fit at its marks; the `contents_hash` changed because the
    timeline, validation blocks, identities and denominators did.
+
+## P1 remediation — spend ceilings for every paid attempt and the release gate (steps 9 and 10, follow-up)
+
+The acceptance review reproduced two defects that the first steps 9–10 change
+did not exercise: the allocation reservation was keyed by the user's idempotency
+key, so two portfolios sharing that key shared one ledger row, and the
+experiment runner never reserved at all — the registered `cost_ceiling_usd` was
+published in the report but not enforced. The release gate had the matching
+defect: `usable_for_recording` was `tree_clean and verdict == "pass"`, so a
+four-stage `--only` run (or the committed four-stage record with
+`frontend_tests: 0`) claimed to be usable.
+
+### Reproduced before the repair (2026-11-13)
+
+* **9A.** Two portfolios submitted the same key `shared-key` in `live` mode with
+  a `$0.20` reservation bound and a `$0.40` daily ceiling. Both submissions
+  succeeded, the provider was called twice, and the ledger contained **one**
+  row: `allocation:shared-key`. The second portfolio had replayed the first
+  portfolio's reservation. With a `$0.20` ceiling the second was still allowed
+  (the replay path bypasses the ceiling) and still called the provider.
+* **9B.** `run_experiment --provider stub` for the committed opportunity set
+  made **27** provider calls, wrote **zero** `experiment:` ledger rows, and
+  reported 12 completed / 0 failed. The report had no `execution.allowances`
+  block.
+* **9C.** A stubbed `CrewAIStageClient` reported 500/300 measured tokens, billed
+  `None`, a price-table estimate of `$0.000930` and reason
+  `provider_reported_cost_unavailable`. The protocol-to-`AgentRunResult`
+  translation dropped all of it: `estimated_cost_usd=None`, `cost_basis=""`,
+  `cost_unknown_reason=""`, no pricing version. Settlement wrote
+  `state=unknown`, `billed=None`, `estimated=None`.
+* **9.4.** After an estimate of `$0.001500`, a later confirmed charge of
+  `$0.002000` left the row at `state=estimated`, `billed=None`,
+  `estimated=$0.001500`.
+* **10A/10B.** `build_result` set `usable_for_recording=True` for a clean
+  one-stage run and for a four-stage record; `write_acceptance_record` had no
+  coverage concept.
+
+### What changed
+
+| Requirement | Where it is enforced | Evidence |
+| --- | --- | --- |
+| Allocation reservations keyed by durable submission + paid attempt | `services.budget.allocation_call_key`; `AllocationSubmission.reservation_key` / `paid_attempt` are persisted before the first reservation (`_paid_attempt_identity`) | `test_p1_step9_spend_limits.py::SameRequestKeyAllocationTests.test_two_portfolios_with_the_same_key_each_hold_their_own_reservation` |
+| A reused key must name the same owner and request | `check_and_reserve(owner=, request_key=)` compares the stored identity and refuses with `ai_spend_reservation_conflict`; an old row with no identity adopts the first caller's | `test_reusing_a_key_for_another_owner_or_request_is_refused_not_replayed` |
+| One portfolio cannot spend another's reservation | the same identity check plus the submission-scoped key; with headroom for one, the second submission fails `ai_spend_reserve_exceeded` before dispatch | `test_with_headroom_for_one_the_other_never_calls_the_provider` |
+| The registered experiment ceiling reaches the runner | `execute_opportunity_set` reads `pre_registration.cost_ceiling_usd`, lowers the protocol's monetary budget to it and reserves every billable attempt against it | `test_p1_step9_spend_limits.py::ExperimentAllowanceTests` |
+| Daily, run and experiment allowances are separate | `AIUsageLedger.scope`/`scope_key`; `check_and_reserve(scope_limit_usd=)` checks the scope total with `pg_advisory_xact_lock`; `scope_state` publishes the allowance evidence | same test; `report["execution"]["allowances"]` |
+| A redelivery cannot dispatch twice | `mark_attempt_dispatched(call_key)` sets `dispatched_at` once; a replay returns `False` and records `ai_spend_attempt_already_dispatched` | same test (second execution makes no new call) |
+| The adapter's five quantities reach settlement | `ModelUsage.pricing_version`; `ProtocolUsage` carries measured/estimated splits and the version; `AgentRunResult` carries both splits, `pricing_version` and `cost_unknown_reason`; `reconcile_*` writes them to `AIUsageLedger` | `test_p1_step9_spend_limits.py::TokenOnlyAdapterSettlementTests` |
+| A confirmed charge replaces an estimate/unknown once | `settle_confirmed_charge`; the previous state/amount is kept in metadata, the reservation is released, `revision` increments once and a repeat is a no-op | `ConfirmedChargeTests.test_a_confirmed_charge_replaces_an_estimate_and_releases_the_reservation`, `test_a_confirmed_charge_also_closes_an_unknown_outcome` |
+| Only eight stages, exactly once, all passing, make a record usable | `scripts/verify_application.REQUIRED_STAGE_IDS` and `stage_coverage`; `build_result.usable_for_recording`; `write_acceptance_record` writes the coverage and refuses to overwrite a usable record with an unusable one | `test_p1_step10_release_gate.py::DeveloperRunIsNotReleaseAcceptanceTests` |
+| A record must reproduce its own digest and stage set to pair | `acceptance_record_digest_valid`, `acceptance_record_coverage`, `acceptance_record_usable`; used by `require_clean_for_recording` and `check_recording_pairing` | `PairingRejectsTheWrongCommitOrAnIncompleteSetTests`, `ReleaseGuardRefusesIncompleteRecordsTests` |
+| A full record names the commit, per-stage evidence, counts and digest, and reproduces them | `write_acceptance_record` + deterministic digest; re-running with different durations produces the same digest and verdict | `FullReleaseRecordTests` |
+| The Step 11 manifest is defined | [`ACCEPTANCE.md`](ACCEPTANCE.md) §6 and `docs/spec/fixtures/release-evidence.v1.json` | documentation-link tests; the shape is `application.release-evidence.v1` |
+
+### Divergences recorded rather than absorbed
+
+1. **A confirmed charge is not a second charge.** It moves the row to `billed`
+   and clears `estimated_usd`; the previous estimate remains in metadata. A
+   second confirmation with the same amount is a no-op, and a different amount
+   after a billed row is refused rather than rewriting a measurement.
+2. **The reservation is still an upper bound.** The experiment's first attempt
+   reserves the whole run bound, so a second attempt is blocked even after the
+   first settles for fractions of a cent. That is the intended direction for a
+   ceiling: the alternative reserves a forecast the ledger cannot justify.
+3. **Only real (or explicitly declared billable) clients reserve.** A scripted
+   offline client makes no provider call; it is not billable unless a test
+   double declares `billable = True`. This keeps the committed stub experiment
+   from holding money it cannot spend.
+4. **A blocked attempt is a failed run, not a silent skip.** It stays in the
+   report's denominator with the stable reason (`ai_spend_experiment_exceeded`)
+   and a cost block that says the provider was not called.
+5. **`--only` is still a useful passing run.** The developer verdict remains
+   `pass` for the selected stages; the separation is in
+   `usable_for_recording`/`coverage`, not in making local iteration fail.
+6. **A record cannot contain the commit it names.** The documented order is
+   unchanged: commit, verify `--record`, record the artefact, commit the
+   artefact and record together. The release record for this change still has
+   to be produced after a commit; this working tree is intentionally dirty.

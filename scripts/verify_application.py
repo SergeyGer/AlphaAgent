@@ -66,8 +66,23 @@ from urllib.request import urlopen
 
 SCHEMA_VERSION = "application.verification.v1"
 ACCEPTANCE_SCHEMA_VERSION = "application.acceptance.v1"
-VERIFIER_VERSION = "1.0"
+VERIFIER_VERSION = "1.1"
 DEFAULT_SMOKE_URL = "http://127.0.0.1:8080/healthz/"
+
+#: The eight stages release acceptance requires, each exactly once with a
+#: passing result. ``--only`` and ``--skip`` are developer conveniences and
+#: cannot satisfy this set; a record missing, duplicating, failing or skipping
+#: any of them is not usable for recording.
+REQUIRED_STAGE_IDS: tuple[str, ...] = (
+    "backend-tests",
+    "frontend-tests",
+    "typecheck",
+    "build",
+    "lint",
+    "format",
+    "migration-check",
+    "smoke",
+)
 
 #: Exit code when a required stage fails or is skipped.
 EXIT_FAILED = 1
@@ -126,6 +141,74 @@ class StageResult:
         }
 
 
+def _stage_field(stage, name: str, default=None):
+    if isinstance(stage, dict):
+        return stage.get(name, default)
+    return getattr(stage, name, default)
+
+
+def stage_coverage(stages, required: tuple[str, ...] = REQUIRED_STAGE_IDS) -> dict:
+    """Summarise whether the eight release stages ran exactly once and passed.
+
+    ``--only`` is a developer convenience, not a release acceptance: a run that
+    selects a subset is a passing run of that subset, but the record must not be
+    usable for recording. The same is true of a skipped, failed, duplicated or
+    unexpected stage. ``complete`` is the single boolean a caller should trust;
+    the lists name every reason it is false.
+    """
+    ids = [str(_stage_field(stage, "id", "")) for stage in stages]
+    counts: dict[str, int] = {}
+    for stage_id in ids:
+        counts[stage_id] = counts.get(stage_id, 0) + 1
+    by_id: dict[str, list] = {}
+    for stage in stages:
+        by_id.setdefault(str(_stage_field(stage, "id", "")), []).append(stage)
+
+    missing = [stage_id for stage_id in required if counts.get(stage_id, 0) == 0]
+    duplicates = sorted(stage_id for stage_id, count in counts.items() if count > 1)
+    unexpected = sorted(stage_id for stage_id in counts if stage_id not in required)
+    failed = sorted(
+        {
+            str(_stage_field(stage, "id", ""))
+            for stage in stages
+            if _stage_field(stage, "status") == "fail"
+        }
+    )
+    skipped = sorted(
+        {
+            str(_stage_field(stage, "id", ""))
+            for stage in stages
+            if _stage_field(stage, "status") == "skipped"
+        }
+    )
+    passing_once = [
+        stage_id
+        for stage_id in required
+        if counts.get(stage_id, 0) == 1 and _stage_field(by_id[stage_id][0], "status") == "pass"
+    ]
+    complete = (
+        not missing
+        and not duplicates
+        and not unexpected
+        and not failed
+        and not skipped
+        and len(passing_once) == len(required)
+    )
+    return {
+        "required": list(required),
+        "present": list(dict.fromkeys(ids)),
+        "missing": missing,
+        "duplicates": duplicates,
+        "unexpected": unexpected,
+        "failed": failed,
+        "skipped": skipped,
+        "passing_once": passing_once,
+        "complete": complete,
+        "stage_count": len(ids),
+        "required_count": len(required),
+    }
+
+
 @dataclass
 class VerificationResult:
     """The outcome of a whole run and the deterministic digest over it."""
@@ -139,6 +222,9 @@ class VerificationResult:
     output_digest: str
     recorded_at: str
     exit_code: int
+    required_stage_ids: tuple[str, ...] = REQUIRED_STAGE_IDS
+    coverage: dict = field(default_factory=dict)
+    usable_for_recording: bool = False
 
     def deterministic_payload(self) -> dict:
         return {
@@ -179,6 +265,9 @@ class VerificationResult:
             "output_digest": self.output_digest,
             "recorded_at": self.recorded_at,
             "counts": counts,
+            "required_stages": list(self.required_stage_ids),
+            "coverage": self.coverage,
+            "usable_for_recording": self.usable_for_recording,
             "stages": [stage.readable() for stage in self.stages],
         }
 
@@ -488,8 +577,15 @@ def build_result(
     *,
     git: GitState,
     allow_skipped: bool = False,
+    required_stage_ids: tuple[str, ...] = REQUIRED_STAGE_IDS,
 ) -> VerificationResult:
-    """Compute the verdict and deterministic digest from stage results."""
+    """Compute the verdict, coverage and deterministic digest from stage results.
+
+    ``verdict`` answers "did the stages that ran pass?". It is deliberately not
+    the release gate: a developer ``--only lint`` run passes its own stages.
+    ``usable_for_recording`` additionally requires a clean tree and each of the
+    eight required stages exactly once with a passing result.
+    """
     required_failed = any(stage.status == "fail" for stage in stage_results)
     required_skipped = any(stage.status == "skipped" for stage in stage_results)
     verdict = "pass"
@@ -498,6 +594,7 @@ def build_result(
     elif required_skipped:
         verdict = "incomplete"
     exit_code = 0 if verdict == "pass" else EXIT_FAILED
+    coverage = stage_coverage(stage_results, required_stage_ids)
     provisional = VerificationResult(
         stages=stage_results,
         commit=git.commit,
@@ -508,6 +605,9 @@ def build_result(
         output_digest="",
         recorded_at=_utc_now(),
         exit_code=exit_code,
+        required_stage_ids=required_stage_ids,
+        coverage=coverage,
+        usable_for_recording=bool(coverage["complete"] and verdict == "pass" and not git.dirty),
     )
     provisional.output_digest = canonical_digest(provisional.deterministic_payload())
     return provisional
@@ -584,12 +684,22 @@ def write_acceptance_record(
     *,
     directory: Path | None = None,
     allow_dirty: bool = False,
+    allow_for_developer: bool = False,
+    allow_overwrite: bool = False,
 ) -> tuple[Path, dict]:
-    """Write the commit-keyed acceptance record, refusing an unusable tree."""
+    """Write the commit-keyed acceptance record, refusing an unusable tree.
+
+    A record is written for a passing developer run (including ``--only``), but
+    it is marked ``usable_for_recording: false`` unless each of the eight
+    required stages ran exactly once and passed. ``allow_for_developer`` also
+    writes the record for a failed or skipped run so the evidence exists; it
+    can never make that record usable. An unusable record will not overwrite a
+    published usable one unless ``allow_overwrite`` is explicit.
+    """
     root = Path(root)
     if not result.commit:
         raise RecordingRefused("git_commit_unavailable", "The commit hash could not be read.")
-    if result.verdict != "pass":
+    if result.verdict != "pass" and not allow_for_developer:
         raise RecordingRefused(
             "verification_did_not_pass",
             f"The verification verdict is {result.verdict!r}; a failed run is not an acceptance.",
@@ -604,6 +714,21 @@ def write_acceptance_record(
                 "recording)."
             ),
         )
+    path = acceptance_record_path(root, result.commit, directory=directory)
+    if path.exists() and not result.usable_for_recording and not allow_overwrite:
+        try:
+            existing = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            existing = {}
+        if isinstance(existing, dict) and acceptance_record_usable(existing):
+            raise RecordingRefused(
+                "would_overwrite_passing_record",
+                (
+                    f"{path} is a usable acceptance record for this commit. Refusing to "
+                    "replace it with a developer run; pass --allow-overwrite only if the "
+                    "published record is known to be wrong."
+                ),
+            )
     record = {
         "schema_version": ACCEPTANCE_SCHEMA_VERSION,
         "commit": result.commit,
@@ -617,6 +742,9 @@ def write_acceptance_record(
         "verifier": "scripts/verify_application.py",
         "command": "venv/bin/python scripts/verify_application.py --record",
         "counts": result.summary()["counts"],
+        "required_stages": list(result.required_stage_ids),
+        "coverage": result.coverage,
+        "stage_count": len(result.stages),
         "stages": [
             {
                 **stage.summary(),
@@ -625,20 +753,65 @@ def write_acceptance_record(
             }
             for stage in result.stages
         ],
-        "usable_for_recording": result.tree_clean and result.verdict == "pass",
+        # The release gate. A passing verdict for a subset is a developer run,
+        # not evidence that the application passed the eight declared checks.
+        "usable_for_recording": bool(result.usable_for_recording),
+        "release_acceptance": bool(result.usable_for_recording),
         "digest_scope": (
             "sha256 of compact sorted-key JSON containing the schema version, commit, "
             "tree_clean, verdict and each stage's id/status/exit_code/counts. Durations, "
-            "timestamps, host paths and command output are excluded so the same commit "
-            "reproduces the same digest."
+            "timestamps, host paths, command output and the derived coverage are excluded "
+            "so the same commit reproduces the same digest."
         ),
     }
-    path = acceptance_record_path(root, result.commit, directory=directory)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     temporary.replace(path)
     return path, record
+
+
+def acceptance_record_coverage(record: dict) -> dict:
+    """Coverage of an acceptance record, derived from its stored stage list."""
+    stages = record.get("stages")
+    if not isinstance(stages, list):
+        stages = []
+    return stage_coverage(stages)
+
+
+def acceptance_record_usable(record: dict) -> bool:
+    """True only for a clean, passing record covering all eight stages once."""
+    if not isinstance(record, dict):
+        return False
+    if record.get("verdict") != "pass" or record.get("tree_clean") is not True:
+        return False
+    if record.get("usable_for_recording") is False:
+        return False
+    return bool(acceptance_record_coverage(record)["complete"])
+
+
+def acceptance_record_digest_valid(record: dict) -> bool:
+    """Recompute the digest over a record's stored stage summaries."""
+    stages = record.get("stages")
+    if not isinstance(stages, list):
+        return False
+    payload = {
+        "schema_version": SCHEMA_VERSION,
+        "commit": record.get("commit") or "unknown",
+        "tree_clean": record.get("tree_clean"),
+        "verdict": record.get("verdict"),
+        "stages": [
+            {
+                "id": stage.get("id"),
+                "status": stage.get("status"),
+                "exit_code": stage.get("exit_code"),
+                "counts": dict(sorted((stage.get("counts") or {}).items())),
+            }
+            for stage in stages
+            if isinstance(stage, dict)
+        ],
+    }
+    return canonical_digest(payload) == record.get("output_digest")
 
 
 class RecordingRefused(Exception):
@@ -667,6 +840,17 @@ def _print_results(result: VerificationResult) -> None:
             f"VERIFY_STAGE {stage.id}={stage.status}"
             f" exit={stage.exit_code if stage.exit_code is not None else '-'}"
             f" {counts}".rstrip()
+        )
+    coverage = result.coverage
+    if not coverage.get("complete"):
+        reasons = []
+        for key in ("missing", "duplicates", "unexpected", "failed", "skipped"):
+            values = coverage.get(key) or []
+            if values:
+                reasons.append(f"{key}={','.join(values)}")
+        print(
+            "VERIFY_COVERAGE not_release_acceptance "
+            + (" ".join(reasons) if reasons else "required_stages_not_exactly_once")
         )
     print("VERIFY_SUMMARY " + json.dumps(result.summary(), sort_keys=True, separators=(",", ":")))
 
@@ -698,6 +882,23 @@ def main(argv: list[str] | None = None) -> int:
         "--allow-dirty",
         action="store_true",
         help="Allow --record on a dirty tree; the record is marked unusable for recording.",
+    )
+    parser.add_argument(
+        "--allow-for-developer",
+        action="store_true",
+        help=(
+            "Write the record even when a selected stage failed or was skipped. It is "
+            "still marked unusable for recording; this exists so developer evidence is "
+            "kept, not so a failed run can be published."
+        ),
+    )
+    parser.add_argument(
+        "--allow-overwrite",
+        action="store_true",
+        help=(
+            "Allow an unusable developer record to replace an existing usable record for "
+            "the same commit. Off by default."
+        ),
     )
     parser.add_argument(
         "--allow-skipped",
@@ -751,7 +952,12 @@ def main(argv: list[str] | None = None) -> int:
             if not record_dir.is_absolute():
                 record_dir = root / record_dir
             path, record = write_acceptance_record(
-                result, root, directory=record_dir, allow_dirty=args.allow_dirty
+                result,
+                root,
+                directory=record_dir,
+                allow_dirty=args.allow_dirty,
+                allow_for_developer=args.allow_for_developer,
+                allow_overwrite=args.allow_overwrite,
             )
         except RecordingRefused as exc:
             print(
@@ -759,7 +965,10 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return EXIT_REFUSED
-        print(f"VERIFY_RECORD {path.relative_to(root)} digest={record['output_digest']}")
+        print(
+            f"VERIFY_RECORD {path.relative_to(root)} digest={record['output_digest']} "
+            f"usable_for_recording={str(record['usable_for_recording']).lower()}"
+        )
 
     return result.exit_code
 
