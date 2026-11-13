@@ -98,6 +98,15 @@ with both returns present. Relative returns use matched pairs only, and the
 report publishes `unmatched_benchmark_rows_excluded` so the smaller denominator
 is visible. A missing benchmark is null, never zero.
 
+The experiment execution path (`compute_registered_metric`) carries the
+benchmark's own entry and horizon observations on every row, with their prices,
+observation timestamps, sessions and sources. Its declared policy
+`benchmark_same_session_pair.v1` requires both benchmark observations to fall on
+the instrument's own sessions; a pair that does not is published with a stable
+exclusion reason and is not scored. The relative registered metric is therefore
+computed from matched pairs only. The live dashboard scorecard keeps its older
+pairwise rule.
+
 Rows are grouped into `heuristic`, `llm` and `synthetic` cohorts. A heuristic
 fallback attempt is a separate producer and is not pooled with a debate run. The
 method version is published per slice; a stored legacy row is tagged
@@ -162,6 +171,14 @@ deliberately separate lookups:
 A mark older than seven days is flagged stale. Fill prices are themselves marks
 at the fill instant, so a position can be valued when it is opened without
 inventing a separate close.
+
+A **simulated fill** is revalidated at that instant rather than inheriting the
+decision-time quantity. The simulator separates proposals from fills, applies
+the same guard, checks cash including fees, clips a sell to the eligible holding
+and passes the day's realised P&L to the next decision. A decision approved at
+one price can therefore fill only a smaller quantity, or be rejected, when the
+executable price or fee cannot be paid. This is a simulation of those rules, not
+a broker fill.
 
 ### 2.3 Fees
 
@@ -300,7 +317,10 @@ function in `services/portfolio_accounting.py`.
 | Session policy | first mark at or after the target session | `first_mark_at_or_after_target_session.v1` |
 | Valuation mark | latest known mark at or before valuation | `latest_known_mark_at_or_before_valuation.v1` |
 | Simulated fill | first executable mark at or after decision | `first_executable_mark_at_or_after_decision.v1` |
+| Simulated fill validation | guard, cash including fees, eligible holding and the day's realised P&L rechecked at the executable instant | `fill_time_revalidation.v1` |
+| Trading day for the daily loss check | UTC calendar day | `utc_calendar_day.v1` |
 | Counterfactual exit | first known mark at or after horizon | `first_known_mark_at_or_after_horizon.v1` |
+| Benchmark window match (execution path) | same-session entry and horizon observations | `benchmark_same_session_pair.v1` |
 
 A Saturday horizon uses the first session at or after Saturday, normally Monday;
 `session_shift_days` records the shift. If no later session exists, the price is
@@ -464,8 +484,10 @@ future intention.
   numbers can change between reads and are not a committed report.
 - Legacy attribution records no `price_observed_at`; the Phase 3 report therefore
   marks those rows `price_timestamp_unverified`.
-- The benchmark interval is declared, not re-derived; `benchmark_interval_verified`
-  is false.
+- The benchmark interval is declared, not re-derived for Phase 3 outcome rows;
+  `benchmark_interval_verified` is false there. The experiment execution path
+  does re-derive its benchmark windows from declared marks, but those marks are
+  authored fixture closes, not a market feed.
 - The example report's TWR is approximate because one fill has an unrecorded
   fee. The report's `methodology.approximate` is `true` and
   `approximate_reasons` names `fees_unrecorded_for_some_fills`.

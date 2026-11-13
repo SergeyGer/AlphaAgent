@@ -240,8 +240,8 @@ class CommittedFixtureRecomputeTests(TestCase):
         archive = json.loads(COMMITTED_REPORT_PATH.read_text(encoding="utf-8"))
         self.assertIn("frozen", archive)
         self.assertIn("opportunity_set", archive["frozen"])
-        self.assertEqual(archive["archive_format"], "experiment_comparison.v2")
-        self.assertEqual(archive["report_schema_version"], "2.0")
+        self.assertEqual(archive["archive_format"], "experiment_comparison.v3")
+        self.assertEqual(archive["report_schema_version"], "3.0")
 
         rebuilt = rebuild_comparison_report(copy.deepcopy(archive))
         self.assertEqual(rebuilt["status"], "reproduced")

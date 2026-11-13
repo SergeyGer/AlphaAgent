@@ -51,7 +51,43 @@
   "benchmark": {
     "ticker": "SPY",
     "asset_class": "equity",
-    "selection_rule": "declared_equity_benchmark"
+    "selection_rule": "declared_equity_benchmark",
+    "marks": [
+      {
+        "ticker": "SPY",
+        "at": "2026-02-03T20:00:00Z",
+        "observed_at": "2026-02-03T20:00:00Z",
+        "price": "400.00",
+        "source": "declared_fixture_benchmark_mark",
+        "provenance": "authored benchmark close for the entry session"
+      },
+      {
+        "ticker": "SPY",
+        "at": "2026-02-04T20:00:00Z",
+        "observed_at": "2026-02-04T20:00:00Z",
+        "price": "402.00",
+        "source": "declared_fixture_benchmark_mark",
+        "provenance": "authored benchmark close for the entry session"
+      },
+      {
+        "ticker": "SPY",
+        "at": "2026-02-05T20:00:00Z",
+        "observed_at": "2026-02-05T20:00:00Z",
+        "price": "401.00",
+        "source": "declared_fixture_benchmark_mark",
+        "provenance": "authored benchmark close for the entry session"
+      },
+      {
+        "ticker": "SPY",
+        "at": "2026-02-11T20:00:00Z",
+        "observed_at": "2026-02-11T20:00:00Z",
+        "price": "410.00",
+        "source": "declared_fixture_benchmark_mark",
+        "provenance": "authored benchmark close for the horizon session"
+      }
+    ],
+    "matching_policy": "benchmark_same_session_pair.v1",
+    "target_policy": "benchmark_first_mark_at_or_after_target_session.v1"
   },
   "marks": [
     {

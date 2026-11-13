@@ -407,27 +407,58 @@ sample plan, primary metric, cost ceiling and acceptable drawdown. The report
 publishes the registration **and** whether it could be honoured.
 
 The comparison report's execution path has its own archive format,
-`experiment_comparison.v2` / `report_schema_version: "2.0"`. It is a different
+`experiment_comparison.v3` / `report_schema_version: "3.0"`. It is a different
 document from the Phase 3 `build_experiment` report and is not read as one.
+Version 3 records the resolved attempt identity, the benchmark observations and
+the fill-time validation inputs a rebuild needs. A version-2 archive was
+produced under the decision-time quantity semantics; the rebuild refuses it by
+name rather than rebuilding it as if the same arithmetic produced it.
 
 #### 3.1b Execution namespace and the registered metric
 
 Each execution has a **deterministic namespace**, derived from the portfolio id,
 the opportunity-set content hash, the provider mode and the injected client
-identity (`execution_namespace(...)`, 16 hex characters). The namespace suffixes every
-`DecisionRun.fixture_id` and is published as `execution.execution_id` and
-`execution.namespace`. Consequences:
+identity (`execution_namespace(...)`, 16 hex characters). The namespace is the
+first segment of every `DecisionRun.fixture_id` (followed by the arm, the
+opportunity digest, the attempt identity hash and the attempt ordinal) and is
+published as `execution.execution_id` and `execution.namespace`. A
+`configuration_id` hash over the four implemented arms' resolved identities is
+published beside it, so a reader can tell two executions that share a namespace
+but differ in model or budget apart. Consequences:
 
 * two portfolios, or two opportunity sets that share a natural key but differ
   in tickers, marks, starting state or provider mode, cannot read or overwrite
   each other's decisions, snapshots or spend;
-* a rerun with the same inputs and provider mode resolves to the same namespace
-  and reuses its recorded runs, so it does not double-spend;
+* a rerun with the same inputs, provider mode and resolved configuration
+  resolves to the same namespace and attempt identity and reuses its recorded
+  runs, so it does not double-spend; a changed configuration has the same
+  namespace but a different identity and attempt key;
 * the cost ledger is scoped: `cost_breakdown.scope` names the execution and its
   run ids, and `verification.run_ids` lists them per arm;
 * each execution's input snapshots are immutable `InputSnapshot` rows; the
   snapshot version includes the opportunity-set content hash, so a changed
   document gets a new snapshot rather than reusing the old one.
+
+The namespace answers *which experiment is this?*. It is not the attempt
+identity. Each `(arm, opportunity)` attempt carries a resolved identity
+(`experiment_attempt.v1`) hashed from the provider and model the client actually
+reports, the protocol version, the client parameters, the protocol budget the
+protocol applies and the declared execution policy (fill rule, timing rule, fee,
+slippage, trading day, cost basis and fee policy). `attempt_identities` is
+published per arm and every run row carries `attempt` and `attempt_identity`.
+The identity is resolved, not copied from the request: `--provider auto` with no
+configured provider records `provider: "unknown"`, and a scripted client records
+`provider: "stub"` even when the requested mode was `auto`.
+
+The attempt ordinal is part of the run key, not of the identity hash:
+
+* an exact repeat resolves to the same identity and reuses its latest attempt;
+* a changed model, parameter or budget has a different identity and its own
+  attempt; it cannot resolve to the other configuration's run;
+* `--force` appends the next attempt after every attempt of that
+  `(namespace, arm, opportunity)` key. It removes nothing: the earlier
+  `DecisionRun`, its decision, guard evaluations and events remain resolvable,
+  and a previously written archive keeps every run id it named.
 
 The registered metric is read from the immutable pre-registration record - its
 id, family, horizon and direction - not from a module constant. For the
@@ -441,6 +472,9 @@ id, family, horizon and direction - not from a module constant. For the
 | `status` | `computed` or `not_computable` |
 | `value` | Mean action score (or the registered id's value), as a Decimal string |
 | `denominator.scheduled` / `.usable` / `.excluded` | Decisions scheduled, decisions with a matured horizon price, and the exclusions by stable reason |
+| `denominator.by_state` | `evaluated`, `pending`, `failed`, `budget_blocked`, `missing` and `not_recorded` counted separately; the six sum to `.scheduled` |
+| `denominator.excluded_by_reason` | Stable reasons, including each benchmark exclusion when the registered id is relative |
+| `benchmark_pairs` | The declared benchmark ticker and policy, and the matched, excluded and excluded-by-reason pair counts |
 | `contributing_runs` / `contributing_run_ids` | How many recorded runs produced a usable observation, and which |
 | `dispersion` | Sample standard deviation, min, max and range (null with `fewer_than_two_observations` when only one) |
 | `interval` | Seeded time-block bootstrap interval; null with a reason when it cannot be formed |
@@ -450,8 +484,29 @@ id, family, horizon and direction - not from a module constant. For the
 A `null` value therefore means "not measurable from this data", never "not
 implemented": an unsupported registered id or family is refused when the
 opportunity set is validated, and a horizon that no mark reaches reports
-`no_session_at_or_after_target` with the missing mark named. V4 remains
-`not_executed`, `value: null`, `in_denominator: false`; it is not a zero.
+`no_session_at_or_after_target` with the missing mark named. A target session
+after the archive's `as_of` is counted as `pending`, not as a missing mark; a
+run that failed for a non-budget reason is `failed`; a run the protocol budget
+stopped is `budget_blocked`; an observation without a usable input is `missing`.
+V4 remains `not_executed`, `value: null`, `in_denominator: false`; it is not a
+zero.
+
+**Benchmark windows are matched, not assumed.** The declared benchmark may carry
+its own `benchmark.marks`. Every scored row publishes the benchmark's entry and
+horizon observations with their prices, observation timestamps, sessions and
+price sources, and the declared policy
+`benchmark_same_session_pair.v1` (the target is the first benchmark mark at or
+after the instrument's own session, never the prior close). A pair is usable only
+when both benchmark observations fall on the instrument's entry and horizon
+sessions, and the horizon observation is not before the target session. A
+relative metric (`mean_relative_forward_return_pct`) takes its value only from
+matched pairs; an excluded pair is published with one of
+`benchmark_entry_observation_missing`, `benchmark_entry_session_mismatch`,
+`benchmark_horizon_observation_missing`,
+`benchmark_horizon_session_mismatch`,
+`benchmark_horizon_before_target_session` or `benchmark_marks_not_recorded`.
+An excluded pair is never a zero, and the matched-pair count is the visible
+denominator.
 
 The report embeds the recorded inputs a rebuild needs: `frozen.opportunity_set`
 (the full document), `frozen.portfolio`, `execution.snapshots_used` (the
@@ -472,6 +527,43 @@ unsupported `report_schema_version` or `archive_format` is refused by name; a
 tampered opportunity set or snapshot is refused by hash. The rebuilt document
 keeps `honesty.simulated_content: true` and `synthetic_label:
 "synthetic_simulation"`.
+
+#### 3.1c Simulated fills (`services/experiment_simulation.py`)
+
+The simulator keeps a chronological event queue, but a decision is a **proposal**
+and a fill is a separate event created when the simulated clock reaches the
+executable mark. Immediate and deferred orders use one validation path at the
+executable instant (`fill_time_revalidation.v1`):
+
+* the same `evaluate_proposal` guard is re-evaluated against the arm's state at
+  that instant, with the decision-time quantity as a ceiling rather than a fill
+  authorisation;
+* available cash is checked **including the declared fee** (`fee_bps`), and a
+  buy is clipped to what cash + fee can actually pay for; a fill that cannot be
+  paid for is rejected, never written with a negative cash balance;
+* a sell is clipped to the eligible holding at that instant; proceeds are
+  credited for the shares actually held, never for the decision-time quantity;
+* the day's realised P&L is passed to both the decision-time guard and the
+  fill-time guard. It accumulates from completed fills under
+  `weighted_average_cost.v1`, with `fee_reduces_realised_pnl.v1`, and resets at
+  the declared `utc_calendar_day.v1` boundary. The per-day and running totals are
+  published in `trajectory.simulation.realised_pnl`; each order carries
+  `realised_pnl_today_usd` and each fill step carries the delta and the running
+  total;
+* each order publishes a `fill_validation` block: policy, executable price,
+  approval at the decision, cash and holdings before the fill, the fee basis, the
+  guard result, whether it was clipped and why, the filled quantity, the
+  realised P&L delta and cash after. The timeline method is
+  `monotonic_fill_validation.v2`.
+
+A fill can therefore be `filled`, `deferred`, `rejected`, `expired`,
+`unpriced`, `hold_no_trade` or `not_executed`, and a successful fill can carry
+`fill_validation.status: "clipped"` when the guard or the cash/fee recheck
+reduced the quantity. The rejection reasons are stable
+(`insufficient_cash_including_fees_at_fill`,
+`clipped_to_available_cash_including_fees`, `no_eligible_holding_at_fill`,
+`clipped_to_holding_at_fill`, `clipped_by_guard_at_fill`,
+`fee_exceeds_sale_proceeds_at_fill`).
 
 ### 3.2 Manifest (version 1, schema 1.0)
 
@@ -686,9 +778,10 @@ The V0-V3 execution path has its own example output:
 It is generated by `python manage.py run_experiment --provider stub` and, like
 the Phase 3 report, is labelled engineering validation. Its arm trajectories are
 simulations under authored marks; they are not the demo account's history.
-The committed archive carries its own opportunity-set document, snapshot
-payloads and decisions, so its metric, trajectories and `contents_hash` can be
-recomputed without a database:
+The committed archive is `experiment_comparison.v3` (`report_schema_version`
+`"3.0"`). It carries its own opportunity-set document, benchmark marks, snapshot
+payloads, resolved attempt identities and decisions, so its metric, trajectories,
+fill decisions and `contents_hash` can be recomputed without a database:
 
 ```bash
 python manage.py rebuild_experiment_report \
@@ -697,9 +790,13 @@ python manage.py rebuild_experiment_report \
 
 The committed metric is `mean_action_score_pct` at the 7-day horizon. The AAPL
 and MSFT horizons are reached by the 2026-02-11 closing marks; the TSLA target is
-after the last mark and is counted in `denominator.excluded_by_reason` as
-`no_session_at_or_after_target`, not scored as a zero. V4 is `not_executed` and
-outside the denominator.
+after the last mark, is counted in `denominator.excluded_by_reason` as
+`no_session_at_or_after_target` and in `denominator.by_state.pending` (its target
+session is after the archive's `as_of`), and is not scored as a zero. The
+opportunity set also declares SPY benchmark marks, so each scored row publishes a
+matched benchmark entry and horizon beside its instrument observation even though
+the registered metric is not the relative one. V4 is `not_executed` and outside
+the denominator.
 
 ## 6. Tests that hold the gate
 
@@ -721,3 +818,10 @@ outside the denominator.
 | LLM cost completeness | `LlmCostTests.*` |
 | Report API ownership and build state | `ReportApiTests.*` |
 | Replay without an LLM | `ExperimentBuildTests.test_building_a_report_never_calls_an_llm`, `BuildExperimentCommandTests.*` |
+| A changed model or budget is a distinct attempt identity | `test_p1_step7_identity_benchmarks.py::test_two_resolved_models_and_a_changed_budget_get_distinct_identities` |
+| A forced rerun keeps the earlier run, decision, guards and events | `test_p1_step7_identity_benchmarks.py::test_forced_rerun_creates_a_new_attempt_and_keeps_the_old_one_resolvable` |
+| Only matching benchmark windows enter a relative result | `test_p1_step7_identity_benchmarks.py::test_matching_mismatched_and_missing_benchmark_windows_are_separated` |
+| A later price or fee cannot overdraw cash | `test_p1_step8_fill_validation.py::test_a_later_price_or_fee_that_exceeds_cash_clips_and_never_overdraws` |
+| A second sell cannot credit unheld shares | `test_p1_step8_fill_validation.py::test_two_sells_beyond_the_holding_clip_the_second_and_never_overcredit` |
+| The day's realised loss blocks same-day risk and resets next day | `test_p1_step8_fill_validation.py::test_the_loss_blocks_same_day_risk_allows_the_next_day_and_is_passed_to_the_decision` |
+| The frozen archive reproduces the timeline and fill decisions | `test_p1_step8_fill_validation.py::test_rebuild_reproduces_the_timeline_fill_decisions_and_digest` |

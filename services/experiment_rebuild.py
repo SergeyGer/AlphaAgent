@@ -40,6 +40,7 @@ from services.experiment_execution import (
     simulate_arm_accounting,
     validate_opportunity_set,
 )
+from services.experiment_identity import AttemptIdentity
 from services.experiment_simulation import (
     DecisionInput,
     SnapshotInput,
@@ -53,7 +54,7 @@ __all__ = [
     "recompute_primary_metric",
 ]
 
-REBUILD_METHOD_VERSION = "archive_replay.v1"
+REBUILD_METHOD_VERSION = "archive_replay.v2"
 _MAX_DIFFERENCES = 100
 
 
@@ -357,6 +358,13 @@ def _prepare(archive: dict) -> dict:
                     decision=decision,
                     snapshot=snapshot,
                     decision_run_id=str(run.get("decision_run_id") or ""),
+                    identity=(
+                        AttemptIdentity.from_dict(run["attempt_identity"])
+                        if isinstance(run.get("attempt_identity"), dict)
+                        else None
+                    ),
+                    attempt=int(run.get("attempt") or 0),
+                    reused=bool(run.get("reused")),
                 )
             )
 
@@ -390,6 +398,8 @@ def _prepare(archive: dict) -> dict:
     execution_block = {
         "execution_id": execution.get("execution_id"),
         "execution_id_kind": execution.get("execution_id_kind") or "deterministic_namespace.v1",
+        "configuration_id": execution.get("configuration_id"),
+        "configuration_id_kind": execution.get("configuration_id_kind"),
         "namespace": execution.get("namespace"),
         "namespace_version": execution.get("namespace_version") or "experiment_execution.v1",
         "portfolio_id": execution.get("portfolio_id"),
@@ -399,6 +409,8 @@ def _prepare(archive: dict) -> dict:
         "snapshots_used": {key: snapshot.as_dict() for key, snapshot in snapshots.items()},
         "evidence": execution.get("evidence") or {},
         "client_modes": execution.get("client_modes") or {},
+        "attempt_identity_version": execution.get("attempt_identity_version"),
+        "attempt_identities": execution.get("attempt_identities") or {},
         "run_ids": {
             arm: [run.decision_run_id for run in arm_runs[arm]] for arm in ("V0", "V1", "V2", "V3")
         },
@@ -526,6 +538,15 @@ def recompute_primary_metric(archive: dict) -> dict:
         trajectories=prepared["trajectories"],
         as_of=prepared["opportunity_set"].as_of,
         uncertainty=dict(prepared["opportunity_set"].pre_registration.get("uncertainty") or {}),
+        benchmark=prepared["opportunity_set"].benchmark,
+        benchmark_marks=prepared["opportunity_set"].benchmark_marks,
+        run_states_by_arm={
+            arm: {
+                run.opportunity: {"status": run.status, "failure_code": run.failure_code}
+                for run in prepared["arm_runs"][arm]
+            }
+            for arm in ("V0", "V1", "V2", "V3")
+        },
     )
     return {
         "metric": metric,

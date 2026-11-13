@@ -861,7 +861,7 @@ Reproduced before the repair:
 | Value, denominator, dispersion and contributing runs | `primary_metric_result.status/value/denominator/dispersion/interval/contributing_runs/by_arm` | `test_a_supported_horizon_carries_a_value_denominator_and_dispersion` |
 | Null means a named missing input | `no_usable_observations` + `missing_input` + `excluded_by_reason` | `test_a_run_without_the_registered_horizon_marks_is_null_with_a_specific_reason` |
 | V4 visibly unimplemented and outside the denominator | arm `implemented: false`, `status: not_executed`, `in_denominator: false`; absent from `denominators.implemented_arms` and `by_arm` | `test_a_supported_horizon_carries_a_value_denominator_and_dispersion` |
-| Committed fixtures recompute value and hash | `experiment_comparison.v2` embeds the opportunity set, snapshots, decisions and methods; `rebuild_experiment_report` reproduces the archive | `test_the_committed_archive_reproduces_its_value_and_hash` |
+| Committed fixtures recompute value and hash | `experiment_comparison.v3` embeds the opportunity set, benchmark marks, snapshots, attempt identities, decisions and methods; `rebuild_experiment_report` reproduces the archive | `test_the_committed_archive_reproduces_its_value_and_hash` |
 
 ### 8 — monotonic simulated time and archived rebuilds
 
@@ -1103,3 +1103,86 @@ Divergences recorded rather than absorbed:
    path resolves a completed *execution* (the reviewed defect). A HOLD, a guard
    block or an awaiting-approval delivery wrote no transaction, so it is
    re-evaluated by worker redelivery rather than returned from a fill receipt.
+
+## P1 remediation — attempt identity and fill-time validation (steps 7 and 8, follow-up)
+
+The acceptance review made two further P1 findings in the steps 7-8 work.
+
+**Step 7 reproduced.** With the same portfolio and opportunity set, executing
+`OfflineStageClient(model="model-a")` and then `model="model-b"` returned the
+same 12 `DecisionRun` ids for the second configuration, and no run recorded a
+resolved provider/model/parameter/budget block. `force=True` deleted the earlier
+row and its decision, guard and event rows (the old run id resolved to `False`).
+A document with `benchmark.marks` set and
+`primary_metric.id = "mean_relative_forward_return_pct"` still returned
+`status: not_computable`, `value: None`,
+`reason: "benchmark_marks_not_recorded"`, and its observation rows carried no
+benchmark entry/horizon block or timestamps.
+
+**Step 8 reproduced.** A BUY approved at 10 units × $100 filled at a later
+$3000 mark for the full 10 units: cash went from `10000.00` to `-20000.00`. Two
+sells of 6 and 8 against a holding of 10 both filled; the position was clamped to
+zero but cash rose from `1000` to `2400`, crediting 12 shares of proceeds. After
+a day realised `-800` against a `500` daily limit, a same-day BUY was approved
+because the simulator passed `realised_pnl_today=0` to the guard.
+
+### 7 — resolved attempt identity, retained reruns and matched benchmarks
+
+| Requirement | Where it is enforced | Evidence |
+| --- | --- | --- |
+| The identity is resolved from the run configuration | `services/experiment_identity.py` (`experiment_attempt.v1`): provider/model/parameters read from the client exactly as `DebateProtocol` reads them, the applied `ProtocolBudget`, and the declared execution policy | `test_p1_step7_identity_benchmarks.py::test_two_resolved_models_and_a_changed_budget_get_distinct_identities` |
+| A changed model or budget cannot reuse the other run | The identity hash is part of `fixture_id`; an exact configuration reuses its own latest attempt | same test; `execution.attempt_identities`, run-level `attempt` and `attempt_identity` |
+| A forced rerun appends an attempt and deletes nothing | `_attempt_for(..., force=True)` returns the next ordinal after every attempt of the run key; the previous `DecisionRun`, decision, guards and events stay | `test_forced_rerun_creates_a_new_attempt_and_keeps_the_old_one_resolvable` |
+| Benchmark entry and horizon observations are recorded beside the instrument | `_benchmark_pair` / `_metric_observation`: prices, `at`, `observed_at`, session and source on both observations, with the declared policy | `test_matching_mismatched_and_missing_benchmark_windows_are_separated` |
+| The relative result uses matched pairs only and publishes exclusions | `mean_relative_forward_return_pct` values filter on `benchmark.status == matched`; `benchmark_pairs` and `denominator.excluded_by_reason` name every exclusion | same test |
+| The denominator separates pending, failed, budget-blocked and missing | `denominator.by_state` and each row's `observation_state`; pending is a target after the archive's `as_of`, budget-blocked is a `budget_*` failure code | same test plus `test_a_document_with_no_benchmark_marks_names_the_missing_input` |
+| Synthetic labelling survives | The new fields are inside `synthetic: true` arms/trajectories; `honesty` is unchanged | existing rebuild tests |
+
+Divergences recorded rather than absorbed:
+
+1. **V0 is deterministic, so its identity does not change with a model.** Two
+   model configurations share the three V0 runs and only the V1-V3 arms are
+   disjoint. That is the correct identity for an arm that made no model call;
+   the report says so per arm.
+2. **Attempts are appended, not archived in a separate table.** The attempt
+   ordinal and resolved identity live in `DecisionRun.fixture_id` and
+   `protocol_metadata`, so no migration was required and an archive written
+   before the rerun keeps every run id it named.
+3. **A benchmark is declared inside the opportunity set, not in `marks`.** Its
+   marks are kept in a separate `PriceBook` so a benchmark price can never value
+   an open position. The matching policy is session-date precision, like the
+   Phase 3 contract; the intraday instant is recorded but not claimed as an
+   exchange-calendar match.
+4. **The example fixture now declares SPY marks.** Its registered metric is
+   still `mean_action_score_pct`, so the value is unchanged (`0.4729`), but the
+   archive now carries benchmark rows and the new identity/denominator fields.
+
+### 8 — one fill-time validation path and the day's realised P&L
+
+| Requirement | Where it is enforced | Evidence |
+| --- | --- | --- |
+| Proposals and fills are separate; immediate and deferred use one path | `_PendingOrder` plus `validate_and_apply`; a decision records a proposal, a fill is created only at its executable instant | `test_p1_step8_fill_validation.py::test_a_later_price_or_fee_that_exceeds_cash_clips_and_never_overdraws` |
+| Cash including fees, eligible holdings, daily loss and portfolio limits are rechecked at the executable price | The fill-time `evaluate_proposal` plus `_affordable_quantity`; a buy is clipped to cash plus fee, a sell to the actual holding | same test; `test_two_sells_beyond_the_holding_clip_the_second_and_never_overcredit` |
+| Realised P&L accumulates within the declared day and reaches the next decision | `weighted_average_cost.v1` + `fee_reduces_realised_pnl.v1`; `utc_calendar_day.v1` reset; `trajectory.simulation.realised_pnl` and `order.realised_pnl_today_usd` | `test_the_loss_blocks_same_day_risk_allows_the_next_day_and_is_passed_to_the_decision` |
+| Semantics are versioned and archived inputs reproduce | `monotonic_fill_validation.v2`, archive `experiment_comparison.v3` / schema `"3.0"`; `fill_validation`, fee/cost-basis/trading-day and benchmark inputs are in the archive | `test_rebuild_reproduces_the_timeline_fill_decisions_and_digest`; `test_the_committed_archive_reproduces_its_value_and_hash` |
+
+Divergences recorded rather than absorbed:
+
+1. **The decision-time quantity is a ceiling, not an authorisation.** A fill can
+   be smaller than the approval; that is the point. Each order publishes both
+   `approved_quantity_at_decision` and `filled_quantity` so the reduction is
+   visible rather than hidden in a recomputed number.
+2. **The policy clips where it can and rejects where it cannot.** A positive
+   affordable quantity is clipped; a zero quantity, a missing holding, a buy
+   whose fee cannot be paid or a sale whose fee exceeds its proceeds is rejected
+   with a stable reason. It never writes a negative cash balance.
+3. **The day's realised P&L is a simulation, not the account ledger.** It uses
+   the same weighted-average cost basis as `services.ledger`, subtracts fees on
+   both sides (the declared fee policy) and resets at UTC midnight. It is not
+   written to `Transaction` or to the live `realised_pnl_today` projection.
+4. **Version 2 archives are refused by name.** They were produced under
+   decision-time quantities; rebuilding them with the v2 simulation would be a
+   silent reinterpretation. The committed archive was regenerated as v3. The
+   committed metric value is unchanged because the fixture has zero fees and
+   quantities that fit at its marks; the `contents_hash` changed because the
+   timeline, validation blocks, identities and denominators did.
