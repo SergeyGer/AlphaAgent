@@ -211,6 +211,10 @@ def recording_provenance(*, root: Path | str | None = None) -> dict:
         "acceptance_record": record_relpath,
         "acceptance_digest": str((record or {}).get("output_digest") or ""),
         "tree_clean": not unexpected,
+        # This block answers "which build emitted the document", not "who
+        # produced the run". A verified build does not turn authored content
+        # into a provider recording; the export's run.origin is the run claim.
+        "scope": "build_verification_not_run_origin",
         "status": status,
         "verified": status == "verified",
         "usable_for_recording": status == "verified",
@@ -224,6 +228,7 @@ def _empty_provenance(status: str) -> dict:
         "acceptance_record": "",
         "acceptance_digest": "",
         "tree_clean": False,
+        "scope": "build_verification_not_run_origin",
         "status": status,
         "verified": False,
         "usable_for_recording": False,

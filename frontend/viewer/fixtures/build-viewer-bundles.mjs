@@ -386,6 +386,12 @@ function buildRun(fixture) {
         fixture_id: fixtureId,
         protocol_version: protocolVersion,
         authored: true,
+        origin_kind: 'authored_fixture',
+        provider_backed: false,
+        limitations: [
+          'Fixture manifest content is authored; no provider or model was called.',
+          'The bundle checksum verifies the file, not that a provider ran.',
+        ],
       },
       detail,
       events,

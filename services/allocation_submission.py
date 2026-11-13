@@ -37,7 +37,7 @@ import os
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -53,6 +53,7 @@ from core.allocation_models import (
     PortfolioPlan,
 )
 from core.decision_json import content_hash, json_safe, utc_iso
+from core.decision_models import InputSnapshot
 from core.log_safety import log_safe
 from core.models import Asset, Portfolio
 from services.allocation_provider import allocation_budget, build_allocation_client
@@ -74,6 +75,7 @@ from services.portfolio_allocation import (
 )
 from services.portfolio_brief import (
     CandidateCase,
+    PortfolioBrief,
     build_allocation_brief,
     capture_allocation_snapshot,
     load_candidate_cases,
@@ -128,6 +130,8 @@ DEFAULT_ANALYSIS_TIMEOUT_SECONDS = 300
 DEFAULT_ANALYSIS_LEASE_SECONDS = 120
 DEFAULT_ANALYSIS_MAX_ATTEMPTS = 3
 DEFAULT_ANALYSIS_STALE_SECONDS = 600
+CHECKPOINT_SCHEMA_VERSION = "allocation.input_checkpoint.v1"
+INPUT_PROVENANCE_SCHEMA = "allocation.input_provenance.v1"
 
 
 class AllocationSubmissionError(ValueError):
@@ -591,6 +595,180 @@ def _data_quality(
 
 
 # ---------------------------------------------------------------------------
+# Input checkpoint: the answer, the input it answered, and the provider config
+# ---------------------------------------------------------------------------
+def _parse_utc(value: Any) -> datetime | None:
+    if value in (None, ""):
+        return None
+    if isinstance(value, datetime):
+        return value
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _quote_collection_from_payload(payload: Mapping[str, Any] | None) -> QuoteCollection:
+    """Rebuild the stored quote observation block without touching the market."""
+    data = dict(payload or {})
+    collection = QuoteCollection()
+    for ticker, row in dict(data.get("quotes") or {}).items():
+        if not isinstance(row, Mapping):
+            continue
+        try:
+            price = Decimal(str(row.get("price")))
+        except (TypeError, ValueError):
+            continue
+        if price <= ZERO:
+            continue
+        collection.add(
+            str(ticker).upper(),
+            price,
+            str(row.get("source") or "checkpoint"),
+            as_of=_parse_utc(row.get("as_of")),
+            retrieved_at=_parse_utc(row.get("retrieved_at")),
+            currency=str(row.get("currency") or "USD"),
+        )
+    collection.missing = [str(ticker) for ticker in data.get("missing_tickers") or []]
+    collection.fallbacks = [
+        dict(row) for row in data.get("cost_fallbacks") or [] if isinstance(row, Mapping)
+    ]
+    collection.errors = [
+        dict(row) for row in data.get("quote_errors") or [] if isinstance(row, Mapping)
+    ]
+    return collection
+
+
+def _input_checkpoint(
+    *,
+    context: Mapping[str, Any],
+    snapshot: InputSnapshot | None,
+    provider_config: Mapping[str, Any] | None = None,
+) -> dict:
+    """The immutable input + provider configuration saved beside the answer."""
+    brief = context["brief"]
+    policy = context["policy"]
+    cost_model = context["cost_model"]
+    quotes: QuoteCollection = context["quotes"]
+    return json_safe(
+        {
+            "schema_version": CHECKPOINT_SCHEMA_VERSION,
+            "brief": brief.as_dict(),
+            "snapshot": (
+                {
+                    "id": str(snapshot.id),
+                    "content_hash": snapshot.content_hash,
+                    "portfolio_version": snapshot.portfolio_version,
+                    "captured_at": utc_iso(snapshot.captured_at),
+                    "analysis_cutoff": utc_iso(snapshot.analysis_cutoff),
+                }
+                if snapshot is not None
+                else None
+            ),
+            "policy": policy.as_dict(),
+            "cost_model": cost_model.as_dict(),
+            "quotes": quotes.as_dict(),
+            "classifications": context.get("classification_info") or {},
+            "candidates": context.get("candidate_info") or {},
+            "state_prices": {ticker: str(price) for ticker, price in brief.state.prices.items()},
+            "holding_prices": {
+                ticker: str(price) for ticker, price in brief.state.holding_prices.items()
+            },
+            "provider_config": dict(provider_config or {}),
+        }
+    )
+
+
+def _provider_config(submission: AllocationSubmission, client: Any) -> dict:
+    """The provider configuration in force for the paid call.
+
+    No credentials are included. Provider, model, parameters and the budget
+    ceilings are what a reader needs to judge the saved answer later; the key is
+    never part of the record.
+    """
+    budget = getattr(client, "budget", None) or allocation_budget()
+    return json_safe(
+        {
+            "mode": submission.mode,
+            "provider": str(getattr(client, "provider", "") or ""),
+            "model": str(getattr(client, "model", "") or ""),
+            "parameters": dict(getattr(client, "parameters", {}) or {}),
+            "synthetic_response": submission.mode == "stub",
+            "budget": {
+                "stage_timeout_seconds": budget.stage_timeout_seconds,
+                "run_deadline_seconds": budget.run_deadline_seconds,
+                "max_input_tokens": budget.max_input_tokens,
+                "max_output_tokens": budget.max_output_tokens,
+                "provider_retries": budget.provider_retries,
+                "monetary_budget_usd": (
+                    str(budget.monetary_budget_usd)
+                    if budget.monetary_budget_usd is not None
+                    else None
+                ),
+            },
+        }
+    )
+
+
+def _restore_analysis_context(
+    submission: AllocationSubmission,
+) -> tuple[dict[str, Any], str]:
+    """Rebuild the saved answer's input, not today's market.
+
+    Returns ``(context, input_source)``. A checkpoint written by this version
+    restores the stored brief/policy/cost model against the immutable snapshot
+    and reports ``provider_result_checkpoint``. A legacy row with a result but no
+    checkpoint is the one case that must re-read the market; it is labelled
+    ``fresh_evaluation_no_checkpoint`` so the plan says so.
+    """
+    checkpoint = dict(submission.checkpoint_context or {})
+    brief_payload = checkpoint.get("brief")
+    if not brief_payload:
+        return _build_analysis_context(submission), "fresh_evaluation_no_checkpoint"
+
+    snapshot = submission.input_snapshot
+    if snapshot is None:
+        raise AllocationSubmissionError(
+            "checkpoint_snapshot_missing",
+            "The provider result is checkpointed with an input snapshot that no longer "
+            "exists. It cannot be linked to a real input, so no plan is created.",
+        )
+    if snapshot.portfolio_id != submission.portfolio_id:
+        raise AllocationSubmissionError(
+            "checkpoint_snapshot_mismatch",
+            "The checkpointed input snapshot belongs to another portfolio.",
+        )
+    if str(brief_payload.get("snapshot_id") or "") != str(snapshot.id):
+        raise AllocationSubmissionError(
+            "checkpoint_snapshot_mismatch",
+            "The checkpointed brief does not reference its recorded input snapshot.",
+        )
+    stored_hash = str((checkpoint.get("snapshot") or {}).get("content_hash") or "")
+    if stored_hash and stored_hash != snapshot.content_hash:
+        raise AllocationSubmissionError(
+            "checkpoint_snapshot_mismatch",
+            "The immutable input snapshot no longer matches the hash recorded with the "
+            "provider result.",
+        )
+
+    context: dict[str, Any] = {
+        "quotes": _quote_collection_from_payload(checkpoint.get("quotes")),
+        "classification_info": dict(checkpoint.get("classifications") or {}),
+        "candidate_info": dict(checkpoint.get("candidates") or {}),
+        "brief": PortfolioBrief.from_dict(
+            brief_payload,
+            state_prices=checkpoint.get("state_prices"),
+            holding_prices=checkpoint.get("holding_prices"),
+        ),
+        "policy": AllocationPolicy.from_dict(checkpoint.get("policy")),
+        "cost_model": CostModel.from_dict(checkpoint.get("cost_model")),
+        "snapshot": snapshot,
+        "input_source": "provider_result_checkpoint",
+    }
+    return context, "provider_result_checkpoint"
+
+
+# ---------------------------------------------------------------------------
 # Submission lifecycle
 # ---------------------------------------------------------------------------
 def _existing_submission(portfolio: Portfolio, key: str) -> AllocationSubmission | None:
@@ -851,9 +1029,17 @@ def _checkpoint_provider_result(
     owner: str,
     proposal: AllocationProposal,
     metadata: dict,
+    context: Mapping[str, Any],
+    snapshot: InputSnapshot | None,
+    provider_config: Mapping[str, Any] | None,
     now,
 ) -> AllocationSubmission | None:
-    """Persist the validated provider result before any plan side effect."""
+    """Persist the validated result **and the input it answers** before any plan.
+
+    The snapshot is immutable; the brief/policy/cost model/quotes are stored
+    beside it so a resume can size the saved answer against the same input even
+    after the market or the portfolio limits have moved.
+    """
     with transaction.atomic():
         submission = _owned_submission(submission_id)
         if submission.is_terminal or submission.claimed_by != owner:
@@ -864,12 +1050,21 @@ def _checkpoint_provider_result(
         submission.model = str(metadata.get("model") or "")[:128]
         submission.synthetic_response = bool(metadata.get("synthetic_response"))
         submission.provider_completed_at = now
+        submission.input_snapshot = snapshot
+        submission.checkpoint_context = _input_checkpoint(
+            context=context,
+            snapshot=snapshot,
+            provider_config=provider_config,
+        )
+        submission.provider_config = json_safe(dict(provider_config or {}))
         submission.heartbeat_at = now
         submission.lease_expires_at = now + timedelta(seconds=_analysis_lease_seconds())
         submission.worker_metadata = json_safe(
             {
                 **(submission.worker_metadata or {}),
                 "last_checkpoint": "provider_result_persisted",
+                "input_source": str(context.get("input_source") or "current_market"),
+                "input_snapshot_id": str(snapshot.id) if snapshot is not None else None,
             }
         )
         submission.save(
@@ -880,6 +1075,9 @@ def _checkpoint_provider_result(
                 "model",
                 "synthetic_response",
                 "provider_completed_at",
+                "input_snapshot",
+                "checkpoint_context",
+                "provider_config",
                 "heartbeat_at",
                 "lease_expires_at",
                 "worker_metadata",
@@ -987,6 +1185,8 @@ def _build_analysis_context(submission: AllocationSubmission) -> dict[str, Any]:
         "brief": brief,
         "policy": policy,
         "cost_model": cost_model,
+        "snapshot": snapshot,
+        "input_source": "current_market",
     }
 
 
@@ -1006,6 +1206,14 @@ def _provider_metadata(
                 "classifications": context["classification_info"],
                 "candidate_source": "stored_decision_runs_plus_declared_absence",
                 "price_history": "not_fetched",
+                "snapshot_id": (
+                    str(context["snapshot"].id) if context.get("snapshot") is not None else None
+                ),
+                "snapshot_content_hash": (
+                    context["snapshot"].content_hash
+                    if context.get("snapshot") is not None
+                    else None
+                ),
             },
         }
     )
@@ -1033,6 +1241,32 @@ def _client_for(submission: AllocationSubmission, brief):
         )
         max_repairs = 1 if submission.mode == "live" else 0
     return client, max_repairs
+
+
+def _attach_input_provenance(
+    proposal: AllocationProposal,
+    context: Mapping[str, Any],
+    submission: AllocationSubmission,
+) -> None:
+    """Record which input and provider configuration the plan's answer used."""
+    brief = context.get("brief")
+    snapshot = context.get("snapshot")
+    metadata = dict(proposal.model_metadata or {})
+    input_metadata = dict(metadata.get("input_provenance") or {})
+    input_metadata.update(
+        {
+            "schema_version": INPUT_PROVENANCE_SCHEMA,
+            "input_source": str(context.get("input_source") or "unknown"),
+            "snapshot_id": (
+                str(snapshot.id)
+                if snapshot is not None
+                else (str(getattr(brief, "snapshot_id", "") or "") or None)
+            ),
+            "snapshot_content_hash": (snapshot.content_hash if snapshot is not None else None),
+            "provider_config": dict(submission.provider_config or {}),
+        }
+    )
+    proposal.model_metadata = {**metadata, "input_provenance": input_metadata}
 
 
 def _finalize_success(
@@ -1075,6 +1309,7 @@ def _finalize_success(
                 ),
                 now=now,
             )
+        _attach_input_provenance(proposal, context, submission)
         plan, _created = create_plan(
             submission.portfolio,
             brief=brief,
@@ -1102,14 +1337,17 @@ def _finalize_success(
         submission.synthetic_response = bool(
             (submission.model_metadata or {}).get("synthetic_response")
         )
-        submission.data_quality = json_safe(
-            _data_quality(
-                quotes=quotes,
-                classification_info=classification_info,
-                candidate_info=candidate_info,
-                brief=brief,
-            )
+        data_quality = _data_quality(
+            quotes=quotes,
+            classification_info=classification_info,
+            candidate_info=candidate_info,
+            brief=brief,
         )
+        data_quality["input"]["input_source"] = str(context.get("input_source") or "unknown")
+        data_quality["input"]["snapshot_id"] = (
+            str(context["snapshot"].id) if context.get("snapshot") is not None else None
+        )
+        submission.data_quality = json_safe(data_quality)
         submission.status = AllocationSubmissionStatus.SUCCEEDED
         submission.completed_at = now
         submission.error_code = ""
@@ -1205,17 +1443,38 @@ def submit_analysis(
 
 
 def dispatch_submission(submission: AllocationSubmission) -> bool:
-    """Publish the worker task without waiting for the analysis.
+    """Publish the worker task and durably record the attempt.
 
     A broker failure is not allowed to turn a durable submission into an HTTP
-    error: the row remains ``queued`` with its deadline, and the repair command
-    (or a later GET that re-dispatches) can pick it up. No exception text is
-    logged; the submission id and the fact are enough to find the cause.
+    error. It is recorded as a stable code on the row instead, which is what the
+    scheduled recovery sweep looks for: the database commit succeeded but the
+    broker never accepted the task. No exception text is logged; the submission
+    id and the stable failure code are enough to find the cause.
     """
     key = str(submission.pk)
-    AllocationSubmission.objects.filter(
-        pk=submission.pk, status=AllocationSubmissionStatus.QUEUED
-    ).update(last_dispatched_at=timezone.now())
+    moment = timezone.now()
+    with transaction.atomic():
+        locked = _owned_submission(submission.pk)
+        if locked.is_terminal or locked.status != AllocationSubmissionStatus.QUEUED:
+            return False
+        locked.dispatch_attempt_count += 1
+        locked.last_dispatched_at = moment
+        locked.last_dispatch_error = ""
+        locked.worker_metadata = json_safe(
+            {
+                **(locked.worker_metadata or {}),
+                "last_dispatch_attempt": locked.dispatch_attempt_count,
+            }
+        )
+        locked.save(
+            update_fields=[
+                "dispatch_attempt_count",
+                "last_dispatched_at",
+                "last_dispatch_error",
+                "worker_metadata",
+                "updated_at",
+            ]
+        )
     try:
         # Local import: tasks imports this module for the worker entry point.
         from tasks import run_allocation_submission_task
@@ -1223,8 +1482,12 @@ def dispatch_submission(submission: AllocationSubmission) -> bool:
         run_allocation_submission_task.delay(key)
         return True
     except Exception:
+        AllocationSubmission.objects.filter(
+            pk=submission.pk, status=AllocationSubmissionStatus.QUEUED
+        ).update(last_dispatch_error="broker_unavailable")
         logger.warning(
-            "Allocation submission %s could not be dispatched; it remains queued for repair",
+            "Allocation submission %s could not be dispatched; it remains queued for "
+            "the recovery sweep",
             key,
         )
         return False
@@ -1283,6 +1546,7 @@ def process_submission(
                 )
             context = _build_analysis_context(submission)
             client, max_repairs = _client_for(submission, context["brief"])
+            provider_config = _provider_config(submission, client)
             # A live analysis is a paid call with an unknown final price. Reserve
             # the configured upper bound before the provider is called; a refused
             # submission writes no provider_started checkpoint and makes no call.
@@ -1342,13 +1606,17 @@ def process_submission(
                 owner=owner,
                 proposal=proposal,
                 metadata=metadata,
+                context=context,
+                snapshot=context.get("snapshot"),
+                provider_config=provider_config,
                 now=timezone.now(),
             )
             if checkpoint is None:
                 return AllocationSubmission.objects.get(pk=submission.pk)
             submission = checkpoint
         else:
-            context = _build_analysis_context(submission)
+            context, restored_source = _restore_analysis_context(submission)
+            context["input_source"] = restored_source
 
         proposal = _proposal_from_result(
             submission.provider_result, submission.model_metadata or {}
@@ -1434,41 +1702,51 @@ def cancel_submission(
         return locked, True
 
 
-def _stuck_queryset(*, now, stale_after_seconds: int):
-    threshold = now - timedelta(seconds=stale_after_seconds)
+def _recovery_queryset(*, now, stale_after_seconds: int):
+    """Rows that might need a repair, cheapest evidence first.
+
+    A queued row is a candidate when it was never dispatched, its last dispatch
+    failed, or its dispatch is older than the stale threshold (the broker may
+    have lost the message). A running row is a candidate when its deadline has
+    passed, its lease expired or its heartbeat is stale. Active leases and
+    terminal rows are never candidates.
+    """
+    stale = now - timedelta(seconds=stale_after_seconds)
+    queued = Q(status=AllocationSubmissionStatus.QUEUED) & (
+        Q(dispatch_attempt_count=0)
+        | Q(last_dispatched_at__isnull=True)
+        | ~Q(last_dispatch_error="")
+        | Q(last_dispatched_at__lte=stale)
+        | Q(created_at__lte=stale)
+        | Q(deadline_at__isnull=False, deadline_at__lte=now)
+    )
+    running = Q(status=AllocationSubmissionStatus.RUNNING) & (
+        Q(deadline_at__isnull=False, deadline_at__lte=now)
+        | Q(lease_expires_at__isnull=False, lease_expires_at__lte=now)
+        | Q(heartbeat_at__isnull=False, heartbeat_at__lte=stale)
+        | Q(heartbeat_at__isnull=True, created_at__lte=stale)
+    )
     return (
-        AllocationSubmission.objects.filter(
-            status__in=[
-                AllocationSubmissionStatus.QUEUED,
-                AllocationSubmissionStatus.RUNNING,
-            ]
-        )
-        .filter(
-            Q(deadline_at__isnull=False, deadline_at__lte=now)
-            | Q(status=AllocationSubmissionStatus.QUEUED, created_at__lte=threshold)
-            | Q(
-                status=AllocationSubmissionStatus.RUNNING,
-                heartbeat_at__lte=threshold,
-            )
-            # A row claimed before the heartbeat column existed has no value to
-            # compare; its age is the next-best evidence that no worker owns it.
-            | Q(
-                status=AllocationSubmissionStatus.RUNNING,
-                heartbeat_at__isnull=True,
-                created_at__lte=threshold,
-            )
-            | Q(
-                status=AllocationSubmissionStatus.RUNNING,
-                lease_expires_at__isnull=False,
-                lease_expires_at__lte=now,
-            )
-        )
+        AllocationSubmission.objects.filter(queued | running)
         .select_related("plan")
         .order_by("created_at")
     )
 
 
-def _repair_action(submission: AllocationSubmission, now) -> tuple[str, str, str]:
+def _repair_action(
+    submission: AllocationSubmission,
+    now,
+    *,
+    stale_threshold,
+) -> tuple[str, str, str]:
+    """The action for one row, evaluated from its current columns.
+
+    Called once to build a dry-run report and again under the row lock before a
+    write. The second evaluation is what keeps a lease that was renewed (or a
+    row that became terminal) from being acted on by a stale plan.
+    """
+    if submission.is_terminal:
+        return ("skip", "terminal", "The row is already terminal; nothing is reopened.")
     if submission.deadline_at is not None and submission.deadline_at <= now:
         return (
             "time_out",
@@ -1476,30 +1754,152 @@ def _repair_action(submission: AllocationSubmission, now) -> tuple[str, str, str
             "The submission passed its analysis deadline. It is marked timed out and "
             "no plan or trade will be created.",
         )
-    if (
-        submission.status == AllocationSubmissionStatus.RUNNING
-        and submission.provider_call_started_at is not None
-        and not submission.provider_result
-    ):
-        return (
-            "fail",
-            "provider_call_unreconciled",
-            "A provider call was started and its result was never recorded. A retry "
-            "would spend a second time, so the submission is failed instead.",
-        )
     if submission.status == AllocationSubmissionStatus.RUNNING:
+        if submission.lease_expires_at is not None and submission.lease_expires_at > now:
+            return (
+                "skip",
+                "active_lease",
+                "The running lease is still valid; another worker owns this attempt.",
+            )
+        if submission.provider_call_started_at is not None and not submission.provider_result:
+            return (
+                "fail",
+                "provider_call_unreconciled",
+                "A provider call was started and its result was never recorded. A retry "
+                "would spend a second time, so the submission is failed instead.",
+            )
+        if submission.attempt_count >= submission.max_attempts:
+            return (
+                "fail",
+                "attempts_exhausted",
+                "The submission used its bounded attempts without a validated plan and "
+                "will not be requeued.",
+            )
         return (
             "requeue",
             "worker_lost",
             "The worker lease expired before a plan was attached. The submission is "
             "returned to the queue for another attempt.",
         )
-    return (
-        "requeue",
-        "not_claimed",
-        "The submission was queued but no worker claimed it before the stale "
-        "threshold. It is re-dispatched.",
-    )
+    if submission.status == AllocationSubmissionStatus.QUEUED:
+        if submission.attempt_count >= submission.max_attempts:
+            return (
+                "fail",
+                "attempts_exhausted",
+                "The submission used its bounded attempts without a validated plan and "
+                "will not be requeued.",
+            )
+        if submission.last_dispatch_error:
+            return (
+                "dispatch",
+                "dispatch_failed",
+                "The durable row was committed but the broker rejected the publish. It "
+                "is published again without a second POST.",
+            )
+        if submission.dispatch_attempt_count == 0 or submission.last_dispatched_at is None:
+            return (
+                "dispatch",
+                "never_published",
+                "The durable row was committed but no dispatch was ever recorded. It is "
+                "published now.",
+            )
+        if submission.last_dispatched_at <= stale_threshold:
+            return (
+                "dispatch",
+                "dispatch_stale",
+                "The last publish is older than the stale threshold; the broker may have "
+                "lost the message, so it is published again.",
+            )
+        return (
+            "skip",
+            "queued",
+            "The queued row was dispatched recently and is waiting for a worker.",
+        )
+    return ("skip", "unknown_state", "The row is in an unexpected state.")
+
+
+def _apply_recovery(
+    row: AllocationSubmission,
+    *,
+    now,
+    stale_threshold,
+) -> tuple[dict[str, Any], bool]:
+    """Re-evaluate and apply one repair under the row lock.
+
+    Returns ``(observed, dispatch_ok)``. ``observed`` is the action that was
+    actually taken, which may differ from the dry-run preview if the lease was
+    renewed or the row became terminal between the query and the lock.
+    """
+    with transaction.atomic():
+        locked = _owned_submission(row.pk)
+        action, code, detail = _repair_action(locked, now, stale_threshold=stale_threshold)
+        observed = {
+            "action": action,
+            "reason": code,
+            "detail": detail,
+            "applied": False,
+            "status_before": locked.status,
+        }
+        if action == "skip":
+            return observed, False
+        previous_status = locked.status
+        if action in {"dispatch", "requeue"}:
+            if locked.status == AllocationSubmissionStatus.RUNNING:
+                locked.status = AllocationSubmissionStatus.QUEUED
+                locked.claimed_by = ""
+                locked.claimed_at = None
+                locked.heartbeat_at = None
+                locked.lease_expires_at = None
+            locked.worker_metadata = json_safe(
+                {
+                    **(locked.worker_metadata or {}),
+                    "last_checkpoint": "recovered",
+                    "recovery": {
+                        "schema_version": "allocation.recovery.v1",
+                        "action": action,
+                        "reason": code,
+                        "at": utc_iso(now),
+                        "previous_status": previous_status,
+                    },
+                }
+            )
+            locked.save(
+                update_fields=[
+                    "status",
+                    "claimed_by",
+                    "claimed_at",
+                    "heartbeat_at",
+                    "lease_expires_at",
+                    "worker_metadata",
+                    "updated_at",
+                ]
+            )
+            observed["applied"] = True
+            observed["status_after"] = locked.status
+            return observed, True
+        status = (
+            AllocationSubmissionStatus.TIMED_OUT
+            if action == "time_out"
+            else AllocationSubmissionStatus.FAILED
+        )
+        _finish_locked(locked, status=status, code=code, detail=detail, now=now)
+        locked.worker_metadata = json_safe(
+            {
+                **(locked.worker_metadata or {}),
+                "last_checkpoint": "recovered",
+                "recovery": {
+                    "schema_version": "allocation.recovery.v1",
+                    "action": action,
+                    "reason": code,
+                    "at": utc_iso(now),
+                    "previous_status": previous_status,
+                },
+            }
+        )
+        locked.save(update_fields=["worker_metadata", "updated_at"])
+        observed["applied"] = True
+        observed["status_after"] = status
+        return observed, False
 
 
 def recover_stuck_submissions(
@@ -1509,86 +1909,59 @@ def recover_stuck_submissions(
     stale_after_seconds: int | None = None,
     limit: int = 100,
 ) -> list[dict[str, Any]]:
-    """Find and optionally repair submissions a worker will not finish.
+    """Find and optionally repair submissions that will not finish on their own.
 
-    Dry run is the default and performs no write. With ``dry_run=False`` a
-    past-deadline or unreconciled row becomes ``timed_out``/``failed``, and a
-    row whose worker merely died before the paid call is returned to ``queued``
-    and dispatched again. Cancelled and timed-out rows are never reopened.
+    Discovery includes queued rows that were never published or whose publish
+    failed, not only rows that have been queued for a long time: that is the
+    interval between the database commit and broker acceptance, where a crash
+    used to leave the job waiting for a user to POST again.
+
+    Dry run is the default and performs no write. With ``dry_run=False`` every
+    action is re-evaluated under the row lock, so an active lease or a terminal
+    row discovered by an earlier query is left intact. Cancelled and timed-out
+    rows are never reopened, and the attempt limit applies before any requeue.
     """
     moment = now or timezone.now()
     stale = _analysis_stale_seconds() if stale_after_seconds is None else stale_after_seconds
-    rows = list(_stuck_queryset(now=moment, stale_after_seconds=stale)[: max(1, int(limit))])
+    stale_threshold = moment - timedelta(seconds=stale)
+    rows = list(_recovery_queryset(now=moment, stale_after_seconds=stale)[: max(1, int(limit))])
     report: list[dict[str, Any]] = []
     for row in rows:
-        action, code, detail = _repair_action(row, moment)
+        action, code, detail = _repair_action(row, moment, stale_threshold=stale_threshold)
+        if action == "skip":
+            # A lease renewed (or a row made terminal) after discovery is not a
+            # repair, and must not inflate the report.
+            continue
         entry = {
             "run_id": str(row.id),
             "status": row.status,
             "attempt_count": row.attempt_count,
+            "max_attempts": row.max_attempts,
+            "dispatch_attempt_count": row.dispatch_attempt_count,
+            "last_dispatch_error": row.last_dispatch_error or None,
             "claimed_by": row.claimed_by or None,
             "deadline_at": utc_iso(row.deadline_at),
             "heartbeat_at": utc_iso(row.heartbeat_at),
             "provider_call_started_at": utc_iso(row.provider_call_started_at),
             "provider_result_persisted": bool(row.provider_result),
+            "input_snapshot_id": (
+                str(row.input_snapshot_id) if row.input_snapshot_id is not None else None
+            ),
             "action": action,
             "reason": code,
             "detail": detail,
             "applied": False,
+            "dispatch_attempted": False,
+            "dispatch_published": False,
         }
-        if not dry_run:
-            if action == "requeue":
-                requeued = False
-                with transaction.atomic():
-                    locked = _owned_submission(row.pk)
-                    if not locked.is_terminal:
-                        locked.status = AllocationSubmissionStatus.QUEUED
-                        locked.claimed_by = ""
-                        locked.claimed_at = None
-                        locked.heartbeat_at = None
-                        locked.lease_expires_at = None
-                        locked.worker_metadata = json_safe(
-                            {
-                                **(locked.worker_metadata or {}),
-                                "last_checkpoint": "requeued",
-                                "requeue_reason": code,
-                            }
-                        )
-                        locked.save(
-                            update_fields=[
-                                "status",
-                                "claimed_by",
-                                "claimed_at",
-                                "heartbeat_at",
-                                "lease_expires_at",
-                                "worker_metadata",
-                                "updated_at",
-                            ]
-                        )
-                        requeued = True
-                if requeued:
-                    dispatch_submission(row)
-                entry["applied"] = requeued
-            else:
-                status = (
-                    AllocationSubmissionStatus.TIMED_OUT
-                    if action == "time_out"
-                    else AllocationSubmissionStatus.FAILED
-                )
-                repaired = _finish_submission(
-                    row.pk,
-                    status=status,
-                    code=code,
-                    detail=detail,
-                    owner=None,
-                    now=moment,
-                    worker_metadata={
-                        **(row.worker_metadata or {}),
-                        "last_checkpoint": "repaired",
-                        "repair_action": action,
-                    },
-                )
-                entry["applied"] = repaired.is_terminal and repaired.status == status
+        if not dry_run and action != "skip":
+            observed, should_dispatch = _apply_recovery(
+                row, now=moment, stale_threshold=stale_threshold
+            )
+            entry.update(observed)
+            entry["dispatch_attempted"] = should_dispatch
+            if should_dispatch:
+                entry["dispatch_published"] = dispatch_submission(row)
         report.append(entry)
     return report
 
@@ -1598,6 +1971,12 @@ def recover_stuck_submissions(
 # ---------------------------------------------------------------------------
 def submission_as_dict(submission: AllocationSubmission) -> dict:
     plan = submission.plan
+    worker_metadata = dict(submission.worker_metadata or {})
+    model_metadata = dict(submission.model_metadata or {})
+    data_quality = dict(submission.data_quality or {})
+    input_quality = dict(data_quality.get("input") or {})
+    model_input = dict(model_metadata.get("input_provenance") or {})
+    recovery = worker_metadata.get("recovery")
     return {
         "run_id": str(submission.id),
         "portfolio_id": submission.portfolio_id,
@@ -1620,6 +1999,31 @@ def submission_as_dict(submission: AllocationSubmission) -> dict:
         "queued_at": utc_iso(submission.queued_at),
         "deadline_at": utc_iso(submission.deadline_at),
         "heartbeat_at": utc_iso(submission.heartbeat_at),
+        # Dispatch is a different axis from a worker attempt: it says whether
+        # the broker accepted a publish. A queued row with an error here is the
+        # commit/publish gap the recovery sweep repairs.
+        "dispatch": {
+            "attempts": submission.dispatch_attempt_count,
+            "last_attempt_at": utc_iso(submission.last_dispatched_at),
+            "last_error": submission.last_dispatch_error or None,
+            "published": bool(submission.last_dispatched_at) and not submission.last_dispatch_error,
+        },
+        "recovered": recovery is not None,
+        "recovery": recovery if isinstance(recovery, dict) else None,
+        "input": {
+            "snapshot_id": (
+                str(submission.input_snapshot_id)
+                if submission.input_snapshot_id is not None
+                else None
+            ),
+            "input_source": (
+                input_quality.get("input_source")
+                or model_input.get("input_source")
+                or worker_metadata.get("input_source")
+                or None
+            ),
+            "provider_config": dict(submission.provider_config or {}),
+        },
         "mode": submission.mode,
         "protocol_version": submission.protocol_version,
         "tickers": list(submission.tickers or []),

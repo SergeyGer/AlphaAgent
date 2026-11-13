@@ -450,13 +450,10 @@ class RecommendationDecisionView(APIView):
             payload["errors"] = None
             return Response(payload, status=status.HTTP_409_CONFLICT)
 
-        logger.info(
-            "User %s %sd recommendation %s -> %s",
-            log_safe(request.user.username),
-            self.decision,
-            outcome.recommendation.pk,
-            log_safe(outcome.recommendation.status),
-        )
+        # The decision is logged in services.recommendations, where the audit
+        # row and its stable fields (recommendation id, status enum, via enum)
+        # live. Keeping the sink there means this view never interpolates a
+        # request-derived string into a log record.
         return Response(payload, status=status.HTTP_200_OK)
 
 

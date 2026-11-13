@@ -109,6 +109,7 @@ const MODE_TONE: Record<RunMode, BadgeTone> = {
   heuristic: 'amber',
   legacy: 'slate',
   synthetic: 'violet',
+  simulated: 'amber',
 };
 
 const NOTICE_CLASS: Record<NoticeTone, string> = {

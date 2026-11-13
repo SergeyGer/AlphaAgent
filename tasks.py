@@ -1250,3 +1250,41 @@ def run_allocation_submission_task(self, submission_id: str) -> dict[str, Any]:
         "attempt_count": submission.attempt_count,
         "plan_id": str(submission.plan_id) if submission.plan_id else None,
     }
+
+
+@shared_task(
+    name="tasks.recover_allocation_submissions_task",
+    acks_late=True,
+    max_retries=0,
+)
+def recover_allocation_submissions_task(limit: int = 100) -> dict[str, Any]:
+    """Scheduled recovery for the commit/publish gap and lost workers.
+
+    This is the automation the repair command never had. It reuses
+    ``recover_stuck_submissions``, which re-evaluates every candidate under a row
+    lock before writing: an active lease or a terminal row is left alone, a
+    past-deadline row becomes ``timed_out``, an unreconciled paid call becomes
+    ``failed``, and a queued row that was never published (or whose publish
+    failed) is published again. It never creates a plan or applies a trade.
+    """
+    from services.allocation_submission import recover_stuck_submissions
+
+    report = recover_stuck_submissions(dry_run=False, limit=max(1, int(limit)))
+    actions = [
+        {
+            "run_id": row.get("run_id"),
+            "action": row.get("action"),
+            "reason": row.get("reason"),
+            "applied": bool(row.get("applied")),
+            "dispatch_attempted": bool(row.get("dispatch_attempted")),
+            "dispatch_published": bool(row.get("dispatch_published")),
+        }
+        for row in report
+    ]
+    return {
+        "status": "ok",
+        "inspected": len(report),
+        "applied": sum(1 for row in report if row.get("applied")),
+        "dispatched": sum(1 for row in report if row.get("dispatch_published")),
+        "actions": actions,
+    }

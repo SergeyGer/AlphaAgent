@@ -477,7 +477,13 @@ export interface RunAgentResponse {
  * `heuristic` and `legacy` specifically mean the LLM debate did not happen, and
  * the detail view has to say so rather than presenting their data as complete.
  */
-export type RunMode = 'live' | 'recorded' | 'heuristic' | 'legacy' | 'synthetic';
+export type RunMode =
+  | 'live'
+  | 'recorded'
+  | 'heuristic'
+  | 'legacy'
+  | 'synthetic'
+  | 'simulated';
 
 /** Pipeline stage / terminal state of one decision run. */
 export type RunStatus =
@@ -531,6 +537,11 @@ export interface RunSummary {
   cost?: Record<string, unknown> | null;
   failure?: Record<string, unknown> | null;
   provenance?: Record<string, unknown> | null;
+  /**
+   * How the run record says its content was produced. This is a different
+   * claim from the export checksum and from the build-verification block.
+   */
+  origin?: Record<string, unknown> | null;
   protocol?: Record<string, unknown> | null;
   snapshot_id?: string | null;
   model_hash?: string | null;

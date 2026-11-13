@@ -8,6 +8,7 @@ import {
   parseViewerBundleText,
   sha256Hex,
   sourceLabelFromMode,
+  sourceLabelFromOrigin,
   sourceLabelForRun,
   SOURCE_LABEL_TEXT,
   type ViewerBundle,
@@ -265,6 +266,18 @@ describe('source labels', () => {
     expect(
       sourceLabelForRun({ mode: 'synthetic', source_label: 'real_recorded' }),
     ).toBe('real_recorded');
+  });
+
+  it('requires a provider-backed origin record, not just a recorded mode', () => {
+    expect(
+      sourceLabelFromOrigin({ kind: 'provider_run', provider_backed: true }),
+    ).toBe('real_recorded');
+    expect(
+      sourceLabelFromOrigin({ kind: 'authored_fixture', provider_backed: false }),
+    ).toBe('synthetic');
+    expect(
+      sourceLabelFromOrigin({ kind: 'recorded_without_provider_record' }),
+    ).toBe('synthetic');
   });
 });
 

@@ -1,13 +1,19 @@
 #!/usr/bin/env python
-"""Regenerate the committed decision-run export contract sample.
+"""Regenerate the committed decision-run export contract samples.
 
-The sample at ``docs/spec/fixtures/decision-run-export.v1.json`` is captured
-from the authenticated ``GET /api/decision-runs/<id>/export/`` endpoint, not
-assembled by hand. It carries every field the endpoint emits, including nested
-decimal strings, nullable times, two guard evaluations, a superseded outcome and
-Unicode text.
+Both samples are captured from the authenticated
+``GET /api/decision-runs/<id>/export/`` endpoint, not assembled by hand. They
+carry every field the endpoint emits, including nested decimal strings, nullable
+times, two guard evaluations, a superseded outcome and Unicode text.
 
-Two suites read the same file:
+* ``docs/spec/fixtures/decision-run-export.v1.json`` is **authored fixture
+  data** (``mode: synthetic``, ``source: fixture``). Its ``run.origin`` says
+  ``authored_fixture`` and the viewer labels it Synthetic.
+* ``docs/spec/fixtures/decision-run-export.provider-backed.v1.json``
+  (``--provider-backed``) is test data for the Step 11 path: the record shape is
+  provider-backed, but the file says no live call produced it.
+
+Two suites read the authored file:
 
 * ``core/tests/test_p1_export_portability.py`` verifies its checksum and compares
   its recursive shape with a fresh export, so the emitter cannot drift without a
@@ -18,6 +24,7 @@ Two suites read the same file:
 Run this only when the export shape changes intentionally, then review the diff:
 
     venv/bin/python scripts/build_export_sample.py --force
+    venv/bin/python scripts/build_export_sample.py --provider-backed --force
 """
 
 from __future__ import annotations
@@ -35,11 +42,22 @@ if str(PROJECT_ROOT) not in sys.path:
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
 DEFAULT_OUTPUT = PROJECT_ROOT / "docs/spec/fixtures/decision-run-export.v1.json"
+DEFAULT_PROVIDER_OUTPUT = (
+    PROJECT_ROOT / "docs/spec/fixtures/decision-run-export.provider-backed.v1.json"
+)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--out", default=str(DEFAULT_OUTPUT))
+    parser.add_argument("--out", default=None)
+    parser.add_argument(
+        "--provider-backed",
+        action="store_true",
+        help=(
+            "Build the provider-backed test record instead of the authored fixture. "
+            "This is test data for the Step 11 provenance path, not a live model call."
+        ),
+    )
     parser.add_argument(
         "--force",
         action="store_true",
@@ -66,7 +84,9 @@ def main() -> int:
     from core.tests.export_sample import create_export_sample_run
     from services.recording_provenance import RecordingRefused, require_clean_for_recording
 
-    output = Path(args.out).resolve()
+    output = Path(
+        args.out or (DEFAULT_PROVIDER_OUTPUT if args.provider_backed else DEFAULT_OUTPUT)
+    ).resolve()
     if output.exists() and not args.force:
         print(f"REFUSED: {output} exists. Pass --force to regenerate it.", file=sys.stderr)
         return 2
@@ -94,7 +114,7 @@ def main() -> int:
             max_sector_concentration_pct=Decimal("40.0"),
             daily_loss_limit_usd=Decimal("500.0"),
         )
-        run = create_export_sample_run(portfolio)
+        run = create_export_sample_run(portfolio, provider_backed=args.provider_backed)
         client = APIClient()
         client.defaults["HTTP_HOST"] = "localhost"
         client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")

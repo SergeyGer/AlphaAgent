@@ -1177,6 +1177,21 @@ def _log_human_decision(
     dashboard shows one continuous story: proposal -> decision -> outcome.
     """
     verdict = "APPROVED" if approved else "REJECTED"
+    # Stable fields only. This replaces the request-layer log that interpolated
+    # the caller's username: an id and two enum values cannot carry a newline or
+    # forged record, and the audit row written beside it is the free-form record.
+    status = (
+        recommendation.status if recommendation.status in RecommendationStatus.values else "unknown"
+    )
+    via = (
+        recommendation.decided_via if recommendation.decided_via in DecidedVia.values else "unknown"
+    )
+    logger.info(
+        "Recommendation decision recorded id=%s status=%s via=%s",
+        int(recommendation.pk),
+        status,
+        via,
+    )
     try:
         log = AgentDecisionLog.objects.create(
             portfolio=portfolio,

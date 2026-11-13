@@ -1,10 +1,16 @@
 """Build the feature-complete run used to pin the export contract.
 
 The committed sample `docs/spec/fixtures/decision-run-export.v1.json` is an
-export the authenticated endpoint produced from this run. The Python test
-compares a fresh export's *shape* against the committed sample, and the viewer's
-Vitest suite imports the same sample unchanged. That pairing is the
-cross-language contract: the browser test proves the shape is importable, and
+export the authenticated endpoint produced from this run. The run is
+**authored fixture data** (`mode="synthetic"`, `source="fixture"`): its claims,
+rebuttal, guard results and provider-shaped fields were written for this test.
+The export's `run.origin` block says so, and the viewer labels it Synthetic.
+That is deliberately different from a provider-backed run record, which the
+`provider_backed=True` branch exercises for the Step 11 recording path.
+
+The Python test compares a fresh export's *shape* against the committed sample,
+and the viewer's Vitest suite imports the same sample unchanged. That pairing is
+the cross-language contract: the browser test proves the shape is importable, and
 the Django test proves the endpoint still emits that shape.
 
 `scripts/build_export_sample.py` calls this builder and writes the fixture, so
@@ -42,8 +48,38 @@ def _event_time(seconds: int) -> datetime:
     return STARTED_AT + timedelta(seconds=seconds)
 
 
-def create_export_sample_run(portfolio, *, fixture_id: str = "export-contract-aapl-2026-11-12"):
-    """Create one run carrying every field the export endpoint emits."""
+def create_export_sample_run(
+    portfolio,
+    *,
+    fixture_id: str = "export-contract-aapl-2026-11-12",
+    provider_backed: bool = False,
+):
+    """Create one run carrying every field the export endpoint emits.
+
+    The default is an **authored fixture**: ``mode="synthetic"``,
+    ``source="fixture"`` and ``protocol_version="synthetic.v1"``. Its claims,
+    rebuttal, guard results and provider-shaped fields are authored test data,
+    so the export must never present it as a provider debate.
+
+    ``provider_backed=True`` builds the other side of the comparison: a run
+    record with ``mode="live"``, ``source="crewai"`` and a provider/model/usage
+    record. It is still test data at the file level (``test_record`` says so),
+    but the provenance path it exercises is the one Step 11's recording will use.
+    """
+    if provider_backed:
+        mode, source, protocol_version = "live", "crewai", "debate.v1"
+        fixture_id = ""
+        protocol_name = "debate.v1"
+        prompt_template_version = "debate.prompt.v3"
+        provider, model = "anthropic", "claude-haiku-5-5"
+    else:
+        mode, source, protocol_version = "synthetic", "fixture", "synthetic.v1"
+        protocol_name = "synthetic.v1"
+        prompt_template_version = "synthetic.export-contract.v1"
+        # Provider-shaped fields stay in the sample so the export contract can
+        # be exercised, but they are declared authored values, not a call.
+        provider, model = "fixture", "authored_fixture"
+
     snapshot = create_snapshot(
         portfolio=portfolio,
         portfolio_version="portfolio-v7",
@@ -73,19 +109,19 @@ def create_export_sample_run(portfolio, *, fixture_id: str = "export-contract-aa
     run = create_run(
         portfolio=portfolio,
         ticker="AAPL",
-        protocol_version="debate.v1",
-        mode="recorded",
-        source="crewai",
+        protocol_version=protocol_version,
+        mode=mode,
+        source=source,
         snapshot=snapshot,
         started_at=STARTED_AT,
         fixture_id=fixture_id,
     )
     run.protocol_metadata = {
         "protocol": {
-            "name": "debate.v1",
-            "prompt_template_version": "debate.prompt.v3",
-            "provider": "anthropic",
-            "model": "claude-haiku-5-5",
+            "name": protocol_name,
+            "prompt_template_version": prompt_template_version,
+            "provider": provider,
+            "model": model,
             "parameters": {
                 "temperature": 0.0,
                 "top_p": 0.95,
@@ -110,6 +146,10 @@ def create_export_sample_run(portfolio, *, fixture_id: str = "export-contract-aa
             "note": "Events replay deterministically; regenerating model output does not.",
         },
     }
+    if provider_backed:
+        # Keep the provider-backed path honest about being test data: the
+        # record shape is real, the provider call for this file is not.
+        run.protocol_metadata["test_record"] = True
     run.save(update_fields=["protocol_metadata"])
 
     transition_status(run, "collecting", occurred_at=_event_time(5))
@@ -127,7 +167,7 @@ def create_export_sample_run(portfolio, *, fixture_id: str = "export-contract-aa
                 "max_position_pct": 90.0,
                 "timeout_seconds": 300.0,
                 "slippage": 0.0025,
-                "model": "claude-haiku-5-5",
+                "model": model,
             },
         },
     )
@@ -266,7 +306,7 @@ def create_export_sample_run(portfolio, *, fixture_id: str = "export-contract-aa
         allowed_quantity=D("10.0"),
         binding_rule="max_trade_allocation_pct",
         reason_codes=[],
-        evaluation_key="export-contract:guard:preflight",
+        evaluation_key=f"export-contract:{run.id}:guard:preflight",
         numerical_checks={
             "requested_notional_usd": "900.0",
             "threshold_pct": 90.0,
@@ -302,7 +342,7 @@ def create_export_sample_run(portfolio, *, fixture_id: str = "export-contract-aa
         allowed_quantity=D("4.0"),
         binding_rule="max_trade_allocation_pct",
         reason_codes=["quantity_clamped_to_budget"],
-        evaluation_key="export-contract:guard:final",
+        evaluation_key=f"export-contract:{run.id}:guard:final",
         numerical_checks={
             "requested_notional_usd": "900.0",
             "allowed_notional_usd": "360.0",

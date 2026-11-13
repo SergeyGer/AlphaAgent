@@ -577,6 +577,12 @@ class AllocationSubmission(models.Model):
     deadline_at = models.DateTimeField(null=True, blank=True, db_index=True)
     queued_at = models.DateTimeField(default=timezone.now, db_index=True)
     last_dispatched_at = models.DateTimeField(null=True, blank=True)
+    #: Every broker publish attempt is counted, and a failure leaves a stable
+    #: code rather than free-form exception text. A queued row with a non-empty
+    #: error (or with no attempt at all) is what the recovery sweep looks for:
+    #: the database commit succeeded but the broker never accepted the task.
+    dispatch_attempt_count = models.PositiveIntegerField(default=0)
+    last_dispatch_error = models.CharField(max_length=64, blank=True, default="")
 
     #: The provider call is a paid side effect, so it gets its own checkpoint.
     #: ``provider_call_started_at`` is written before the call and
@@ -586,6 +592,21 @@ class AllocationSubmission(models.Model):
     provider_call_started_at = models.DateTimeField(null=True, blank=True)
     provider_completed_at = models.DateTimeField(null=True, blank=True)
     provider_result = models.JSONField(default=dict, blank=True)
+    #: The immutable input the persisted provider result answered, plus the
+    #: declared values needed to rebuild the plan without reading today's market:
+    #: the brief payload, policy, cost model, quotes and classifications.
+    input_snapshot = models.ForeignKey(
+        "core.InputSnapshot",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="allocation_submissions",
+    )
+    checkpoint_context = models.JSONField(default=dict, blank=True)
+    #: Provider, model, parameters and budget ceilings in force for the call.
+    #: Kept with the result so a resume can say what produced it without
+    #: reconstructing the client from a possibly different configuration.
+    provider_config = models.JSONField(default=dict, blank=True)
     #: The validated proposal is persisted before any plan row is written, so a
     #: retry can resume without a second provider spend and the plan creation is
     #: a separate, atomic step.

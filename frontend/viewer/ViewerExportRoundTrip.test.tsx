@@ -20,6 +20,10 @@ const samplePath = path.resolve(
   process.cwd(),
   '../docs/spec/fixtures/decision-run-export.v1.json',
 );
+const providerPath = path.resolve(
+  process.cwd(),
+  '../docs/spec/fixtures/decision-run-export.provider-backed.v1.json',
+);
 
 function importedRun(): ViewerRun {
   const raw = JSON.parse(fs.readFileSync(samplePath, 'utf8')) as unknown;
@@ -58,10 +62,21 @@ describe('ViewerRunView — import of a real captured export', () => {
       expect(probe.calls).toEqual([]);
       expect(screen.getByTestId('viewer-source-label')).toHaveAttribute(
         'data-source-label',
-        'real_recorded',
+        'synthetic',
       );
-      expect(screen.getByTestId('viewer-source-label')).toHaveTextContent('Real recorded');
-      expect(screen.getByTestId('viewer-provenance')).toHaveTextContent('actually executed');
+      expect(screen.getByTestId('viewer-source-label')).toHaveTextContent('Synthetic');
+      expect(screen.getByTestId('viewer-provenance')).toHaveTextContent('Fixture data');
+      expect(screen.getByTestId('viewer-run-origin')).toHaveAttribute(
+        'data-origin-kind',
+        'authored_fixture',
+      );
+      expect(screen.getByTestId('viewer-run-origin')).toHaveAttribute(
+        'data-provider-backed',
+        'false',
+      );
+      expect(screen.getByTestId('viewer-origin-limitations')).toHaveTextContent(
+        'authored fixture data',
+      );
       expect(screen.getAllByText('AAPL').length).toBeGreaterThan(0);
       expect(screen.getByText(/Read-only replay/)).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /approve/i })).toBeNull();
@@ -140,10 +155,10 @@ describe('ViewerApp — loading a captured export through the file picker', () =
       await waitFor(() => {
         expect(screen.getByTestId('viewer-source-label')).toHaveAttribute(
           'data-source-label',
-          'real_recorded',
+          'synthetic',
         );
       });
-      expect(screen.getByText(/1 run · Real recorded · schema 1.0 · file/)).toBeInTheDocument();
+      expect(screen.getByText(/1 run · Synthetic · schema 1.0 · file/)).toBeInTheDocument();
       expect(screen.getAllByText('AAPL').length).toBeGreaterThan(0);
       expect(probe.calls.length).toBeGreaterThan(0);
       // The only network attempt is the viewer's own relative fixture probe; it
@@ -155,4 +170,38 @@ describe('ViewerApp — loading a captured export through the file picker', () =
       probe.restore();
     }
   }, 30_000);
+});
+
+describe('ViewerRunView — provider-backed export next to the authored sample', () => {
+  it('preserves the recorded source and its stated limitations', () => {
+    const probe = networkProbe();
+    try {
+      const raw = JSON.parse(fs.readFileSync(providerPath, 'utf8')) as unknown;
+      const run = parseViewerBundle(raw).runs[0];
+      if (!run) throw new Error('The provider-backed sample did not import.');
+      render(<ViewerRunView run={run} />);
+
+      expect(probe.calls).toEqual([]);
+      expect(screen.getByTestId('viewer-source-label')).toHaveAttribute(
+        'data-source-label',
+        'real_recorded',
+      );
+      expect(screen.getByTestId('viewer-source-label')).toHaveTextContent('Real recorded');
+      expect(screen.getByTestId('viewer-run-origin')).toHaveAttribute(
+        'data-origin-kind',
+        'provider_run',
+      );
+      expect(screen.getByTestId('viewer-run-origin')).toHaveAttribute(
+        'data-provider-backed',
+        'true',
+      );
+      expect(screen.getByTestId('viewer-run-origin')).toHaveTextContent('source crewai');
+      const limitations = screen.getByTestId('viewer-origin-limitations');
+      expect(limitations).toHaveTextContent("provider 'anthropic'");
+      expect(limitations).toHaveTextContent('price-table estimate is not a bill');
+      expect(limitations).toHaveTextContent('Test data');
+    } finally {
+      probe.restore();
+    }
+  });
 });

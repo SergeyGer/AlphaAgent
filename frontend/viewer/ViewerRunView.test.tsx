@@ -48,8 +48,14 @@ describe('ViewerRunView — source labels', () => {
     recorded.mode = 'recorded';
     recorded.source_label = 'real_recorded';
     recorded.detail.run.mode = 'recorded';
+    recorded.detail.run.source = 'crewai';
+    recorded.detail.run.fixture_id = null;
     recorded.provenance.label = 'real_recorded';
-    recorded.provenance.note = 'Contract sample used to exercise the real-recorded label.';
+    recorded.provenance.fixture_id = null;
+    recorded.provenance.origin_kind = 'provider_run';
+    recorded.provenance.provider_backed = true;
+    recorded.provenance.note = 'Provider-backed test record used to exercise the label.';
+    recorded.provenance.limitations = ['The provider reported tokens but no billed dollar amount.'];
 
     render(<ViewerRunView run={recorded} />);
 
@@ -58,6 +64,13 @@ describe('ViewerRunView — source labels', () => {
     expect(within(label).getByText('Real recorded')).toBeInTheDocument();
     expect(within(label).queryByText('Synthetic')).toBeNull();
     expect(screen.getByTestId('viewer-provenance')).toHaveTextContent('actually executed');
+    expect(screen.getByTestId('viewer-run-origin')).toHaveAttribute(
+      'data-origin-kind',
+      'provider_run',
+    );
+    expect(screen.getByTestId('viewer-origin-limitations')).toHaveTextContent(
+      'no billed dollar amount',
+    );
   });
 
   it('labels heuristic and legacy runs explicitly', () => {

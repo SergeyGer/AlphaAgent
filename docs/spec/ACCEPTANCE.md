@@ -113,6 +113,7 @@ Step 5 sample capture) uses the same guard. A successful artefact carries:
   "acceptance_record": "docs/spec/acceptance/<commit>.json",
   "acceptance_digest": "<sha256>",
   "tree_clean": true,
+  "scope": "build_verification_not_run_origin",
   "status": "verified",
   "verified": true,
   "usable_for_recording": true
@@ -123,6 +124,12 @@ The Step 5 export bundle (`GET /api/decision-runs/<id>/export/`) carries the
 same block. When the working tree is dirty or no record exists, the shape is
 unchanged: the strings are empty and `status` names the reason, so a consumer
 never has to distinguish a missing block from a verified one.
+
+`scope` is explicit: this block is **build verification**, not run origin. A
+verified build says the checks passed on that commit; it does not say the
+document's content came from a provider. The export's `run.origin` states that
+separately, and only `provider_run` with `provider_backed: true` is evidence of
+a provider debate.
 
 Check every committed recording against its named record:
 

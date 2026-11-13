@@ -285,27 +285,53 @@ portfolio. Body:
   owner lease and attempt counter. The lifecycle is `queued` -> `running` ->
   `succeeded` | `failed` | `cancelled` | `timed_out`; every transition is a
   conditional, locked write and a terminal row is never reopened.
+* Submission writes the durable row before dispatch. `dispatch_submission`
+  counts every broker publish (`dispatch_attempt_count`, `last_dispatched_at`)
+  and records a stable `last_dispatch_error` (`broker_unavailable`) instead of
+  free-form exception text. A queued row that was never published, whose publish
+  failed, or whose publish is stale is discovered automatically.
 * The provider call is checkpointed: `provider_call_started_at` is written
-  before the call and the validated proposal (`provider_result`) plus model
-  metadata immediately after it, before any plan row. A retry that finds the
-  result resumes at plan creation and does not spend again. A retry that finds a
-  started call with no result records `provider_call_unreconciled` and stops:
-  the first call may already have been billed, so a second spend is not assumed
-  safe.
+  before the call and, immediately after it, the validated proposal
+  (`provider_result`), model metadata, the immutable `input_snapshot`, an input
+  context (`checkpoint_context`: the brief, policy, cost model, quotes,
+  classifications and candidate metadata) and the provider configuration
+  (`provider_config`: provider, model, parameters, budget ceilings, never a
+  credential). A retry that finds the result resumes at plan creation, sizes the
+  saved answer against the **checkpointed** input, and does not spend again. The
+  plan records `input_provenance.input_source: "provider_result_checkpoint"`.
+  Only a row with a result but no input checkpoint re-reads the market; it is
+  labelled `fresh_evaluation_no_checkpoint` on the plan and in
+  `data_quality.input.input_source`. A checkpoint whose snapshot is missing or
+  hash-mismatched fails typed rather than being repriced.
+* A retry that finds a started call with no result records
+  `provider_call_unreconciled` and stops: the first call may already have been
+  billed, so a second spend is not assumed safe.
 * Submission creates a `proposed` plan and **no ledger row**. The plan and the
   `succeeded` status are committed in one transaction, re-checking cancellation
   and the deadline under the row lock, so a cancelled or timed-out submission
-  has no plan for the apply endpoint to act on.
+  has no plan for the apply endpoint to act on. One submission has one plan
+  identity (`analysis:<submission id>`).
 * A failed, cancelled or timed-out analysis is stored with a stable
   `failure_reason` (`error.code`) and is replayed on retry of the same key; it is
   never retried automatically and never replaced by a stub.
 * `POST /api/decision-runs/<run_id>/cancel/` cancels an open submission. The
   optional `reason` is a stable code (`^[a-z][a-z0-9_.:-]{0,63}$`), default
   `cancelled_by_user`. Cancelling a terminal row is **409**.
-* `python manage.py repair_allocation_submissions` is the repair path. Dry run is
-  the default; `--execute` times out a past-deadline row, fails an unreconciled
-  provider call, or re-queues a row whose worker died before the paid call. It
+* The registered beat task `tasks.recover_allocation_submissions_task` runs the
+  existing recovery service every minute. It re-evaluates each candidate under
+  the row lock: an active lease or terminal row is left intact, a past-deadline
+  row becomes `timed_out`, an unreconciled paid call becomes `failed`, and a
+  queued row with no publish or a failed publish is published again. The
+  attempt limit is enforced before any requeue. This is the automation the
+  manual command lacked.
+* `python manage.py repair_allocation_submissions` remains the inspection and
+  manual path. Dry run is the default; `--execute` applies the same actions. It
   never creates a plan or applies a trade.
+* `GET .../status/` publishes `dispatch` (`attempts`, `last_attempt_at`,
+  `last_error`, `published`), `recovered`/`recovery` (action, reason, time),
+  `input` (`snapshot_id`, `input_source`, `provider_config`) and the six-state
+  lifecycle, so a recovered, expired or failed job is visible without reading a
+  log.
 
 Why the record is an `AllocationSubmission`, not a `DecisionRun`: the existing
 `DecisionRun` is per instrument (one ticker, one debate, one guard record). A

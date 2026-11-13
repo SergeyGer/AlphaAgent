@@ -111,6 +111,25 @@ export function ViewerRunView({ run, className }: ViewerRunViewProps): ReactElem
         <p className="mt-1 break-words text-xs leading-relaxed text-slate-400">
           {run.provenance.note}
         </p>
+        <p
+          data-testid="viewer-run-origin"
+          data-origin-kind={run.provenance.origin_kind ?? 'not_recorded'}
+          data-provider-backed={run.provenance.provider_backed ? 'true' : 'false'}
+          className="mt-1 break-words font-mono text-[10px] uppercase tracking-wider text-slate-500"
+        >
+          Run record: {run.provenance.origin_kind ?? 'not recorded'} · source{' '}
+          {run.detail.run.source ?? 'not recorded'}
+        </p>
+        {run.provenance.limitations && run.provenance.limitations.length > 0 ? (
+          <ul
+            data-testid="viewer-origin-limitations"
+            className="mt-2 list-disc space-y-1 pl-5 text-xs leading-relaxed text-amber-200/80"
+          >
+            {run.provenance.limitations.map((limitation) => (
+              <li key={limitation}>{limitation}</li>
+            ))}
+          </ul>
+        ) : null}
         {run.provenance.fixture_id ? (
           <p className="mt-1 break-all font-mono text-[10px] uppercase tracking-wider text-slate-500">
             Fixture {run.provenance.fixture_id} · protocol{' '}

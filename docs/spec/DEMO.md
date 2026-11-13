@@ -282,12 +282,17 @@ call**), and the exact version/expiry an approval covers.
 
 **The analysis runs in a worker.** The `POST` returns from the durable
 `queued` row; it does not call the model. Run the Celery worker (the compose
-`worker` service or `celery -A config worker`) and poll the status URL. If a
-worker dies, `python manage.py repair_allocation_submissions` reports the stuck
-row and changes nothing (dry run); `--execute` times it out, fails an
-unreconciled provider call, or re-queues a worker that died before the paid call.
-A cancelled or timed-out submission has no plan, and only an approved plan can
-reach `apply`.
+`worker` service or `celery -A config worker`) and poll the status URL. The
+existing beat schedule runs `recover_allocation_submissions_task` every minute:
+it re-publishes a queued row that was never published or whose publish failed,
+times out a past-deadline row, fails an unreconciled paid call, and re-queues a
+worker whose lease expired - all under a row lock, so an active lease and a
+terminal row are left alone. No second POST and no manual command is needed.
+`python manage.py repair_allocation_submissions` remains the inspection path;
+it is dry run by default and `--execute` applies the same actions. A cancelled
+or timed-out submission has no plan, and only an approved plan can reach
+`apply`. The status URL publishes `dispatch`, `recovered`, `recovery` and the
+input snapshot/source next to the six states.
 
 **The recorded run, without making another call.** Read
 [`fixtures/fix08-live-allocation.v1.json`](fixtures/fix08-live-allocation.v1.json).
@@ -426,9 +431,12 @@ drawer as the authenticated application.
 
 **What to look for.**
 
-- The source label is **Synthetic** on every committed fixture. Importing an API
-  export labelled `recorded` renders **Real recorded** instead; the label is not
-  inferred from the file name.
+- The source label is **Synthetic** on every committed fixture. The committed
+  API export sample is authored too: its `run.origin` is
+  `authored_fixture`, so it renders **Synthetic**. Only an export whose
+  `run.origin` is `provider_run` with `provider_backed: true` renders **Real
+  recorded**; that label is not inferred from the file name or from a recorded
+  mode alone. The origin's limitations are displayed with the label.
 - A cursor before adjudication shows no verdict, no strongest objection and no
   guard; the final summary is pinned separately and labelled as outside the replay
   scene.
