@@ -305,6 +305,10 @@ class FillPriceSelection:
     fill_rule: str
     price: Decimal | None = None
     at: datetime | None = None
+    #: When the selected mark became known. A simulated fill is executed at
+    #: this instant, never at the earlier validity instant, so a backfilled mark
+    #: cannot be used before the simulation could have learned it.
+    knowledge_at: datetime | None = None
     source: str | None = None
     rejected_earlier_marks: int = 0
     reason: str | None = None
@@ -320,6 +324,7 @@ class FillPriceSelection:
             "fill_rule": self.fill_rule,
             "price_usd": None if self.price is None else str(self.price),
             "at": utc_iso(self.at),
+            "knowledge_at": utc_iso(self.knowledge_at),
             "source": self.source,
             "rejected_earlier_marks": self.rejected_earlier_marks,
             "reason": self.reason,
@@ -360,6 +365,7 @@ def select_fill_price(
         fill_rule=fill_rule,
         price=mark.price,
         at=mark.at,
+        knowledge_at=mark.knowledge_at,
         source=mark.source,
         rejected_earlier_marks=len(earlier),
     )

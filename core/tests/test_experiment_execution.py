@@ -140,10 +140,7 @@ class ExecutionPathTests(TestCase):
             self.assertTrue(arms[key]["protocol_matches_declaration"])
 
         recorded = {
-            run.protocol_version
-            for run in DecisionRun.objects.filter(
-                fixture_id__startswith=self.opportunity_set.opportunity_set_id
-            )
+            run.protocol_version for run in DecisionRun.objects.filter(portfolio=self.portfolio)
         }
         self.assertEqual(
             recorded,
@@ -157,8 +154,12 @@ class ExecutionPathTests(TestCase):
 
     def test_v2_records_no_rebuttal_and_v3_records_one(self):
         self.execute()
-        v2 = DecisionRun.objects.filter(fixture_id__startswith="alphaagent-arms.v1.v2.").first()
-        v3 = DecisionRun.objects.filter(fixture_id__startswith="alphaagent-arms.v1.v3.").first()
+        v2 = DecisionRun.objects.filter(
+            portfolio=self.portfolio, fixture_id__contains=".V2."
+        ).first()
+        v3 = DecisionRun.objects.filter(
+            portfolio=self.portfolio, fixture_id__contains=".V3."
+        ).first()
         self.assertIsNotNone(v2)
         self.assertIsNotNone(v3)
         self.assertEqual(v2.rebuttals.count(), 0)
@@ -259,7 +260,9 @@ class ExecutionPathTests(TestCase):
         self.assertEqual(v0["cost"]["billed_cost_unknown_runs"], 0)
         self.assertEqual(v0["cost"]["measured_tokens"], {"input": 0, "output": 0})
         self.assertEqual(v0["cost"]["estimated_tokens"], {"input": 0, "output": 0})
-        run = DecisionRun.objects.filter(fixture_id__startswith="alphaagent-arms.v1.v0.").first()
+        run = DecisionRun.objects.filter(
+            portfolio=self.portfolio, fixture_id__contains=".V0."
+        ).first()
         self.assertEqual(run.total_cost_usd, Decimal("0"))
         self.assertEqual(run.cost_basis, "deterministic_no_model_call")
         # A known zero cost is not an unknown one: the net series is computable.
@@ -276,20 +279,16 @@ class ExecutionPathTests(TestCase):
         self.assertTrue(report["honesty"]["no_profitability_claim"])
         self.assertFalse(report["honesty"]["comparative_protocol_claim"])
         for run in DecisionRun.objects.filter(
-            fixture_id__startswith="alphaagent-arms.v1.v1."
-        ) | DecisionRun.objects.filter(fixture_id__startswith="alphaagent-arms.v1.v2."):
+            portfolio=self.portfolio, fixture_id__contains=".V1."
+        ) | DecisionRun.objects.filter(portfolio=self.portfolio, fixture_id__contains=".V2."):
             self.assertEqual(run.mode, RunMode.SIMULATED)
             self.assertEqual(run.source, RunSource.STUB)
 
     def test_rerunning_reuses_recorded_runs_instead_of_duplicating_them(self):
         first = self.execute()
-        before = DecisionRun.objects.filter(
-            fixture_id__startswith=self.opportunity_set.opportunity_set_id
-        ).count()
+        before = DecisionRun.objects.filter(portfolio=self.portfolio).count()
         second = self.execute()
-        after = DecisionRun.objects.filter(
-            fixture_id__startswith=self.opportunity_set.opportunity_set_id
-        ).count()
+        after = DecisionRun.objects.filter(portfolio=self.portfolio).count()
         self.assertEqual(before, after)
         self.assertEqual(first["denominators"]["scheduled"], second["denominators"]["scheduled"])
         self.assertEqual(first["denominators"]["completed"], second["denominators"]["completed"])
@@ -344,7 +343,9 @@ class ExecutionPathTests(TestCase):
         self.assertFalse(report["honesty"]["simulated_provider"])
         # No synthetic case was substituted for the arms that could not run.
         self.assertEqual(
-            DecisionRun.objects.filter(fixture_id__startswith="alphaagent-arms.v1.v1.").count(),
+            DecisionRun.objects.filter(
+                portfolio=self.portfolio, fixture_id__contains=".V1."
+            ).count(),
             0,
         )
 
