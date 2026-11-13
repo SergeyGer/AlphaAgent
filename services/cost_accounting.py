@@ -29,6 +29,8 @@ wrong. The metadata carries ``strict_billed_ceiling: false`` for that reason.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
@@ -36,6 +38,7 @@ from decimal import Decimal, InvalidOperation
 from django.conf import settings
 
 __all__ = [
+    "PRICE_TABLE_VERSION",
     "UNKNOWN_MODEL_PRICING",
     "UNKNOWN_NO_CALL",
     "UNKNOWN_PROVIDER_COST",
@@ -46,12 +49,18 @@ __all__ = [
     "estimate_cost",
     "price_rates",
     "price_table_cost",
+    "pricing_version",
 ]
 
 logger = logging.getLogger("alphaagent.cost_accounting")
 
 MILLION = Decimal("1000000")
 ZERO = Decimal("0")
+
+#: Version of the price table the estimates were calculated from. The digest
+#: suffix changes when ``AI_MODEL_PRICING`` changes, so an estimate recorded
+#: under one rate table cannot be mistaken for one recalculated under another.
+PRICE_TABLE_VERSION = "ai_model_pricing.v1"
 
 #: Why a billed cost is null. Typed so a report can group reasons instead of
 #: parsing prose.
@@ -251,6 +260,22 @@ def price_rates(model: str) -> dict | None:
         if candidates:
             rates = pricing[max(candidates, key=len)]
     return rates
+
+
+def pricing_version() -> str:
+    """A stable identifier for the configured price table.
+
+    The version is the declared table name plus a short digest of the rates. A
+    rate edit changes the digest, so an estimate recorded before the edit stays
+    distinguishable from one calculated after it.
+    """
+    pricing = getattr(settings, "AI_MODEL_PRICING", {}) or {}
+    try:
+        payload = json.dumps(pricing, sort_keys=True, separators=(",", ":"), default=str)
+    except (TypeError, ValueError):
+        payload = repr(sorted(pricing))
+    digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
+    return f"{PRICE_TABLE_VERSION}:{digest}"
 
 
 def _rates_to_decimals(rates: dict) -> tuple[Decimal, Decimal, Decimal, Decimal]:

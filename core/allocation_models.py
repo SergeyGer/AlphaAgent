@@ -592,6 +592,12 @@ class AllocationSubmission(models.Model):
     provider_call_started_at = models.DateTimeField(null=True, blank=True)
     provider_completed_at = models.DateTimeField(null=True, blank=True)
     provider_result = models.JSONField(default=dict, blank=True)
+    #: The durable identity of the billable attempt, written before the first
+    #: reservation. The daily-spend ledger is keyed by this, not by the user's
+    #: idempotency key: two portfolios may use the same key, and a retried
+    #: worker must replay its own reservation rather than hold a second one.
+    paid_attempt = models.PositiveIntegerField(default=0)
+    reservation_key = models.CharField(max_length=255, blank=True, default="")
     #: The immutable input the persisted provider result answered, plus the
     #: declared values needed to rebuild the plan without reading today's market:
     #: the brief payload, policy, cost model, quotes and classifications.

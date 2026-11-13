@@ -1,0 +1,126 @@
+{
+  "schema_version": "application.release-evidence.v1",
+  "template": true,
+  "commit": "",
+  "subject": "",
+  "tree_clean": false,
+  "release_ready": false,
+  "build": {
+    "commit": "",
+    "subject": "",
+    "tree_clean": false,
+    "diff_sha256": null,
+    "dirty_paths": [],
+    "note": "A release manifest names a clean commit. A dirty tree is developer evidence and cannot be a release acceptance."
+  },
+  "limitations": [],
+  "acceptance_record": {
+    "path": "",
+    "output_digest": "",
+    "usable_for_recording": false
+  },
+  "counts": {
+    "backend_tests": 0,
+    "frontend_tests": 0
+  },
+  "stages": [],
+  "evidence": {
+    "ci": {
+      "status": "not_available",
+      "url": "",
+      "detail": "A GitHub Actions run URL for this commit, or the local stages that stood in for it and why the remote run was unavailable."
+    },
+    "docs": {
+      "status": "not_available",
+      "url": "",
+      "detail": "The Docs workflow run URL (links, wiki references, referenced media), or the local equivalents that were run."
+    },
+    "codeql": {
+      "status": "not_available",
+      "url": "",
+      "alerts": null,
+      "detail": "The CodeQL security-and-quality analysis for this commit and its alert count. Null means not observed, never zero."
+    }
+  },
+  "workflows": [
+    {
+      "name": "approve_refreshed_terms",
+      "status": "not_run",
+      "evidence": "An authenticated browser session: the stale screen is refused, the refreshed terms are displayed and the approval succeeds once."
+    },
+    {
+      "name": "replay_completed_decision",
+      "status": "not_run",
+      "evidence": "An authenticated browser replay of a completed decision through its guard, verdict and outcomes."
+    },
+    {
+      "name": "recover_interrupted_job",
+      "status": "not_run",
+      "evidence": "A queued/running allocation submission whose lease expired, recovered by the repair path without a second provider spend."
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "status": "not_run",
+      "evidence": "",
+      "skipped_reason": ""
+    },
+    {
+      "step": 2,
+      "status": "not_run",
+      "evidence": "",
+      "skipped_reason": ""
+    },
+    {
+      "step": 3,
+      "status": "not_run",
+      "evidence": "",
+      "skipped_reason": ""
+    },
+    {
+      "step": 4,
+      "status": "not_run",
+      "evidence": "",
+      "skipped_reason": ""
+    },
+    {
+      "step": 5,
+      "status": "not_run",
+      "evidence": "",
+      "skipped_reason": ""
+    },
+    {
+      "step": 6,
+      "status": "not_run",
+      "evidence": "",
+      "skipped_reason": ""
+    },
+    {
+      "step": 7,
+      "status": "not_run",
+      "evidence": "",
+      "skipped_reason": ""
+    },
+    {
+      "step": 8,
+      "status": "not_run",
+      "evidence": "",
+      "skipped_reason": ""
+    },
+    {
+      "step": 9,
+      "status": "not_run",
+      "evidence": "",
+      "skipped_reason": ""
+    }
+  ],
+  "recording_manifest": {
+    "artefacts": [],
+    "run_ids": [],
+    "provider_mode": "",
+    "run_origin_claim": "provider_run",
+    "input_data_is_synthetic": null,
+    "notes": "Step 11 records against this manifest. The acceptance record must be usable for recording and must name this commit."
+  }
+}

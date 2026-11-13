@@ -420,6 +420,10 @@ def _prepare(archive: dict) -> dict:
         "idempotent": True,
         "note": execution.get("note") or "",
     }
+    # Archives written before the allowance block existed must still reproduce.
+    # Adding an empty block here would make every such archive "differ".
+    if "allowances" in execution:
+        execution_block["allowances"] = execution.get("allowances") or {}
     rebuilt = build_comparison_report(
         opportunity_set=opportunity_set,
         arm_runs=arm_runs,

@@ -34,6 +34,7 @@ from services.cost_accounting import (
     UNKNOWN_PROVIDER_COST,
     UNKNOWN_UNRECONCILED_TIMEOUT,
     price_table_cost,
+    pricing_version,
 )
 from services.debate_protocol import (
     BudgetExhausted,
@@ -214,6 +215,7 @@ class BudgetedAllocationClient:
                     reported=reported.reported,
                     tokens_measured=reported.tokens_measured,
                     price_table_cost_usd=priced,
+                    pricing_version=reported.pricing_version or pricing_version(),
                     cost_unknown_reason=reported.cost_unknown_reason,
                 )
             return reported
@@ -232,6 +234,7 @@ class BudgetedAllocationClient:
             reported=False,
             tokens_measured=False,
             price_table_cost_usd=priced,
+            pricing_version=pricing_version() if priced is not None else "",
             cost_unknown_reason=UNKNOWN_PROVIDER_COST,
         )
 

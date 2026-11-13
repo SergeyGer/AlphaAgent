@@ -105,6 +105,9 @@ from services.cost_accounting import (
 from services.cost_accounting import (
     price_table_cost as price_table_cost,
 )
+from services.cost_accounting import (
+    pricing_version as pricing_version,
+)
 from services.decision_runs import (
     append_event,
     create_run,
@@ -457,6 +460,9 @@ class ModelUsage:
     #: Price-table arithmetic over the tokens above. An estimate, even when the
     #: tokens are measured.
     price_table_cost_usd: Decimal | None = None
+    #: Which price table produced ``price_table_cost_usd``. A rate edit changes
+    #: it, so the estimate can be re-priced knowingly rather than silently.
+    pricing_version: str = ""
     cost_unknown_reason: str = ""
 
     @property
@@ -516,6 +522,9 @@ class ProtocolUsage:
     billed_cost_calls: int = 0
     billed_cost_unknown_calls: int = 0
     billed_cost_unknown_reason: str = ""
+    #: The price table the estimates above were calculated from. Empty only for
+    #: a run that made no priced call or a client that did not report one.
+    pricing_version: str = ""
     calls: int = 0
     retries: int = 0
     repairs: int = 0
@@ -599,6 +608,7 @@ class ProtocolUsage:
                 if self.price_table_unpriced_calls
                 else None
             ),
+            "pricing_version": self.pricing_version or None,
             "billed_cost_usd": (
                 str(self.billed_cost_usd.quantize(Decimal("0.000001")))
                 if self.cost_reported
@@ -3340,6 +3350,7 @@ class DebateProtocol:
                         input_tokens=reported.input_tokens,
                         output_tokens=reported.output_tokens,
                     ),
+                    pricing_version=reported.pricing_version or pricing_version(),
                     cost_unknown_reason=reported.cost_unknown_reason,
                 )
             return reported
@@ -3357,6 +3368,7 @@ class DebateProtocol:
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
             ),
+            pricing_version=pricing_version(),
             cost_unknown_reason=UNKNOWN_PROVIDER_COST,
         )
 
@@ -3376,6 +3388,8 @@ class DebateProtocol:
         else:
             self._usage.estimated_input_tokens += usage.input_tokens
             self._usage.estimated_output_tokens += usage.output_tokens
+        if usage.pricing_version and not self._usage.pricing_version:
+            self._usage.pricing_version = usage.pricing_version
 
         # Billed, price-table, or unknown - never a substitution.
         if usage.cost_usd is not None:

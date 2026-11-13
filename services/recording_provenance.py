@@ -23,7 +23,12 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from scripts.verify_application import RecordingRefused
+from scripts.verify_application import (
+    RecordingRefused,
+    acceptance_record_coverage,
+    acceptance_record_digest_valid,
+    acceptance_record_usable,
+)
 
 __all__ = [
     "RECORDED_ARTIFACTS",
@@ -202,6 +207,12 @@ def recording_provenance(*, root: Path | str | None = None) -> dict:
         status = "acceptance_record_not_passed"
     elif not record.get("tree_clean"):
         status = "acceptance_record_not_clean"
+    elif not acceptance_record_digest_valid(record):
+        status = "acceptance_record_digest_invalid"
+    elif not acceptance_record_usable(record):
+        # A passing four-stage record is not evidence that the eight-stage
+        # release gate ran; it stays visible but cannot authorise a recording.
+        status = "acceptance_record_not_usable"
     else:
         status = "verified"
 
@@ -283,6 +294,28 @@ def require_clean_for_recording(*, root: Path | str | None = None) -> dict:
                 f"The acceptance record for {state.commit} was written from a dirty tree "
                 "and is not usable as recording provenance. Re-run the verifier on a clean "
                 "tree with --record."
+            ),
+        )
+    if not acceptance_record_digest_valid(record):
+        raise RecordingRefused(
+            "acceptance_record_digest_invalid",
+            (
+                f"The acceptance record for {state.commit} does not reproduce its own "
+                "output_digest. The record was edited after it was written."
+            ),
+        )
+    if not acceptance_record_usable(record):
+        coverage = acceptance_record_coverage(record)
+        raise RecordingRefused(
+            "acceptance_record_not_usable",
+            (
+                f"The acceptance record for {state.commit} does not cover all eight "
+                f"release stages exactly once with a passing result "
+                f"(missing={coverage.get('missing')}, duplicates="
+                f"{coverage.get('duplicates')}, failed={coverage.get('failed')}, "
+                f"skipped={coverage.get('skipped')}). Run the full verifier with "
+                "--record; a --only or skipped run is developer evidence, not a "
+                "release acceptance."
             ),
         )
     return recording_provenance(root=root_path)
@@ -417,13 +450,64 @@ def check_recording_pairing(
                 )
             )
             continue
+        if not acceptance_record_digest_valid(record):
+            results.append(
+                ArtifactPairing(
+                    name=name,
+                    path=relative,
+                    ok=False,
+                    code="acceptance_record_digest_invalid",
+                    detail=(
+                        "The acceptance record does not reproduce its own output_digest; "
+                        "the stored stage results were edited after the record was written."
+                    ),
+                    commit=commit,
+                    acceptance_digest=digest,
+                )
+            )
+            continue
+        coverage = acceptance_record_coverage(record)
+        if not coverage["complete"]:
+            results.append(
+                ArtifactPairing(
+                    name=name,
+                    path=relative,
+                    ok=False,
+                    code="acceptance_stages_incomplete",
+                    detail=(
+                        "The acceptance record does not cover all eight required stages "
+                        "exactly once with a passing result "
+                        f"(missing={coverage['missing']}, duplicates={coverage['duplicates']}, "
+                        f"failed={coverage['failed']}, skipped={coverage['skipped']})."
+                    ),
+                    commit=commit,
+                    acceptance_digest=digest,
+                )
+            )
+            continue
+        if not acceptance_record_usable(record):
+            results.append(
+                ArtifactPairing(
+                    name=name,
+                    path=relative,
+                    ok=False,
+                    code="acceptance_record_not_usable",
+                    detail=(
+                        "The acceptance record is not usable for recording "
+                        "(tree_clean=false or usable_for_recording=false)."
+                    ),
+                    commit=commit,
+                    acceptance_digest=digest,
+                )
+            )
+            continue
         results.append(
             ArtifactPairing(
                 name=name,
                 path=relative,
                 ok=True,
                 code="paired",
-                detail="The artefact names the commit and digest of a passing acceptance record.",
+                detail="The artefact names the commit and digest of a usable acceptance record.",
                 commit=commit,
                 acceptance_digest=digest,
             )
