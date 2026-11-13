@@ -113,6 +113,8 @@ class RecommendationEndpointTests(APITestCase):
         self.assertEqual(row["status"], RecommendationStatus.PENDING)
         self.assertEqual(row["notional_usd"], "200.00")
         self.assertTrue(row["is_actionable"])
+        self.assertEqual(row["terms_version"], 1)
+        self.assertTrue(row["terms_ref"])
 
     def test_filter_by_status(self):
         self.assertEqual(
@@ -130,8 +132,17 @@ class RecommendationEndpointTests(APITestCase):
             source="test_market_data",
             as_of=timezone.now(),
         )
+        from services.recommendation_terms import terms_reference
+
+        body = {
+            "terms_version": self.reco.terms_version,
+            "terms_ref": terms_reference(self.reco),
+            "idempotency_key": "dashboard-api-approve",
+        }
         with patch("services.recommendations.get_latest_quote", return_value=quote):
-            response = self.client.post(reverse("core:recommendation-approve", args=[self.reco.id]))
+            response = self.client.post(
+                reverse("core:recommendation-approve", args=[self.reco.id]), body, format="json"
+            )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         body = response.json()

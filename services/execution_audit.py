@@ -371,8 +371,15 @@ def record_fill_outcome(
     via: str = "",
     user_id: int | None = None,
     duplicate_recommendation: TradeRecommendation | None = None,
+    approved_terms: dict | None = None,
 ) -> ExecutionAttempt | None:
-    """Commit the fill's run resolution and attempt row in this transaction."""
+    """Commit the fill's run resolution and attempt row in this transaction.
+
+    ``approved_terms`` carries the exact displayed terms (including the
+    server-issued reference) from the caller's ``ExecutionAudit``. Without it
+    the attempt would record only the request shape, and the reference the
+    operator saw would be lost at the moment the fill is written.
+    """
     if run is None:
         return ensure_fill_attempt(
             transaction_row=transaction_row,
@@ -389,6 +396,7 @@ def record_fill_outcome(
         via=via,
         user_id=user_id,
         execution_key=(getattr(request, "execution_key", "") or "").strip(),
+        approved_terms=approved_terms or {},
     )
     complete_run(
         run,

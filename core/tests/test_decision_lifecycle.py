@@ -213,7 +213,9 @@ class DecisionLifecycleTests(TestCase):
         self.assertNotEqual(detail["run"]["execution_state"], "executed")
 
         with patch("services.recommendations.get_latest_quote", return_value=quote("100.00")):
-            outcome = approve_recommendation(recommendation.id)
+            outcome = approve_recommendation(
+                recommendation.id, terms_version=recommendation.terms_version
+            )
         self.assertTrue(outcome.executed)
 
         run.refresh_from_db()
@@ -245,7 +247,9 @@ class DecisionLifecycleTests(TestCase):
                 approved=False, decision=blocked, request=None, reason=blocked.reason
             ),
         ):
-            outcome = approve_recommendation(recommendation.id)
+            outcome = approve_recommendation(
+                recommendation.id, terms_version=recommendation.terms_version
+            )
         self.assertFalse(outcome.executed)
         recommendation.refresh_from_db()
         self.assertEqual(recommendation.status, RecommendationStatus.BLOCKED)
@@ -332,7 +336,9 @@ class DecisionLifecycleTests(TestCase):
             created_at=timezone.now() - timedelta(hours=2)
         )
         with patch("services.recommendations.get_latest_quote", return_value=quote("101.00")):
-            outcome = approve_recommendation(recommendation.id)
+            outcome = approve_recommendation(
+                recommendation.id, terms_version=recommendation.terms_version
+            )
         self.assertTrue(outcome.executed)
         run = DecisionRun.objects.get(pk=result["decision_run_id"])
         self.assertEqual(run.execution_state, "executed")

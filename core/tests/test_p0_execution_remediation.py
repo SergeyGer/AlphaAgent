@@ -311,7 +311,9 @@ class RecommendationApprovalAcceptanceTests(TestCase):
 
     def test_price_drift_returns_revised_terms_and_writes_no_fill(self):
         with patch("services.recommendations.get_latest_quote", return_value=self.quote("120")):
-            outcome = approve_recommendation(self.recommendation.id)
+            outcome = approve_recommendation(
+                self.recommendation.id, terms_version=self.recommendation.terms_version
+            )
         self.assertFalse(outcome.executed)
         self.assertTrue(outcome.requires_new_approval)
         self.assertEqual(outcome.reason_code, "price_drift_requires_approval")
@@ -329,9 +331,14 @@ class RecommendationApprovalAcceptanceTests(TestCase):
 
     def test_a_second_approval_at_the_refreshed_terms_fills_once(self):
         with patch("services.recommendations.get_latest_quote", return_value=self.quote("120")):
-            approve_recommendation(self.recommendation.id)
+            approve_recommendation(
+                self.recommendation.id, terms_version=self.recommendation.terms_version
+            )
+        self.recommendation.refresh_from_db()
         with patch("services.recommendations.get_latest_quote", return_value=self.quote("120")):
-            outcome = approve_recommendation(self.recommendation.id)
+            outcome = approve_recommendation(
+                self.recommendation.id, terms_version=self.recommendation.terms_version
+            )
         self.assertTrue(outcome.executed)
         self.assertEqual(Transaction.objects.count(), 1)
         self.recommendation.refresh_from_db()
@@ -456,13 +463,17 @@ class FillAuditAtomicityAcceptanceTests(TestCase):
             ),
             self.assertRaises(RuntimeError),
         ):
-            approve_recommendation(self.recommendation.id)
+            approve_recommendation(
+                self.recommendation.id, terms_version=self.recommendation.terms_version
+            )
         self.assertEqual(Transaction.objects.count(), 0)
         self.run.refresh_from_db()
         self.assertEqual(self.run.execution_state, DecisionExecutionState.AWAITING_APPROVAL)
 
         with patch("services.recommendations.get_latest_quote", return_value=self.quote):
-            outcome = approve_recommendation(self.recommendation.id)
+            outcome = approve_recommendation(
+                self.recommendation.id, terms_version=self.recommendation.terms_version
+            )
         self.assertTrue(outcome.executed)
         self.assertEqual(Transaction.objects.count(), 1)
         self.assertEqual(
@@ -483,7 +494,9 @@ class FillAuditAtomicityAcceptanceTests(TestCase):
             patch("config.celery.app.send_task", side_effect=RuntimeError("broker down")),
             self.captureOnCommitCallbacks(execute=True),
         ):
-            outcome = approve_recommendation(self.recommendation.id)
+            outcome = approve_recommendation(
+                self.recommendation.id, terms_version=self.recommendation.terms_version
+            )
         self.assertTrue(outcome.executed)
         self.assertEqual(Transaction.objects.count(), 1)
         self.run.refresh_from_db()

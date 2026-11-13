@@ -19,7 +19,9 @@ requires a new approval.
 
 from __future__ import annotations
 
+import hmac
 import logging
+import re
 from dataclasses import dataclass
 from datetime import timedelta
 from decimal import Decimal
@@ -63,18 +65,81 @@ from services.market_data import get_latest_quote
 from services.portfolio_brief import portfolio_state_version
 from services.portfolio_metrics import build_exposure
 from services.quote_policy import ExecutionFreshnessPolicy, validate_mark
+from services.recommendation_terms import terms_reference, terms_reference_from_approval
 
 logger = logging.getLogger("alphaagent.recommendations")
 
 __all__ = [
+    "TERMS_REFUSAL_CODES",
     "ApprovalOutcome",
     "approve_recommendation",
     "create_recommendation",
     "expire_stale_recommendations",
     "find_pending_recommendation",
+    "recommendation_terms_reference",
     "recommendation_ttl",
     "reject_recommendation",
 ]
+
+#: Stable refusal codes. A stale screen must fail with a code an operator can
+#: act on, not a generic "already decided" that hides which terms were refused.
+TERMS_VERSION_REQUIRED = "approval_terms_version_required"
+TERMS_VERSION_INVALID = "approval_terms_version_invalid"
+TERMS_VERSION_STALE = "approval_terms_version_stale"
+TERMS_REFERENCE_STALE = "approval_terms_reference_stale"
+IDENTITY_MISMATCH = "approval_identity_mismatch"
+IDEMPOTENCY_KEY_INVALID = "approval_idempotency_key_invalid"
+NOT_OWNED = "approval_recommendation_not_owned"
+
+TERMS_REFUSAL_CODES = frozenset(
+    {
+        TERMS_VERSION_REQUIRED,
+        TERMS_VERSION_INVALID,
+        TERMS_VERSION_STALE,
+        TERMS_REFERENCE_STALE,
+        IDENTITY_MISMATCH,
+        IDEMPOTENCY_KEY_INVALID,
+        NOT_OWNED,
+    }
+)
+_IDEMPOTENCY_KEY_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,160}$")
+_MISSING = object()
+_INVALID = object()
+
+
+def recommendation_terms_reference(recommendation: TradeRecommendation) -> str:
+    """The reference the API exposes for the terms currently on the row."""
+    return terms_reference(recommendation)
+
+
+def _coerce_terms_version(value: Any) -> int | object | None:
+    if value is None or value == "":
+        return _MISSING
+    if isinstance(value, bool):
+        return _INVALID
+    try:
+        parsed = int(str(value).strip())
+    except (TypeError, ValueError):
+        return _INVALID
+    return parsed if parsed >= 1 else _INVALID
+
+
+#: Telegram callback data is capped at 64 bytes, so the bot carries the last
+#: ten characters of the reference. That suffix is still a witness: it is not a
+#: secret, but a copied reference from another recommendation will not end with
+#: it. The service never accepts a suffix shorter than this.
+MIN_REFERENCE_SUFFIX = 8
+
+
+def _reference_matches(submitted: str, expected: str) -> bool:
+    """Whether ``submitted`` names ``expected`` (full value or bot suffix)."""
+    submitted_bytes = submitted.encode("utf-8")
+    expected_bytes = expected.encode("utf-8")
+    if hmac.compare_digest(submitted_bytes, expected_bytes):
+        return True
+    return MIN_REFERENCE_SUFFIX <= len(submitted_bytes) < len(
+        expected_bytes
+    ) and hmac.compare_digest(submitted_bytes, expected_bytes[-len(submitted_bytes) :])
 
 
 def recommendation_ttl() -> timedelta:
@@ -98,6 +163,13 @@ class ApprovalOutcome:
     revised_terms: dict | None = None
     run_id: str | None = None
     execution_attempt_id: str | None = None
+    #: The exact reference the reviewer submitted, or the one that was displayed
+    #: when the approval was recorded. Kept on the outcome so audit and API
+    #: consumers never have to recompute it from mutated row state.
+    displayed_terms_ref: str = ""
+    #: True when this call returned the original execution for a completed
+    #: approval instead of writing a second fill.
+    replayed: bool = False
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -113,8 +185,11 @@ class ApprovalOutcome:
             "run_id": self.run_id,
             "execution_attempt_id": self.execution_attempt_id,
             "terms_version": self.recommendation.terms_version,
+            "terms_ref": self.displayed_terms_ref
+            or recommendation_terms_reference(self.recommendation),
             "reference_price": str(self.recommendation.price),
             "quote_observed_at": utc_iso(self.recommendation.quote_observed_at),
+            "replayed": self.replayed,
         }
 
 
@@ -234,8 +309,11 @@ def _record_approval_snapshot(
     portfolio_version: str,
     via: str,
     legacy_unknown: bool,
+    quote: Any = None,
+    idempotency_key: str = "",
 ) -> RecommendationApproval:
     terms = _recommendation_terms(recommendation)
+    displayed_ref = terms_reference(recommendation, tolerance_pct=tolerance)
     return RecommendationApproval.objects.create(
         recommendation=recommendation,
         recommendation_version=int(recommendation.terms_version or 1),
@@ -250,6 +328,12 @@ def _record_approval_snapshot(
         policy_version=policy_version,
         portfolio_version=portfolio_version,
         terms_hash=_terms_hash(terms),
+        terms_ref=displayed_ref,
+        idempotency_key=idempotency_key,
+        evaluated_price=getattr(quote, "price", None),
+        evaluated_quote_observed_at=getattr(quote, "as_of", None),
+        evaluated_quote_retrieved_at=getattr(quote, "retrieved_at", None),
+        evaluated_quote_source=str(getattr(quote, "source", "") or ""),
         decided_at=timezone.now(),
         accepted=False,
         legacy_unknown_provenance=legacy_unknown,
@@ -267,17 +351,46 @@ def _refresh_recommendation_terms(
     reason_code: str,
     reason: str,
 ) -> dict:
-    """Show the refreshed terms and require a new approval for them."""
-    price = price.quantize(Decimal("0.01"))
-    recommendation.price = price
-    recommendation.notional_usd = (recommendation.amount * price).quantize(Decimal("0.01"))
-    recommendation.quote_observed_at = getattr(quote, "as_of", None)
-    recommendation.quote_retrieved_at = getattr(quote, "retrieved_at", None)
-    recommendation.price_source = str(getattr(quote, "source", "") or "")
-    recommendation.price_currency = str(getattr(quote, "currency", "") or "USD")
+    """Show the refreshed terms and require a new approval for them.
+
+    The version is incremented only when a displayed term actually changed. A
+    retry that observes the same price must not manufacture a new version: the
+    version is the identity the reviewer approved, not an attempt counter.
+    """
+    new_price = price.quantize(Decimal("0.01"))
+    new_notional = (recommendation.amount * new_price).quantize(Decimal("0.01"))
+    new_observed = getattr(quote, "as_of", None)
+    new_retrieved = getattr(quote, "retrieved_at", None)
+    new_source = str(getattr(quote, "source", "") or "")
+    new_currency = str(getattr(quote, "currency", "") or "USD")
+    material = (
+        new_price != recommendation.price
+        or new_notional != recommendation.notional_usd
+        or new_observed != recommendation.quote_observed_at
+        or new_source != recommendation.price_source
+        or new_currency != recommendation.price_currency
+        or tolerance != recommendation.price_tolerance_pct
+    )
+    if not material:
+        # Nothing the reviewer saw changed. Keep the version and the expiry
+        # untouched; a no-change retry is not a new set of terms.
+        return {
+            **_recommendation_terms(recommendation),
+            "terms_ref": terms_reference(recommendation, tolerance_pct=tolerance),
+            "reason_code": reason_code,
+            "message": reason,
+            "requires_new_approval": True,
+        }
+    recommendation.price = new_price
+    recommendation.notional_usd = new_notional
+    recommendation.quote_observed_at = new_observed
+    recommendation.quote_retrieved_at = new_retrieved
+    recommendation.price_source = new_source
+    recommendation.price_currency = new_currency
     recommendation.price_tolerance_pct = tolerance
-    recommendation.terms_version = int(recommendation.terms_version or 1) + 1
-    recommendation.expires_at = timezone.now() + recommendation_ttl()
+    if material:
+        recommendation.terms_version = int(recommendation.terms_version or 1) + 1
+        recommendation.expires_at = timezone.now() + recommendation_ttl()
     recommendation.status = RecommendationStatus.PENDING
     recommendation.decided_at = None
     recommendation.decided_via = ""
@@ -299,6 +412,7 @@ def _refresh_recommendation_terms(
     )
     revised = {
         **_recommendation_terms(recommendation),
+        "terms_ref": terms_reference(recommendation, tolerance_pct=tolerance),
         "reason_code": reason_code,
         "message": reason,
         "requires_new_approval": True,
@@ -310,19 +424,41 @@ def _refresh_recommendation_terms(
 # Approval / rejection
 # ---------------------------------------------------------------------------
 @transaction.atomic
-def approve_recommendation(recommendation_id: int, via: str = DecidedVia.WEB) -> ApprovalOutcome:
+def approve_recommendation(
+    recommendation_id: int,
+    via: str = DecidedVia.WEB,
+    *,
+    terms_version: Any = None,
+    terms_ref: str = "",
+    portfolio_id: int | None = None,
+    idempotency_key: str = "",
+    recommendation_version: Any = None,
+) -> ApprovalOutcome:
     """Approve and attempt execution through the authoritative lock.
 
-    The terms the reviewer sees are frozen first: side, quantity, reference
+    The caller must name the terms it displayed: either the opaque
+    ``terms_ref`` returned with the recommendation or its integer
+    ``terms_version``. Both are checked under the recommendation lock before any
+    quote is read or any audit row is written. A missing, stale or foreign
+    reference is refused with a stable code and no ledger write.
+
+    The terms the reviewer saw are frozen first: side, quantity, reference
     price, tolerance, expiry, recommendation version and observation
-    provenance. The current quote is then compared with that reference. A move
-    beyond the tolerance refreshes the displayed terms and requires a new
+    provenance. The current quote is then compared with that frozen reference. A
+    move beyond the tolerance refreshes the displayed terms and requires a new
     approval; it never substitutes the new price for the one the human approved.
 
-    The fill and its run audit commit together. A failure after the fill but
-    before the audit rolls the whole transaction back; a retry can also recover
-    an already-committed fill whose attempt row is incomplete.
+    A repeat of a completed approval reaches this function, presents the same
+    terms and idempotency key, and is answered with the original fill and run.
+    The fill and its run audit commit together; a failure after the fill but
+    before the audit rolls the whole transaction back, and a retry repairs an
+    already-committed fill whose attempt row is incomplete.
     """
+    if terms_version is None and recommendation_version is not None:
+        # The stored term is ``terms_version``; the approval payloads built from
+        # the decision contract also call it the recommendation version. Accept
+        # either name rather than silently ignoring the caller's identity.
+        terms_version = recommendation_version
     recommendation = (
         TradeRecommendation.objects.select_for_update()
         .select_related("portfolio", "portfolio__user")
@@ -330,8 +466,122 @@ def approve_recommendation(recommendation_id: int, via: str = DecidedVia.WEB) ->
     )
     portfolio = recommendation.portfolio
 
+    # Ownership is re-checked under the same lock as the decision. The view and
+    # the bot also scope their initial lookup, but a caller that reaches the
+    # service directly must not be able to decide another portfolio's terms.
+    if portfolio_id is not None and int(portfolio_id) != recommendation.portfolio_id:
+        return ApprovalOutcome(
+            recommendation,
+            False,
+            "Approval refused: the recommendation belongs to another portfolio.",
+            reason_code=NOT_OWNED,
+        )
+
+    submitted_key = str(idempotency_key or "").strip()
+    if submitted_key and not _IDEMPOTENCY_KEY_RE.match(submitted_key):
+        return ApprovalOutcome(
+            recommendation,
+            False,
+            "Approval refused: the idempotency key is not a stable action identity.",
+            reason_code=IDEMPOTENCY_KEY_INVALID,
+        )
+
+    # A completed approval is replayed against the frozen approval row, not the
+    # recommendation's post-execution values (the executed quantity and price
+    # may have been clamped). For a pending recommendation the current row is
+    # the displayed terms.
+    accepted = (
+        recommendation.approvals.filter(accepted=True).order_by("-id").first()
+        if not recommendation.is_actionable
+        else None
+    )
+    submitted_ref = str(terms_ref or "").strip()
+    parsed_version = _coerce_terms_version(terms_version)
+    if parsed_version is _INVALID:
+        return ApprovalOutcome(
+            recommendation,
+            False,
+            "Approval refused: the submitted terms version is not an integer.",
+            reason_code=TERMS_VERSION_INVALID,
+        )
+
+    expected_ref = ""
+    if accepted is not None:
+        expected_ref = accepted.terms_ref or terms_reference_from_approval(accepted, recommendation)
+    else:
+        expected_ref = terms_reference(recommendation)
+    if submitted_ref and len(submitted_ref) > 64:
+        return ApprovalOutcome(
+            recommendation,
+            False,
+            "Approval refused: the submitted terms reference is not a valid reference.",
+            reason_code=TERMS_REFERENCE_STALE,
+            requires_new_approval=True,
+            displayed_terms_ref=expected_ref,
+        )
+    if submitted_ref:
+        # A reference from another recommendation or portfolio carries that
+        # row's id/portfolio in its hash, so recomputing here rejects it even
+        # when the numeric version happens to be equal.
+        if expected_ref and not _reference_matches(submitted_ref, expected_ref):
+            return ApprovalOutcome(
+                recommendation,
+                False,
+                "Approval refused: these terms are no longer the displayed terms.",
+                reason_code=TERMS_REFERENCE_STALE,
+                requires_new_approval=True,
+                displayed_terms_ref=expected_ref,
+            )
+    elif parsed_version is _MISSING:
+        return ApprovalOutcome(
+            recommendation,
+            False,
+            "Approval refused: a terms version or terms reference is required.",
+            reason_code=TERMS_VERSION_REQUIRED,
+            requires_new_approval=True,
+        )
+
+    if parsed_version is not _MISSING:
+        expected_version = (
+            accepted.recommendation_version
+            if accepted is not None
+            else int(recommendation.terms_version or 1)
+        )
+        if parsed_version != expected_version:
+            return ApprovalOutcome(
+                recommendation,
+                False,
+                (
+                    f"Approval refused: the submitted terms version "
+                    f"v{parsed_version} is not current (v{expected_version})."
+                ),
+                reason_code=TERMS_VERSION_STALE,
+                requires_new_approval=True,
+                displayed_terms_ref=expected_ref,
+            )
+
+    displayed_version = (
+        accepted.recommendation_version
+        if accepted is not None
+        else int(recommendation.terms_version or 1)
+    )
+    action_key = submitted_key or f"recommendation:{recommendation.id}:approve:v{displayed_version}"
+
     if not recommendation.is_actionable:
         if recommendation.status == RecommendationStatus.EXECUTED and recommendation.transaction_id:
+            if (
+                submitted_key
+                and accepted is not None
+                and accepted.idempotency_key
+                and not hmac.compare_digest(submitted_key, accepted.idempotency_key)
+            ):
+                return ApprovalOutcome(
+                    recommendation,
+                    False,
+                    "Approval refused: the idempotency key does not match the completed action.",
+                    reason_code=IDENTITY_MISMATCH,
+                    displayed_terms_ref=expected_ref or action_key,
+                )
             # A retried approval must return the original fill and repair an
             # incomplete audit before it is reported as complete.
             from services.execution_audit import resume_execution_audit
@@ -344,6 +594,12 @@ def approve_recommendation(recommendation_id: int, via: str = DecidedVia.WEB) ->
                 via=via,
                 user_id=portfolio.user_id,
                 execution_key=f"recommendation:{recommendation.id}",
+                approved_terms={
+                    "terms_ref": expected_ref or submitted_ref,
+                    "recommendation_version": displayed_version,
+                    "idempotency_key": action_key,
+                    "replayed": True,
+                },
             )
             request = ExecutionRequest(
                 portfolio_id=portfolio.id,
@@ -360,16 +616,17 @@ def approve_recommendation(recommendation_id: int, via: str = DecidedVia.WEB) ->
             attempt = resume_execution_audit(
                 transaction_row=recommendation.transaction, request=request, audit=audit
             )
+            run_id = recommendation.decision_run_id or getattr(attempt, "decision_run_id", None)
             return ApprovalOutcome(
                 recommendation,
                 True,
                 "Already executed; returned the original fill.",
                 transaction_id=recommendation.transaction_id,
                 reason_code="already_executed",
-                run_id=str(recommendation.decision_run_id)
-                if recommendation.decision_run_id
-                else None,
+                run_id=str(run_id) if run_id else None,
                 execution_attempt_id=str(attempt.id) if attempt is not None else None,
+                displayed_terms_ref=expected_ref or submitted_ref,
+                replayed=True,
             )
         reason = (
             "Recommendation already decided."
@@ -399,6 +656,7 @@ def approve_recommendation(recommendation_id: int, via: str = DecidedVia.WEB) ->
             reason_code="expired"
             if recommendation.status == RecommendationStatus.EXPIRED
             else "already_decided",
+            displayed_terms_ref=expected_ref,
         )
 
     policy = ExecutionFreshnessPolicy.from_settings()
@@ -449,10 +707,17 @@ def approve_recommendation(recommendation_id: int, via: str = DecidedVia.WEB) ->
         portfolio_version=portfolio_version,
         via=via,
         legacy_unknown=legacy_unknown,
+        quote=quote,
+        idempotency_key=action_key,
     )
+    displayed_ref = approval_row.terms_ref
 
     # The reference is the price that was *shown*, not the refreshed quote.
-    reference_price = recommendation.price
+    # Read it back from the frozen approval row so the drift and quantity checks
+    # cannot accidentally compare the new market price with itself.
+    reference_price = approval_row.reference_price
+    reference_quantity = approval_row.quantity
+    tolerance = approval_row.tolerance_pct
     drift = (abs(price - reference_price) / reference_price) * Decimal("100")
     if drift > tolerance:
         reason = (
@@ -481,6 +746,7 @@ def approve_recommendation(recommendation_id: int, via: str = DecidedVia.WEB) ->
             requires_new_approval=True,
             revised_terms=revised,
             run_id=str(recommendation.decision_run_id) if recommendation.decision_run_id else None,
+            displayed_terms_ref=displayed_ref,
         )
 
     positions = replay_positions(portfolio)
@@ -491,7 +757,7 @@ def approve_recommendation(recommendation_id: int, via: str = DecidedVia.WEB) ->
 
     proposal = TradeProposal(
         action=recommendation.action,
-        amount=float(recommendation.amount),
+        amount=float(reference_quantity),
         sentiment=recommendation.sentiment,
         reasoning=recommendation.reasoning or "Approved by operator.",
     )
@@ -510,7 +776,7 @@ def approve_recommendation(recommendation_id: int, via: str = DecidedVia.WEB) ->
     decision.quote_source = mark.source
     decision.quote_retrieved_at = mark.retrieved_at
     decision.approved_price = reference_price
-    decision.approved_quantity = recommendation.amount
+    decision.approved_quantity = reference_quantity
     decision.price_tolerance_pct = tolerance
     decision.quantity_tolerance = Decimal("0.00000001")
     decision.approval_ref = f"recommendation:{recommendation.id}"
@@ -530,6 +796,7 @@ def approve_recommendation(recommendation_id: int, via: str = DecidedVia.WEB) ->
             code="guard_rejected",
             via=via,
             guard_decision=decision,
+            displayed_terms_ref=displayed_ref,
         )
 
     request = ExecutionRequest(
@@ -545,7 +812,7 @@ def approve_recommendation(recommendation_id: int, via: str = DecidedVia.WEB) ->
         approved_policy_version=policy_version,
         approved_portfolio_version=portfolio_version,
         approved_price=reference_price,
-        approved_quantity=recommendation.amount,
+        approved_quantity=reference_quantity,
         price_tolerance_pct=tolerance,
         quote_time=mark.as_of,
         quote_source=mark.source,
@@ -560,7 +827,12 @@ def approve_recommendation(recommendation_id: int, via: str = DecidedVia.WEB) ->
         user_id=portfolio.user_id,
         execution_key=f"recommendation:{recommendation.id}",
         approved_terms=_terms_hash_payload(
-            recommendation, tolerance, policy_version, portfolio_version
+            recommendation,
+            tolerance,
+            policy_version,
+            portfolio_version,
+            terms_ref=displayed_ref,
+            idempotency_key=action_key,
         ),
     )
     try:
@@ -590,6 +862,7 @@ def approve_recommendation(recommendation_id: int, via: str = DecidedVia.WEB) ->
             requires_new_approval=True,
             revised_terms={**revised, **(exc.revised_terms or {})},
             run_id=str(recommendation.decision_run_id) if recommendation.decision_run_id else None,
+            displayed_terms_ref=displayed_ref,
         )
     except ExecutionRejected as exc:
         approval_row.accepted = False
@@ -602,6 +875,7 @@ def approve_recommendation(recommendation_id: int, via: str = DecidedVia.WEB) ->
             code=getattr(exc, "code", "execution_rejected"),
             via=via,
             guard_decision=getattr(exc, "decision", None) or decision,
+            displayed_terms_ref=displayed_ref,
         )
 
     if not execution.approved or execution.transaction is None:
@@ -615,6 +889,7 @@ def approve_recommendation(recommendation_id: int, via: str = DecidedVia.WEB) ->
             code="guard_rejected",
             via=via,
             guard_decision=execution.decision or decision,
+            displayed_terms_ref=displayed_ref,
         )
 
     transaction_row = execution.transaction
@@ -700,6 +975,7 @@ def approve_recommendation(recommendation_id: int, via: str = DecidedVia.WEB) ->
         execution_attempt_id=(
             str(execution.execution_attempt.id) if execution.execution_attempt is not None else None
         ),
+        displayed_terms_ref=displayed_ref,
     )
 
 
@@ -708,12 +984,17 @@ def _terms_hash_payload(
     tolerance: Decimal,
     policy_version: str,
     portfolio_version: str,
+    *,
+    terms_ref: str = "",
+    idempotency_key: str = "",
 ) -> dict:
     return {
         **_recommendation_terms(recommendation),
         "tolerance_pct": str(tolerance),
         "policy_version": policy_version,
         "portfolio_version": portfolio_version,
+        "terms_ref": terms_ref or None,
+        "idempotency_key": idempotency_key or None,
     }
 
 
@@ -724,6 +1005,7 @@ def _block_recommendation(
     code: str,
     via: str,
     guard_decision: GuardDecision | None = None,
+    displayed_terms_ref: str = "",
 ) -> ApprovalOutcome:
     """Terminal blocked decision: update the recommendation and its run together."""
     recommendation.status = RecommendationStatus.BLOCKED
@@ -755,16 +1037,32 @@ def _block_recommendation(
         guard_reason=reason,
         reason_code=code,
         run_id=str(recommendation.decision_run_id) if recommendation.decision_run_id else None,
+        displayed_terms_ref=displayed_terms_ref,
     )
 
 
 @transaction.atomic
-def reject_recommendation(recommendation_id: int, via: str = DecidedVia.WEB) -> ApprovalOutcome:
+def reject_recommendation(
+    recommendation_id: int,
+    via: str = DecidedVia.WEB,
+    *,
+    terms_version: Any = None,
+    terms_ref: str = "",
+    portfolio_id: int | None = None,
+    idempotency_key: str = "",
+) -> ApprovalOutcome:
     recommendation = (
         TradeRecommendation.objects.select_for_update()
         .select_related("portfolio", "portfolio__user")
         .get(pk=recommendation_id)
     )
+    if portfolio_id is not None and int(portfolio_id) != recommendation.portfolio_id:
+        return ApprovalOutcome(
+            recommendation,
+            False,
+            "Rejection refused: the recommendation belongs to another portfolio.",
+            reason_code=NOT_OWNED,
+        )
 
     if not recommendation.is_actionable:
         if recommendation.status == RecommendationStatus.REJECTED:

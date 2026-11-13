@@ -68,6 +68,12 @@ function PendingCard({
         <Badge tone={recommendation.action === 'BUY' ? 'emerald' : 'rose'}>{recommendation.action}</Badge>
         <SentimentBadge sentiment={recommendation.sentiment} />
         <StatusBadge status={recommendation.status} />
+        <span
+          className="font-mono text-[10px] uppercase tracking-wider text-slate-400"
+          title="The terms version this screen is displaying"
+        >
+          v{recommendation.terms_version}
+        </span>
         <span className="ml-auto font-mono text-[10px] text-slate-500">
           {formatRelativeTime(recommendation.created_at, now)}
         </span>

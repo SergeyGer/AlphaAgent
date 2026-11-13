@@ -259,7 +259,9 @@ class ApprovalCallbackTests(TelegramTestCase):
             as_of=timezone.now(),
         )
         with patch("services.recommendations.get_latest_quote", return_value=quote):
-            handle_update(callback_update(self.chat_id, f"ap:{self.reco.id}"))
+            handle_update(
+                callback_update(self.chat_id, f"ap:{self.reco.id}:v{self.reco.terms_version}")
+            )
 
         self.reco.refresh_from_db()
         self.assertEqual(self.reco.status, RecommendationStatus.EXECUTED)
@@ -279,7 +281,9 @@ class ApprovalCallbackTests(TelegramTestCase):
         handle_update(callback_update(self.chat_id, f"rj:{self.reco.id}"))
         self.client_fake.answers.clear()
 
-        handle_update(callback_update(self.chat_id, f"ap:{self.reco.id}"))
+        handle_update(
+            callback_update(self.chat_id, f"ap:{self.reco.id}:v{self.reco.terms_version}")
+        )
 
         self.assertTrue(self.client_fake.answers[-1]["alert"])
         self.assertIn("already", self.client_fake.answers[-1]["text"].lower())

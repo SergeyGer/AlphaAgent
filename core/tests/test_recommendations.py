@@ -113,7 +113,9 @@ class ApproveRecommendationTests(TestCase):
 
     def test_approval_executes_within_limits(self):
         with patch("services.recommendations.get_latest_quote", return_value=quote("100.00")):
-            outcome = approve_recommendation(self.reco.id, via=DecidedVia.WEB)
+            outcome = approve_recommendation(
+                self.reco.id, via=DecidedVia.WEB, terms_version=self.reco.terms_version
+            )
 
         self.assertTrue(outcome.executed)
         self.assertEqual(outcome.recommendation.status, RecommendationStatus.EXECUTED)
@@ -129,14 +131,18 @@ class ApproveRecommendationTests(TestCase):
 
     def test_approval_records_how_it_was_decided(self):
         with patch("services.recommendations.get_latest_quote", return_value=quote("100.00")):
-            approve_recommendation(self.reco.id, via=DecidedVia.TELEGRAM)
+            approve_recommendation(
+                self.reco.id, via=DecidedVia.TELEGRAM, terms_version=self.reco.terms_version
+            )
         self.reco.refresh_from_db()
         self.assertEqual(self.reco.decided_via, DecidedVia.TELEGRAM)
         self.assertIsNotNone(self.reco.decided_at)
 
     def test_approval_writes_a_human_decision_to_the_audit_trail(self):
         with patch("services.recommendations.get_latest_quote", return_value=quote("100.00")):
-            approve_recommendation(self.reco.id, via=DecidedVia.WEB)
+            approve_recommendation(
+                self.reco.id, via=DecidedVia.WEB, terms_version=self.reco.terms_version
+            )
 
         log = AgentDecisionLog.objects.filter(portfolio=self.portfolio).latest("created_at")
         self.assertIn("Human decision", log.reasoning)
@@ -151,7 +157,9 @@ class ApproveRecommendationTests(TestCase):
         returned for a fresh approval and no fill is written under the old one.
         """
         with patch("services.recommendations.get_latest_quote", return_value=quote("400.00")):
-            outcome = approve_recommendation(self.reco.id, via=DecidedVia.WEB)
+            outcome = approve_recommendation(
+                self.reco.id, via=DecidedVia.WEB, terms_version=self.reco.terms_version
+            )
 
         self.assertFalse(outcome.executed)
         self.assertTrue(outcome.requires_new_approval)
@@ -168,7 +176,9 @@ class ApproveRecommendationTests(TestCase):
         self.portfolio.save(update_fields=["balance_usd"])
 
         with patch("services.recommendations.get_latest_quote", return_value=quote("100.00")):
-            outcome = approve_recommendation(self.reco.id, via=DecidedVia.WEB)
+            outcome = approve_recommendation(
+                self.reco.id, via=DecidedVia.WEB, terms_version=self.reco.terms_version
+            )
 
         # 5% of $10 = a $0.50 ceiling; $200 at $100 is clamped to fit it.
         self.assertTrue(outcome.executed)
@@ -181,7 +191,9 @@ class ApproveRecommendationTests(TestCase):
         self.portfolio.save(update_fields=["max_trade_allocation_pct"])
 
         with patch("services.recommendations.get_latest_quote", return_value=quote("100.00")):
-            outcome = approve_recommendation(self.reco.id, via=DecidedVia.WEB)
+            outcome = approve_recommendation(
+                self.reco.id, via=DecidedVia.WEB, terms_version=self.reco.terms_version
+            )
 
         self.assertFalse(outcome.executed)
         self.assertEqual(outcome.recommendation.status, RecommendationStatus.BLOCKED)
@@ -193,7 +205,9 @@ class ApproveRecommendationTests(TestCase):
             self.portfolio, proposal("SELL", 5.0, "BEARISH"), Decimal("100.00"), ticker="TSLA"
         )
         with patch("services.recommendations.get_latest_quote", return_value=quote("100.00")):
-            outcome = approve_recommendation(reco.id, via=DecidedVia.WEB)
+            outcome = approve_recommendation(
+                reco.id, via=DecidedVia.WEB, terms_version=reco.terms_version
+            )
 
         self.assertFalse(outcome.executed)
         self.assertEqual(outcome.recommendation.status, RecommendationStatus.BLOCKED)
@@ -222,7 +236,9 @@ class ApproveRecommendationTests(TestCase):
         )
 
         with patch("services.recommendations.get_latest_quote", return_value=quote("100.00")):
-            outcome = approve_recommendation(self.reco.id, via=DecidedVia.WEB)
+            outcome = approve_recommendation(
+                self.reco.id, via=DecidedVia.WEB, terms_version=self.reco.terms_version
+            )
 
         self.assertFalse(outcome.executed)
         self.assertIn("daily loss limit", outcome.guard_reason.lower())
@@ -232,7 +248,9 @@ class ApproveRecommendationTests(TestCase):
             expires_at=timezone.now() - timedelta(minutes=1)
         )
         with patch("services.recommendations.get_latest_quote", return_value=quote("100.00")):
-            outcome = approve_recommendation(self.reco.id, via=DecidedVia.WEB)
+            outcome = approve_recommendation(
+                self.reco.id, via=DecidedVia.WEB, terms_version=self.reco.terms_version
+            )
 
         self.assertFalse(outcome.executed)
         self.assertEqual(outcome.recommendation.status, RecommendationStatus.EXPIRED)
@@ -240,8 +258,12 @@ class ApproveRecommendationTests(TestCase):
 
     def test_double_approval_is_rejected(self):
         with patch("services.recommendations.get_latest_quote", return_value=quote("100.00")):
-            first = approve_recommendation(self.reco.id, via=DecidedVia.WEB)
-            second = approve_recommendation(self.reco.id, via=DecidedVia.WEB)
+            first = approve_recommendation(
+                self.reco.id, via=DecidedVia.WEB, terms_version=self.reco.terms_version
+            )
+            second = approve_recommendation(
+                self.reco.id, via=DecidedVia.WEB, terms_version=self.reco.terms_version
+            )
 
         # A replay returns the original fill and run link; it never executes
         # a second time or leaves the audit half-written.
@@ -253,7 +275,9 @@ class ApproveRecommendationTests(TestCase):
     def test_no_price_at_all_blocks_execution(self):
         """No quote and no fallback => the guard refuses to trade blind."""
         with patch("services.recommendations.get_latest_quote", return_value=None):
-            outcome = approve_recommendation(self.reco.id, via=DecidedVia.WEB)
+            outcome = approve_recommendation(
+                self.reco.id, via=DecidedVia.WEB, terms_version=self.reco.terms_version
+            )
 
         self.assertFalse(outcome.executed)
         self.assertEqual(outcome.recommendation.status, RecommendationStatus.BLOCKED)
@@ -268,7 +292,9 @@ class ApproveRecommendationTests(TestCase):
         records the blocked reason instead of executing at a guessed price.
         """
         with patch("services.market_data._fetch_from_yfinance", return_value=None):
-            outcome = approve_recommendation(self.reco.id, via=DecidedVia.WEB)
+            outcome = approve_recommendation(
+                self.reco.id, via=DecidedVia.WEB, terms_version=self.reco.terms_version
+            )
 
         self.assertFalse(outcome.executed)
         self.assertIn("No current quote", outcome.guard_reason)

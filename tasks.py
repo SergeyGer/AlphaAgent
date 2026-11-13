@@ -111,6 +111,105 @@ def _watchlist() -> list[str]:
     return [str(t).upper() for t in configured]
 
 
+def _completed_delivery_result(
+    existing: Transaction, execution_key: str, *, portfolio: Portfolio, ticker: str
+) -> dict[str, Any]:
+    """Return the original execution for a redelivered Celery task.
+
+    The task id is the delivery identity, and the ledger row already holds it as
+    ``execution_key``. The audit link is recovered through the same
+    ``resume_execution_audit`` path a repeated approval uses: an existing
+    ``ExecutionAttempt`` is read (and its terminal event repaired), and a legacy
+    fill with no attempt gets one created and linked to the run. No model is
+    called and no second ledger row is written.
+    """
+    from core.decision_models import ExecutionAttempt
+    from services.execution_audit import LegacyExecutionProvenance, resume_execution_audit
+
+    attempt = ExecutionAttempt.objects.filter(execution_key=execution_key).first()
+    run = attempt.decision_run if attempt is not None else None
+    if run is None:
+        legacy_log = (
+            AgentDecisionLog.objects.filter(transaction=existing)
+            .select_related("portfolio")
+            .first()
+        )
+        if legacy_log is not None:
+            run = legacy_log.decision_runs.first()
+
+    request = ExecutionRequest(
+        portfolio_id=existing.portfolio_id,
+        ticker=existing.ticker,
+        side=existing.tx_type,
+        quantity=existing.amount,
+        quotes={},
+        execution_key=execution_key,
+        source=(getattr(attempt, "source", "") or "autonomous"),
+        approval_ref=(getattr(attempt, "approval_ref", "") or ""),
+        approved_price=existing.price,
+        approved_quantity=existing.amount,
+        quote_time=existing.price_observed_at,
+        quote_source=existing.price_source,
+        quote_retrieved_at=existing.price_retrieved_at,
+    )
+    audit = ExecutionAudit(
+        run=run,
+        outcome=DecisionExecutionState.EXECUTED,
+        reason="Celery redelivery of a completed execution; returned the original fill.",
+        via="celery_redelivery",
+        user_id=portfolio.user_id,
+        execution_key=execution_key,
+        approved_terms={
+            "recovered_from": "celery_duplicate_delivery",
+            "transaction_id": existing.id,
+            "execution_key": execution_key,
+        },
+    )
+    try:
+        with transaction.atomic():
+            attempt = resume_execution_audit(transaction_row=existing, request=request, audit=audit)
+    except LegacyExecutionProvenance as exc:
+        logger.warning(
+            "Duplicate delivery %s has an unexplained legacy fill: %s",
+            log_safe(execution_key),
+            log_safe(exc),
+        )
+        attempt = None
+    if attempt is not None and run is not None and attempt.decision_run_id is None:
+        # A legacy attempt row may predate the run link. Restore it from the
+        # authoritative delivery identity instead of creating another row.
+        attempt.decision_run = run
+        attempt.recovered = True
+        attempt.save(update_fields=["decision_run", "recovered"])
+    if attempt is not None and attempt.decision_run_id is not None:
+        run = attempt.decision_run
+    outcome = getattr(attempt, "state", "") or DecisionExecutionState.EXECUTED
+    logger.info(
+        "Duplicate delivery for task %s: returned transaction %s (run %s, audit %s)",
+        log_safe(execution_key),
+        existing.id,
+        getattr(run, "id", None),
+        "recovered" if getattr(attempt, "recovered", False) else "existing",
+    )
+    return {
+        "status": "executed",
+        "duplicate_delivery": True,
+        "portfolio_id": portfolio.id,
+        "ticker": ticker,
+        "action": existing.tx_type,
+        "approved": True,
+        "amount": str(existing.amount),
+        "price": str(existing.price),
+        "notional": str(existing.gross_value_usd),
+        "transaction_id": existing.id,
+        "decision_run_id": str(run.id) if run is not None else None,
+        "execution_state": outcome,
+        "outcome": outcome,
+        "execution_attempt_id": str(attempt.id) if attempt is not None else None,
+        "audit_recovered": bool(getattr(attempt, "recovered", False)),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Subtask: one portfolio x one ticker
 # ---------------------------------------------------------------------------
@@ -146,6 +245,25 @@ def run_alpha_agent_task(
         logger.warning("Portfolio %s no longer exists; skipping %s", portfolio_id, ticker)
         return {"status": "skipped", "reason": "portfolio_missing", "ticker": ticker}
 
+    # ---- 0a. Duplicate delivery ------------------------------------------
+    # The Celery task id is the stable identity of this decision *delivery*.
+    # ``acks_late`` means a worker can receive the same message twice; the
+    # second delivery must return the first result, not re-run the model, spend
+    # again, or be suppressed by a state change (such as autonomy being turned
+    # off) that happened after the execution already completed. Checked before
+    # the autonomy gate and before any budget reservation or provider call.
+    execution_key = f"celery:{self.request.id}" if self.request.id else ""
+    if execution_key:
+        existing = (
+            Transaction.objects.filter(execution_key=execution_key)
+            .select_related("portfolio")
+            .first()
+        )
+        if existing is not None:
+            return _completed_delivery_result(
+                existing, execution_key, portfolio=portfolio, ticker=ticker
+            )
+
     if not portfolio.is_autonomous and not require_approval:
         logger.info("Portfolio %s autonomy disabled; skipping %s", portfolio_id, ticker)
         return {"status": "skipped", "reason": "autonomy_disabled", "ticker": ticker}
@@ -153,34 +271,6 @@ def run_alpha_agent_task(
     # Autonomy always wins: an autonomous portfolio never queues for approval.
     require_approval = require_approval and not portfolio.is_autonomous
     user_id = portfolio.user_id
-
-    # ---- 0a. Duplicate delivery ------------------------------------------
-    # The Celery task id is the stable identity of this decision *delivery*.
-    # ``acks_late`` means a worker can receive the same message twice; the
-    # second delivery must return the first result, not re-run the model and
-    # then discover that the portfolio has moved.
-    execution_key = f"celery:{self.request.id}" if self.request.id else ""
-    if execution_key:
-        existing = Transaction.objects.filter(execution_key=execution_key).first()
-        if existing is not None:
-            logger.info(
-                "Duplicate delivery for task %s: returning transaction %s",
-                self.request.id,
-                existing.id,
-            )
-            return {
-                "status": "executed",
-                "duplicate_delivery": True,
-                "portfolio_id": portfolio_id,
-                "ticker": ticker,
-                "action": existing.tx_type,
-                "approved": True,
-                "amount": str(existing.amount),
-                "price": str(existing.price),
-                "notional": str(existing.gross_value_usd),
-                "transaction_id": existing.id,
-                "decision_run_id": None,
-            }
 
     # ---- 0. Throttle ------------------------------------------------------
     # Claimed before any expensive work. The allocation ceiling is per-trade, so

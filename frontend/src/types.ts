@@ -278,6 +278,29 @@ export interface Recommendation {
   decided_at: string | null;
   expires_at: string | null;
   created_at: string;
+  /**
+   * The exact terms the server displayed. Approval submits both back so a
+   * screen that stayed open during a refresh cannot approve the new terms.
+   */
+  terms_version: number;
+  terms_ref: string;
+  quote_observed_at: string | null;
+  quote_retrieved_at: string | null;
+  price_source: string;
+  price_currency: string;
+  price_tolerance_pct: Decimal | null;
+}
+
+export interface RecommendationRevision {
+  recommendation_version: number;
+  terms_ref: string;
+  reference_price: Decimal;
+  quantity: Decimal;
+  notional_usd: Decimal;
+  expires_at: string | null;
+  quote_observed_at: string | null;
+  quote_retrieved_at: string | null;
+  quote_source: string | null;
 }
 
 export interface RecommendationDecisionResponse {
@@ -286,6 +309,13 @@ export interface RecommendationDecisionResponse {
   executed: boolean;
   transaction_id: number | null;
   message: string;
+  reason_code?: string | null;
+  terms_version: number;
+  terms_ref: string;
+  replayed: boolean;
+  requires_new_approval?: boolean;
+  /** Present when a price move refreshed the displayed terms. */
+  revised_terms?: RecommendationRevision | null;
 }
 
 /* ------------------------------------------------------------------ */

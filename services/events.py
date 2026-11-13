@@ -191,6 +191,8 @@ def emit_portfolio_snapshot(user_id: int | None, payload: dict) -> None:
 
 
 def emit_recommendation(user_id: int | None, recommendation, *, created: bool = True) -> None:
+    from services.recommendation_terms import terms_reference
+
     publish(
         user_id,
         EventType.RECOMMENDATION_CREATED if created else EventType.RECOMMENDATION_UPDATED,
@@ -208,6 +210,8 @@ def emit_recommendation(user_id: int | None, recommendation, *, created: bool = 
             "decided_at": recommendation.decided_at,
             "expires_at": recommendation.expires_at,
             "created_at": recommendation.created_at,
+            "terms_version": recommendation.terms_version,
+            "terms_ref": terms_reference(recommendation),
         },
     )
 

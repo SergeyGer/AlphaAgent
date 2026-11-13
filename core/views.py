@@ -44,7 +44,11 @@ from core.serializers import (
     TransactionSerializer,
     build_portfolio_payload,
 )
-from services.recommendations import approve_recommendation, reject_recommendation
+from services.recommendations import (
+    TERMS_REFUSAL_CODES,
+    approve_recommendation,
+    reject_recommendation,
+)
 from services.snapshots import equity_series
 from telegram_bot import handle_update
 
@@ -356,6 +360,11 @@ class RecommendationDecisionView(APIView):
     Approving does **not** bypass the execution guard: the trade is re-validated
     against live prices and current limits, and is reported as ``BLOCKED`` if it
     no longer fits.
+
+    The body must name the terms the caller displayed: ``terms_ref`` (preferred)
+    or ``terms_version``. A repeat of a completed approval with the same identity
+    is answered with the original fill; a stale or missing identity is a 409 and
+    writes nothing.
     """
 
     permission_classes = [IsAuthenticated]
@@ -375,22 +384,46 @@ class RecommendationDecisionView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        if not recommendation.is_actionable:
-            return Response(
-                {
-                    "error": True,
-                    "status_code": status.HTTP_409_CONFLICT,
-                    "detail": f"Recommendation is already {recommendation.status.lower()}.",
-                    "errors": None,
-                },
-                status=status.HTTP_409_CONFLICT,
-            )
+        body = request.data if isinstance(request.data, dict) else {}
+        terms_version = body.get("terms_version")
+        if terms_version is None:
+            terms_version = body.get("recommendation_version")
+        if terms_version is None:
+            terms_version = request.query_params.get("terms_version")
+        terms_ref = body.get("terms_ref") or request.query_params.get("terms_ref") or ""
+        idempotency_key = (
+            body.get("idempotency_key") or request.headers.get("Idempotency-Key") or ""
+        )
 
         try:
             if self.decision == "approve":
-                outcome = approve_recommendation(recommendation.id, via=DecidedVia.WEB)
+                outcome = approve_recommendation(
+                    recommendation.id,
+                    via=DecidedVia.WEB,
+                    terms_version=terms_version,
+                    terms_ref=str(terms_ref),
+                    portfolio_id=portfolio.id,
+                    idempotency_key=str(idempotency_key),
+                )
             else:
-                outcome = reject_recommendation(recommendation.id, via=DecidedVia.WEB)
+                outcome = reject_recommendation(
+                    recommendation.id,
+                    via=DecidedVia.WEB,
+                    terms_version=terms_version,
+                    terms_ref=str(terms_ref),
+                    portfolio_id=portfolio.id,
+                    idempotency_key=str(idempotency_key),
+                )
+        except TradeRecommendation.DoesNotExist:
+            return Response(
+                {
+                    "error": True,
+                    "status_code": status.HTTP_404_NOT_FOUND,
+                    "detail": "Recommendation not found.",
+                    "errors": None,
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
         except Exception as exc:
             logger.exception("Recommendation %s decision failed: %s", pk, log_safe(exc))
             return Response(
@@ -403,6 +436,20 @@ class RecommendationDecisionView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
+        payload = outcome.as_dict()
+        payload["detail"] = outcome.message
+        payload["code"] = outcome.reason_code or None
+        refused = outcome.reason_code in TERMS_REFUSAL_CODES or outcome.reason_code in {
+            "already_decided",
+            "expired",
+            "rejected",
+        }
+        if refused:
+            payload["error"] = True
+            payload["status_code"] = status.HTTP_409_CONFLICT
+            payload["errors"] = None
+            return Response(payload, status=status.HTTP_409_CONFLICT)
+
         logger.info(
             "User %s %sd recommendation %s -> %s",
             log_safe(request.user.username),
@@ -410,7 +457,7 @@ class RecommendationDecisionView(APIView):
             pk,
             outcome.recommendation.status,
         )
-        return Response(outcome.as_dict(), status=status.HTTP_200_OK)
+        return Response(payload, status=status.HTTP_200_OK)
 
 
 class RecommendationApproveView(RecommendationDecisionView):
