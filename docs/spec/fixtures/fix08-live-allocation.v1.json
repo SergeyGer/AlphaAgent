@@ -2090,6 +2090,7 @@
     "acceptance_record": "docs/spec/acceptance/4e6c71f7e01c50b4e43ff44b40e90265837a3a0a.json",
     "acceptance_digest": "af900b9f4f4fe0b4866b5fb925dca178d2a27501574a1b13424c6bb5ab0b0a95",
     "tree_clean": true,
+    "scope": "build_verification_not_run_origin",
     "status": "attached_at_remediation",
     "verified": true,
     "usable_for_recording": true,

@@ -70,15 +70,26 @@ file name:
 
 | Label | Meaning |
 | --- | --- |
-| **Real recorded** | A run that actually executed (`mode: recorded` or `live`). The viewer cannot independently re-authenticate the recording; it displays the label the bundle declares. |
-| **Synthetic** | Authored fixture data. Not a market decision; no outcome should be inferred. |
+| **Real recorded** | The run record says `run.origin.kind: "provider_run"` with `provider_backed: true`. A recorded/live mode alone is not enough: only a provider-backed run record establishes that a debate happened. The viewer cannot independently re-authenticate the recording; it displays the label the bundle declares. |
+| **Synthetic** | Authored fixture data (`authored_fixture`), including an older export that carries a `fixture_id` on a recorded label. Not a market decision; no outcome should be inferred. |
 | **Heuristic** | The deterministic fallback. The bull/bear debate did not run, so absent claims are absent by construction. |
 | **Legacy** | A report recorded before the claim/evidence/rebuttal protocol. Missing sections were never produced in this shape. |
 
+Every run also shows its `run.origin` kind, whether it is provider-backed, and
+the origin's limitations. Three claims stay distinct: the bundle/export
+`checksum` is integrity, `recording` is build verification, and `run.origin` is
+the content producer. A verified checksum or recording never upgrades an authored
+sample to a provider debate.
+
 The committed fixture bundle is entirely **Synthetic**, per the manifest's own
-honesty block. The real-recorded path is exercised by importing an API export;
-`viewer/bundle.test.ts` and `viewer/ViewerRunView.test.tsx` test the recorded
-and synthetic labels independently.
+honesty block. The committed API export sample
+(`docs/spec/fixtures/decision-run-export.v1.json`) is authored and therefore also
+Synthetic; the superseded recorded-label sample is retained as a conformance file
+and imports as Synthetic. The real-recorded path is exercised by importing
+`decision-run-export.provider-backed.v1.json`, which is explicitly test data for
+the Step 11 recording path. `viewer/bundle.test.ts`,
+`viewer/exportParity.test.ts` and `viewer/ViewerRunView.test.tsx` test the
+labels independently.
 
 ## What it deliberately cannot do
 

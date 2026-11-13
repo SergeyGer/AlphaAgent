@@ -252,6 +252,30 @@ export function sourceLabelForRun(run: Pick<ViewerRun, 'source_label' | 'mode'>)
     : sourceLabelFromMode(run.mode);
 }
 
+/**
+ * The run record's own origin claim wins over the mode fallback.
+ *
+ * A recorded/live *mode* is not sufficient evidence of a provider debate: the
+ * superseded export sample carried `recorded` on authored fixture content. Only
+ * `origin.kind === "provider_run"` with `provider_backed: true` renders as
+ * Real recorded. Everything else that declares an origin is a non-provider
+ * source, so it falls back to Synthetic/Heuristic/Legacy rather than crediting a
+ * model call that the record does not establish.
+ */
+export function sourceLabelFromOrigin(
+  origin: Record<string, unknown> | null | undefined,
+): ViewerSourceLabel | null {
+  if (!origin) return null;
+  const kind = text(origin['kind']);
+  const providerBacked = origin['provider_backed'] === true;
+  if (kind === 'provider_run' && providerBacked) return 'real_recorded';
+  if (kind === 'heuristic_fallback') return 'heuristic';
+  if (kind === 'legacy_import') return 'legacy';
+  if (kind) return 'synthetic';
+  if (providerBacked) return 'real_recorded';
+  return 'synthetic';
+}
+
 /* ------------------------------------------------------------------ */
 /* Bundle contract                                                      */
 /* ------------------------------------------------------------------ */
@@ -267,6 +291,11 @@ export interface ViewerRunProvenance {
   fixture_id?: string | null;
   protocol_version?: string | null;
   authored?: boolean;
+  /** The run record's own origin claim (`run.origin`), when the export has one. */
+  origin_kind?: string | null;
+  provider_backed?: boolean;
+  /** Limitations attached to the origin claim, preserved verbatim. */
+  limitations?: string[];
 }
 
 export interface ViewerRun {
@@ -394,7 +423,14 @@ function verifyChecksum(container: unknown, label: string): void {
 /* Shape validation                                                     */
 /* ------------------------------------------------------------------ */
 
-const RUN_MODES: readonly RunMode[] = ['live', 'recorded', 'heuristic', 'legacy', 'synthetic'];
+const RUN_MODES: readonly RunMode[] = [
+  'live',
+  'recorded',
+  'heuristic',
+  'legacy',
+  'synthetic',
+  'simulated',
+];
 const RUN_STATUSES: readonly RunStatus[] = [
   'queued',
   'collecting',
@@ -561,6 +597,9 @@ function validateViewerRun(value: unknown, index: number): ViewerRun {
       fixture_id: text(provenanceRaw['fixture_id']),
       protocol_version: text(provenanceRaw['protocol_version']) ?? run.protocol_version,
       authored: provenanceRaw['authored'] === true,
+      origin_kind: text(provenanceRaw['origin_kind']),
+      provider_backed: provenanceRaw['provider_backed'] === true,
+      limitations: stringArray(provenanceRaw['limitations']),
     },
     detail,
     events,
@@ -680,7 +719,40 @@ function importDecisionExport(raw: Record<string, unknown>): ImportedBundle {
     redaction,
   };
 
-  const sourceLabel = sourceLabelFromMode(run.mode);
+  const origin = isRecord(run.origin) ? run.origin : null;
+  const originKind = text(origin?.['kind']);
+  const providerBacked = origin?.['provider_backed'] === true;
+  const limitations = origin ? stringArray(origin['limitations']) : [];
+  let provenanceNote = text(origin?.['note']) ?? '';
+  let sourceLabel: ViewerSourceLabel;
+
+  if (origin) {
+    sourceLabel = sourceLabelFromOrigin(origin) ?? 'synthetic';
+  } else if (run.fixture_id && (run.mode === 'recorded' || run.mode === 'live')) {
+    // Compatibility with exports captured before `run.origin` existed. A
+    // fixture_id identifies authored fixture content, so the superseded
+    // recorded label is not treated as evidence of a provider debate.
+    sourceLabel = 'synthetic';
+    provenanceNote =
+      'Superseded export label: this file carries a fixture_id, which identifies ' +
+      'authored fixture data. It predates the run-origin block and is not presented as ' +
+      'a provider debate.';
+    limitations.push(provenanceNote);
+  } else {
+    sourceLabel = sourceLabelFromMode(run.mode);
+    if (sourceLabel === 'real_recorded') {
+      provenanceNote =
+        'This export predates the explicit run-origin block. The label comes from the ' +
+        'recorded mode; the document carries no provider run record.';
+      limitations.push(provenanceNote);
+    }
+  }
+  if (!provenanceNote) {
+    provenanceNote =
+      text(redaction ? redaction['evidence_body_policy'] : null) ??
+      'Imported from the authenticated export endpoint. Evidence bodies follow the export redaction policy.';
+  }
+
   return {
     kind: 'decision-run-export',
     bundleVersion: version,
@@ -688,7 +760,7 @@ function importDecisionExport(raw: Record<string, unknown>): ImportedBundle {
     generatedAt: text(raw['exported_at']),
     sourceLabel,
     description:
-      'Imported AlphaAgent decision-run export. The source label is derived from the run provenance; the viewer cannot independently re-authenticate a recording.',
+      'Imported AlphaAgent decision-run export. The source label is derived from the run origin; the viewer cannot independently re-authenticate a recording.',
     honesty: redaction,
     runs: [
       {
@@ -697,12 +769,13 @@ function importDecisionExport(raw: Record<string, unknown>): ImportedBundle {
         source_label: sourceLabel,
         provenance: {
           label: sourceLabel,
-          note:
-            text(redaction ? redaction['evidence_body_policy'] : null) ??
-            'Imported from the authenticated export endpoint. Evidence bodies follow the export redaction policy.',
+          note: provenanceNote,
           fixture_id: run.fixture_id ?? null,
           protocol_version: run.protocol_version,
-          authored: false,
+          authored: origin ? origin['authored'] === true : sourceLabel === 'synthetic',
+          origin_kind: originKind,
+          provider_backed: providerBacked,
+          limitations,
         },
         detail,
         events,

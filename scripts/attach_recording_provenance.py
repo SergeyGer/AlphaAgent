@@ -47,6 +47,7 @@ def provenance_block(record: dict, record_path: Path) -> dict:
         "acceptance_record": relative,
         "acceptance_digest": str(record["output_digest"]),
         "tree_clean": bool(record.get("tree_clean")),
+        "scope": "build_verification_not_run_origin",
         "status": "attached_at_remediation",
         "verified": bool(record.get("verdict") == "pass" and record.get("tree_clean")),
         "usable_for_recording": bool(record.get("usable_for_recording")),

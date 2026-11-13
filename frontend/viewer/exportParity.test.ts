@@ -23,6 +23,14 @@ import {
 const projectRoot = path.resolve(process.cwd(), '..');
 const vectorPath = path.join(projectRoot, 'docs/spec/fixtures/canonical-json.v1.json');
 const samplePath = path.join(projectRoot, 'docs/spec/fixtures/decision-run-export.v1.json');
+const supersededPath = path.join(
+  projectRoot,
+  'docs/spec/fixtures/decision-run-export.v0-superseded.json',
+);
+const providerPath = path.join(
+  projectRoot,
+  'docs/spec/fixtures/decision-run-export.provider-backed.v1.json',
+);
 const fixtureBundlePath = path.resolve(
   process.cwd(),
   'viewer/public/decision-runs.v1.bundle.json',
@@ -39,6 +47,14 @@ interface VectorDocument {
 
 function importSample(): Record<string, unknown> {
   return readJson(samplePath);
+}
+
+function importSuperseded(): Record<string, unknown> {
+  return readJson(supersededPath);
+}
+
+function importProvider(): Record<string, unknown> {
+  return readJson(providerPath);
 }
 
 function expectValidationError(run: () => unknown, code: string): BundleValidationError {
@@ -97,25 +113,93 @@ describe('importing the captured API export', () => {
       expect(imported.kind).toBe('decision-run-export');
       expect(imported.bundleVersion).toBe('1.0');
       expect(imported.schemaVersion).toBe('1.0');
-      expect(imported.sourceLabel).toBe('real_recorded');
+      expect(imported.sourceLabel).toBe('synthetic');
       expect(imported.runs).toHaveLength(1);
 
       const run = imported.runs[0]!;
       expect(run.raw_export).toEqual(sample);
-      expect(run.source_label).toBe('real_recorded');
+      expect(run.source_label).toBe('synthetic');
       expect(run.exported_at).toMatch(/Z$/);
-      expect(run.provenance.protocol_version).toBe('debate.v1');
+      expect(run.provenance.protocol_version).toBe('synthetic.v1');
       expect(run.detail.run.status).toBe('completed');
-      expect(run.detail.run.mode).toBe('recorded');
-      expect(run.detail.run.source).toBe('crewai');
+      expect(run.detail.run.mode).toBe('synthetic');
+      expect(run.detail.run.source).toBe('fixture');
       expect(run.detail.run.error_code).toBeNull();
+      // The authored sample must not be presented as a provider debate.
+      expect(run.provenance.origin_kind).toBe('authored_fixture');
+      expect(run.provenance.provider_backed).toBe(false);
+      expect(run.provenance.note).toContain('Authored fixture content');
+      expect(run.provenance.limitations?.length).toBeGreaterThan(0);
       // The full metadata envelope survives, not just the fields the list
       // endpoint happens to publish.
       expect(run.detail.run.cost).toBeTruthy();
       expect(run.detail.run.stage_states).toBeTruthy();
       expect(run.detail.run.protocol).toBeTruthy();
       expect(run.detail.run.failure).toBeNull();
-      expect(run.detail.run.provenance).toMatchObject({ mode: 'recorded', is_synthetic: false });
+      expect(run.detail.run.provenance).toMatchObject({
+        mode: 'synthetic',
+        is_synthetic: true,
+        source: 'fixture',
+      });
+      const claims = (sample['provenance_claims'] ?? {}) as Record<string, unknown>;
+      const build = claims['build_verification'] as Record<string, unknown>;
+      expect(build['establishes_provider_debate']).toBe(false);
+      const integrity = claims['integrity'] as Record<string, unknown>;
+      expect(integrity['establishes_integrity']).toBe(true);
+      expect(integrity['establishes_provider_debate']).toBe(false);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('imports the superseded sample as authored, not as a provider debate', () => {
+    const fetchCalls: unknown[] = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = ((...args: unknown[]) => {
+      fetchCalls.push(args);
+      throw new Error('The offline viewer must not call the network.');
+    }) as typeof globalThis.fetch;
+    try {
+      const sample = importSuperseded();
+      const imported = parseViewerBundle(sample);
+      expect(fetchCalls).toEqual([]);
+      expect(imported.sourceLabel).toBe('synthetic');
+      expect(imported.runs[0]?.source_label).toBe('synthetic');
+      expect(imported.runs[0]?.provenance.origin_kind).toBeNull();
+      expect(imported.runs[0]?.provenance.note).toContain('Superseded export label');
+      expect(imported.runs[0]?.provenance.note).toContain('fixture_id');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('rejects a modified superseded payload', () => {
+    const tampered = importSuperseded();
+    (tampered['run'] as Record<string, unknown>)['mode'] = 'live';
+    expectValidationError(() => parseViewerBundle(tampered), 'checksum');
+  });
+
+  it('preserves a provider-backed run origin and its limitations', () => {
+    const fetchCalls: unknown[] = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = ((...args: unknown[]) => {
+      fetchCalls.push(args);
+      throw new Error('The offline viewer must not call the network.');
+    }) as typeof globalThis.fetch;
+    try {
+      const sample = importProvider();
+      const imported = parseViewerBundle(sample);
+      expect(fetchCalls).toEqual([]);
+      expect(imported.sourceLabel).toBe('real_recorded');
+      const run = imported.runs[0]!;
+      expect(run.provenance.origin_kind).toBe('provider_run');
+      expect(run.provenance.provider_backed).toBe(true);
+      expect(run.provenance.limitations?.some((text) => text.includes("provider 'anthropic'"))).toBe(
+        true,
+      );
+      expect(run.provenance.limitations?.some((text) => text.includes('Test data'))).toBe(true);
+      expect(run.detail.run.mode).toBe('live');
+      expect(run.detail.run.source).toBe('crewai');
     } finally {
       globalThis.fetch = originalFetch;
     }

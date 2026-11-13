@@ -2,7 +2,7 @@
   "bundle_kind": "alphaagent.offline-viewer",
   "bundle_version": "1.0",
   "schema_version": "1.0",
-  "generated_at": "2026-11-12T15:45:36.044Z",
+  "generated_at": "2026-11-13T12:39:43.710Z",
   "generated_for": "REP-02 offline decision replay viewer",
   "source": {
     "label": "synthetic",
@@ -33,7 +33,13 @@
         "note": "Risk intervention: the guard clamps a 40-share BUY to 2 shares",
         "fixture_id": "risk-intervention-aapl-2026-02-03",
         "protocol_version": "synthetic.v1",
-        "authored": true
+        "authored": true,
+        "origin_kind": "authored_fixture",
+        "provider_backed": false,
+        "limitations": [
+          "Fixture manifest content is authored; no provider or model was called.",
+          "The bundle checksum verifies the file, not that a provider ran."
+        ]
       },
       "detail": {
         "run": {
@@ -483,7 +489,7 @@
       "checksum": {
         "algorithm": "sha256",
         "scope": "this run object with its 'checksum' member removed, canonicalised as sorted-key compact JSON (UTF-8)",
-        "value": "a8725e172413782b3a98e5ceff310f11eb09a4b31ed08df446ff91eebfe23dff"
+        "value": "c9dbd7f8564911e297282a8981e22ac106e0b64d9dc5279ad34d3c7f5d8fa1c4"
       }
     },
     {
@@ -495,7 +501,13 @@
         "note": "Disagreement: opposing cases, two rebuttals, explicit HOLD adjudication",
         "fixture_id": "disagreement-tsla-2026-02-04",
         "protocol_version": "synthetic.v1",
-        "authored": true
+        "authored": true,
+        "origin_kind": "authored_fixture",
+        "provider_backed": false,
+        "limitations": [
+          "Fixture manifest content is authored; no provider or model was called.",
+          "The bundle checksum verifies the file, not that a provider ran."
+        ]
       },
       "detail": {
         "run": {
@@ -918,7 +930,7 @@
       "checksum": {
         "algorithm": "sha256",
         "scope": "this run object with its 'checksum' member removed, canonicalised as sorted-key compact JSON (UTF-8)",
-        "value": "1e103310401ed52554aa77026611ee3a0963e79329fa0d5784b39e42b4ba29fc"
+        "value": "9683356984f4309dc3e5125478689073a2d0d6c963f7eec0cae082971879779d"
       }
     },
     {
@@ -930,7 +942,13 @@
         "note": "Uncertainty: unknown publication date, a degraded stage, an unpriced outcome, HOLD",
         "fixture_id": "uncertainty-msft-2026-02-05",
         "protocol_version": "synthetic.v1",
-        "authored": true
+        "authored": true,
+        "origin_kind": "authored_fixture",
+        "provider_backed": false,
+        "limitations": [
+          "Fixture manifest content is authored; no provider or model was called.",
+          "The bundle checksum verifies the file, not that a provider ran."
+        ]
       },
       "detail": {
         "run": {
@@ -1243,13 +1261,13 @@
       "checksum": {
         "algorithm": "sha256",
         "scope": "this run object with its 'checksum' member removed, canonicalised as sorted-key compact JSON (UTF-8)",
-        "value": "99965ba1134ab33c52c6f67dc2655244926c02d2230ffa9a13918e2511010360"
+        "value": "0aed8e684710e571c628cf32102f886bf2b8a4e40e569a8ad7ac62397b3bacbb"
       }
     }
   ],
   "checksum": {
     "algorithm": "sha256",
     "scope": "this bundle object with its 'checksum' member removed (run checksums included), canonicalised as sorted-key compact JSON (UTF-8)",
-    "value": "db13c946c314c7a85853aaf8c479ae41add48e2d07d322b602fa4ead20b174a6"
+    "value": "9b9da3b2b89cd2d61988f407ff22baf3385e34c4ee227d8972456f4da19aa101"
   }
 }

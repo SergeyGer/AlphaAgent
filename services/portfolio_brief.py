@@ -1016,6 +1016,96 @@ class PortfolioBrief:
             ),
         }
 
+    @classmethod
+    def from_dict(
+        cls,
+        payload: Mapping[str, Any],
+        *,
+        state_prices: Mapping[str, Any] | None = None,
+        holding_prices: Mapping[str, Any] | None = None,
+    ) -> PortfolioBrief:
+        """Rebuild a stored brief exactly enough to resume a plan.
+
+        A resumed attempt must size the saved provider response against the input
+        it actually answered. This reconstructs the arithmetic state from the
+        brief the endpoint stored (which itself came from an immutable
+        ``InputSnapshot``), rather than re-reading today's holdings or prices.
+        """
+        data = dict(payload or {})
+        holdings: list[Holding] = []
+        for row in data.get("holdings") or []:
+            if not isinstance(row, Mapping):
+                continue
+            ticker = str(row.get("ticker") or "").strip().upper()
+            if not ticker:
+                continue
+            holdings.append(
+                Holding(
+                    ticker=ticker,
+                    quantity=_dec(row.get("quantity"), default=ZERO) or ZERO,
+                    avg_cost=_dec(row.get("avg_cost"), default=ZERO) or ZERO,
+                    price=_dec(row.get("price")),
+                    price_source=str(row.get("price_source") or ""),
+                )
+            )
+        cash_payload = dict(data.get("cash") or {})
+        cash_usd = _dec(cash_payload.get("balance_usd"), default=ZERO) or ZERO
+        equity = _dec(data.get("equity_usd"))
+        weights = {
+            str(ticker).upper(): _dec(weight, default=ZERO) or ZERO
+            for ticker, weight in dict(data.get("weights") or {}).items()
+        }
+        prices: dict[str, Decimal] = {}
+        if state_prices is not None:
+            for ticker, value in state_prices.items():
+                parsed = _dec(value)
+                if parsed is not None:
+                    prices[str(ticker).upper()] = parsed
+        else:
+            prices = {
+                holding.ticker: holding.price for holding in holdings if holding.price is not None
+            }
+        stored_holding_prices = {
+            str(ticker).upper(): _dec(price)
+            for ticker, price in dict(holding_prices or {}).items()
+            if _dec(price) is not None
+        }
+        data_quality = dict(data.get("data_quality") or {})
+        state = PortfolioState(
+            holdings=holdings,
+            cash_usd=cash_usd,
+            positions_value_usd=(equity - cash_usd) if equity is not None else ZERO,
+            equity_usd=equity,
+            weights=weights,
+            prices=prices,
+            unpriced_tickers=list(data_quality.get("unpriced_tickers") or []),
+            prices_marked_at_cost=list(data_quality.get("prices_marked_at_cost") or []),
+            holding_prices=stored_holding_prices,
+        )
+        return cls(
+            portfolio_version=str(data.get("portfolio_version") or ""),
+            snapshot_id=str(data.get("snapshot_id") or ""),
+            captured_at=data.get("captured_at"),
+            analysis_cutoff=data.get("analysis_cutoff"),
+            objective=str(data.get("objective") or ""),
+            investment_horizon_days=int(data.get("investment_horizon_days") or 30),
+            state=state,
+            holdings=list(data.get("holdings") or []),
+            cash=cash_payload,
+            weights=weights,
+            exposure=dict(data.get("exposure") or {}),
+            limits=dict(data.get("limits") or {}),
+            transaction_costs=dict(data.get("transaction_costs") or {}),
+            theses=list(data.get("theses") or []),
+            candidate_cases=list(data.get("candidate_cases") or []),
+            claim_catalog=list(data.get("claim_catalog") or []),
+            risk_statistics=dict(data.get("risk_statistics") or {}),
+            data_quality=data_quality,
+            policy=dict(data.get("policy") or {}),
+            permitted_tickers=list(data.get("permitted_tickers") or []),
+            classifications=dict(data.get("classifications") or {}),
+        )
+
 
 def _load_theses(portfolio: Portfolio) -> list[dict]:
     rows = PositionThesis.objects.filter(portfolio=portfolio, status=ThesisStatus.OPEN).order_by(

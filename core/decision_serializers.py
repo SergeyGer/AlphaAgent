@@ -42,6 +42,8 @@ from core.decision_models import (
     OutcomeRecord,
     Rebuttal,
     RunEvent,
+    RunMode,
+    RunSource,
 )
 from core.models import DecisionOutcome
 from services.decision_outcomes import OUTCOME_METHOD_VERSION
@@ -63,6 +65,7 @@ __all__ = [
     "outcome_payload",
     "protocol_summary",
     "rebuttal_payload",
+    "run_origin",
 ]
 
 BUNDLE_SCHEMA_VERSION = "1.0"
@@ -514,6 +517,159 @@ def protocol_summary(run: DecisionRun) -> dict | None:
     }
 
 
+RUN_ORIGIN_SCHEMA_VERSION = "decision_run.origin.v1"
+
+#: What produced the content. This is a different claim from the export's
+#: checksum (integrity) and from its ``recording`` block (the build that emitted
+#: the document). Only ``provider_run`` may be presented as a provider debate.
+ORIGIN_AUTHORED_FIXTURE = "authored_fixture"
+ORIGIN_PROVIDER_RUN = "provider_run"
+ORIGIN_HEURISTIC_FALLBACK = "heuristic_fallback"
+ORIGIN_LEGACY_IMPORT = "legacy_import"
+ORIGIN_SIMULATED = "simulated_scripted_provider"
+ORIGIN_RECORDED_WITHOUT_PROVIDER = "recorded_without_provider_record"
+ORIGIN_UNKNOWN = "unknown"
+
+ORIGIN_NOTE = {
+    ORIGIN_AUTHORED_FIXTURE: (
+        "Authored fixture content. Not a model decision and not evidence that a provider ran."
+    ),
+    ORIGIN_PROVIDER_RUN: (
+        "A provider-backed run record produced this content. The event replay is stored, "
+        "not regenerated."
+    ),
+    ORIGIN_HEURISTIC_FALLBACK: (
+        "The deterministic fallback produced this run; no bull/bear debate occurred."
+    ),
+    ORIGIN_LEGACY_IMPORT: (
+        "A report recorded before the claim/evidence/rebuttal protocol; absent sections "
+        "were never produced."
+    ),
+    ORIGIN_SIMULATED: (
+        "A scripted provider produced this run; the code path is real, the model output is not."
+    ),
+    ORIGIN_RECORDED_WITHOUT_PROVIDER: (
+        "The run carries a recorded/live label but no provider run record, so it is not "
+        "presented as a provider debate."
+    ),
+    ORIGIN_UNKNOWN: "The run record does not establish how its content was produced.",
+}
+
+
+def run_origin(run: DecisionRun) -> dict:
+    """How this run's content was produced, as one explicit claim.
+
+    Three facts about an export are deliberately kept apart:
+
+    * the **checksum** proves the document is unmodified (integrity);
+    * the **recording** block names the commit and acceptance record the build was
+      verified against (build provenance);
+    * this block names the run record that produced the content (run origin).
+
+    A ``fixture_id`` identifies authored fixture content. It therefore wins over a
+    recorded/live mode label: the model fields on a fixture were authored too, and
+    presenting them as a provider debate is the defect this function removes.
+    """
+    metadata = run.protocol_metadata if isinstance(run.protocol_metadata, dict) else {}
+    protocol = metadata.get("protocol") if isinstance(metadata.get("protocol"), dict) else {}
+    provider = str(protocol.get("provider") or "").strip()
+    model = str(protocol.get("model") or "").strip()
+    mode = str(run.mode or "")
+    source = str(run.source or "")
+    fixture_id = str(run.fixture_id or "")
+    label_conflict = bool(fixture_id) and mode in {RunMode.RECORDED, RunMode.LIVE}
+    limitations: list[str] = []
+
+    if mode == RunMode.SYNTHETIC or label_conflict:
+        kind = ORIGIN_AUTHORED_FIXTURE
+        if label_conflict:
+            limitations.append(
+                "The recorded label is superseded: a fixture_id identifies authored fixture "
+                "content, so no provider debate is claimed."
+            )
+        limitations.extend(
+            [
+                (
+                    "Claims, rebuttals, guard results and provider fields are authored fixture "
+                    "data. No model was called and no provider run record exists."
+                ),
+                (
+                    "The checksum verifies document integrity and the build record verifies a "
+                    "build; neither establishes that a provider ran."
+                ),
+                "Outcome figures are illustrative, not measured performance.",
+            ]
+        )
+    elif mode == RunMode.HEURISTIC or source == RunSource.HEURISTIC_FALLBACK:
+        kind = ORIGIN_HEURISTIC_FALLBACK
+        limitations.append(
+            "No claims or rebuttals can exist here by construction: the debate did not run."
+        )
+    elif mode == RunMode.LEGACY or source == RunSource.HISTORICAL_IMPORT:
+        kind = ORIGIN_LEGACY_IMPORT
+        limitations.append(
+            "Missing protocol sections were never produced in this shape, not omitted later."
+        )
+    elif mode == RunMode.SIMULATED or source == RunSource.STUB:
+        kind = ORIGIN_SIMULATED
+        limitations.append(
+            "A scripted response stands in for the model; it is not a sample from an LLM."
+        )
+    elif mode in {RunMode.LIVE, RunMode.RECORDED} and source == RunSource.CREWAI and provider:
+        kind = ORIGIN_PROVIDER_RUN
+        limitations.extend(
+            [
+                (
+                    f"The run record names provider {provider!r} and model {model!r}. Event "
+                    "replay is deterministic; regenerating the model output is not."
+                ),
+                (
+                    "The checksum verifies document integrity, not that the provider response "
+                    "is authentic."
+                ),
+            ]
+        )
+        usage = metadata.get("usage") if isinstance(metadata.get("usage"), dict) else {}
+        if usage.get("cost_reported") is False:
+            limitations.append(
+                "The provider reported tokens but no billed dollar amount; the price-table "
+                "estimate is not a bill."
+            )
+        if metadata.get("test_record") is True:
+            limitations.append(
+                "Test data: this record exercises the provider-backed provenance path; no live "
+                "provider call produced this file."
+            )
+    elif mode in {RunMode.LIVE, RunMode.RECORDED}:
+        kind = ORIGIN_RECORDED_WITHOUT_PROVIDER
+        limitations.append(
+            "No provider or model was recorded, so the run cannot be presented as a provider "
+            "debate."
+        )
+    else:
+        kind = ORIGIN_UNKNOWN
+
+    provider_backed = kind == ORIGIN_PROVIDER_RUN
+    return {
+        "schema_version": RUN_ORIGIN_SCHEMA_VERSION,
+        "kind": kind,
+        "provider_backed": provider_backed,
+        "authored": kind in {ORIGIN_AUTHORED_FIXTURE, ORIGIN_SIMULATED},
+        "mode": mode or None,
+        "source": source or None,
+        "fixture_id": fixture_id or None,
+        "provider": provider or None,
+        "model": model or None,
+        "run_record": (
+            "provider_run_record"
+            if provider_backed
+            else ("fixture_manifest" if fixture_id else "none")
+        ),
+        "limitations": limitations,
+        "note": ORIGIN_NOTE[kind],
+    }
+
+
 def build_run_metadata(run: DecisionRun, *, events=None) -> dict:
     """Run metadata + stage states + source + cost + failure details."""
     events = list(events) if events is not None else list(run.events.order_by("sequence"))
@@ -544,6 +700,7 @@ def build_run_metadata(run: DecisionRun, *, events=None) -> dict:
             "protocol_version": run.protocol_version,
             "fixture_id": run.fixture_id or None,
         },
+        "origin": run_origin(run),
         "protocol": protocol_summary(run),
         "snapshot_id": str(run.snapshot_id) if run.snapshot_id else None,
         "started_at": utc_iso(run.started_at),
@@ -832,6 +989,7 @@ def build_export_bundle(run: DecisionRun, *, events=None) -> dict:
 
     evidence = [export_evidence_payload(item) for item in evidence_for_run(run)]
     omitted = sum(1 for item in evidence if item.get("excerpt_omitted"))
+    origin = run_origin(run)
 
     bundle = {
         "bundle_version": BUNDLE_SCHEMA_VERSION,
@@ -869,6 +1027,31 @@ def build_export_bundle(run: DecisionRun, *, events=None) -> dict:
         # shape is stable when no record exists; the status says why it is not
         # verified rather than omitting the block and letting a reader assume it.
         "recording": recording_provenance(),
+        # Three independent claims, named so a reader cannot substitute one for
+        # another. A checksum is integrity; a recording is build verification; a
+        # provider debate is only a run_origin claim.
+        "provenance_claims": {
+            "schema_version": "decision_run.provenance_claims.v1",
+            "integrity": {
+                "evidence": "checksum",
+                "establishes_integrity": True,
+                "establishes_run_origin": False,
+                "establishes_provider_debate": False,
+            },
+            "build_verification": {
+                "evidence": "recording",
+                "establishes_integrity": False,
+                "establishes_run_origin": False,
+                "establishes_provider_debate": False,
+            },
+            "run_origin": {
+                "evidence": "run.origin",
+                "kind": origin["kind"],
+                "establishes_integrity": False,
+                "establishes_run_origin": True,
+                "establishes_provider_debate": bool(origin["provider_backed"]),
+            },
+        },
         "redaction": {
             "version": "1.0",
             "dropped_key_count": len(SENSITIVE_KEYS),

@@ -154,6 +154,17 @@ class CostModel:
             ),
         }
 
+    @classmethod
+    def from_dict(cls, payload: dict | None) -> CostModel:
+        """Rebuild the exact declared cost model stored with a provider result."""
+        data = dict(payload or {})
+        return cls(
+            version=str(data.get("model_version") or "linear_bps.v1"),
+            bps=_decimal(data.get("bps", "10"), default=Decimal("10")),
+            fixed_per_trade_usd=_decimal(data.get("fixed_per_trade_usd", "0"), default=ZERO),
+            minimum_fee_usd=_decimal(data.get("minimum_fee_usd", "0"), default=ZERO),
+        )
+
 
 @dataclass(frozen=True)
 class AllocationPolicy:
@@ -314,3 +325,84 @@ class AllocationPolicy:
             "max_snapshot_age_seconds": self.max_snapshot_age_seconds,
             "investment_horizon_days": self.investment_horizon_days,
         }
+
+    @classmethod
+    def from_dict(cls, payload: dict | None) -> AllocationPolicy:
+        """Rebuild the policy that was in force when a provider result was saved.
+
+        A resume must not silently adopt today's portfolio limits: a limit moved
+        after the call would change what the saved response is allowed to do.
+        The stored policy is the authority for the resumed plan.
+        """
+        data = dict(payload or {})
+        limits = dict(data.get("limits") or {})
+        execution = dict(data.get("execution") or {})
+        risk = dict(data.get("risk_statistics") or {})
+        evidence = dict(data.get("evidence_policy") or {})
+        defaults = cls()
+        policy = cls(
+            policy_version=str(data.get("policy_version") or POLICY_VERSION),
+            max_name_weight=_decimal(
+                limits.get("max_name_weight"), default=defaults.max_name_weight
+            ),
+            max_sector_weight=_decimal(
+                limits.get("max_sector_weight"), default=defaults.max_sector_weight
+            ),
+            max_total_exposure=_decimal(
+                limits.get("max_total_exposure"), default=defaults.max_total_exposure
+            ),
+            min_cash_weight=_decimal(
+                limits.get("min_cash_weight"), default=defaults.min_cash_weight
+            ),
+            max_turnover=_decimal(limits.get("max_turnover"), default=defaults.max_turnover),
+            max_trade_fraction_of_cash=_decimal(
+                limits.get("max_trade_fraction_of_cash"),
+                default=defaults.max_trade_fraction_of_cash,
+            ),
+            min_trade_notional_usd=_decimal(
+                execution.get("min_trade_notional_usd"), default=defaults.min_trade_notional_usd
+            ),
+            default_lot_size=_decimal(
+                execution.get("default_lot_size"), default=defaults.default_lot_size
+            ),
+            lot_sizes={
+                str(ticker).upper(): _decimal(weight)
+                for ticker, weight in dict(execution.get("lot_sizes") or {}).items()
+            },
+            covariance_min_observations=int(
+                risk.get("covariance_min_observations", defaults.covariance_min_observations)
+            ),
+            covariance_max_history_age_days=int(
+                risk.get(
+                    "covariance_max_history_age_days", defaults.covariance_max_history_age_days
+                )
+            ),
+            max_snapshot_age_seconds=int(
+                data.get("max_snapshot_age_seconds", defaults.max_snapshot_age_seconds)
+            ),
+            investment_horizon_days=int(
+                data.get("investment_horizon_days", defaults.investment_horizon_days)
+            ),
+            stale_snapshot_action=_choice(
+                evidence.get("stale_snapshot", defaults.stale_snapshot_action),
+                name="stale_snapshot",
+                default=defaults.stale_snapshot_action,
+            ),
+            missing_correlation_action=_choice(
+                evidence.get("missing_correlation_history", defaults.missing_correlation_action),
+                name="missing_correlation_history",
+                default=defaults.missing_correlation_action,
+            ),
+            insufficient_evidence_action=_choice(
+                evidence.get("insufficient_evidence", defaults.insufficient_evidence_action),
+                name="insufficient_evidence",
+                default=defaults.insufficient_evidence_action,
+            ),
+            unknown_sector_action=_choice(
+                evidence.get("unknown_sector", defaults.unknown_sector_action),
+                name="unknown_sector",
+                default=defaults.unknown_sector_action,
+            ),
+        )
+        policy.validate()
+        return policy

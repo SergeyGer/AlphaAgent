@@ -40,6 +40,7 @@ export const RUN_MODE_LABELS: Record<RunMode, string> = {
   heuristic: 'Heuristic',
   legacy: 'Legacy',
   synthetic: 'Synthetic',
+  simulated: 'Simulated (scripted provider)',
 };
 
 export const RUN_STATUS_LABELS: Record<RunStatus, string> = {

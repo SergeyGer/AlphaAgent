@@ -666,6 +666,7 @@ inline is superseded by §6 below.
 | The digest covers the stored payload, not a re-serialised copy; edits fail and versions are named | `build_export_bundle` normalises to the served primitives (`export_json_safe`) before hashing and returns that exact document; `verify_export_bundle` recomputes from the parsed document; `importDecisionExport` verifies the parsed file. Unsupported versions raise/report the field name and value. | `ExportSampleVerificationTests`, `ExportEndpointShapeTests`, export tests in `exportParity.test.ts` |
 | Guards, superseded outcomes and the synthetic fixtures survive | The exporter already published the full collections; the importer now keeps them instead of projecting them away. `docs/spec/fixtures/decision-run-export.v1.json` carries two guard checks and a superseded outcome; the three committed synthetic fixtures still import under 1.0. | `test_the_sample_preserves_the_two_guard_case_and_superseded_outcome`, `ViewerRunView — guard replay`, `committed synthetic fixtures…` |
 | The endpoint, not only the fixture loader, is tested | The sample is captured from `GET /api/decision-runs/<id>/export/`; `scripts/build_export_sample.py` regenerates it; the Python suite compares a fresh endpoint export's recursive shape with the committed sample and the Vitest suite imports those bytes. | `ExportEndpointShapeTests.test_the_endpoint_shape_matches_the_committed_sample` |
+| Run origin is a distinct claim from integrity and build verification | `run_origin` publishes `run.origin`; `build_run_metadata` includes it on every run payload; the export adds `provenance_claims` (`checksum` = integrity, `recording` = build, `run.origin` = content producer) and the `recording` block is scoped `build_verification_not_run_origin`. Only a provider-backed run record renders Real recorded. | `test_p1_step5_provenance.py::AuthoredExportSampleTests`, `ProviderBackedExportTests`, `exportParity.test.ts` |
 
 A second real-run export defect was reproduced while building the sample:
 `outcome_payload` passed a stored ISO `reference_at` string to `utc_iso`, which
@@ -698,7 +699,7 @@ Divergences recorded rather than absorbed:
 | Six distinct states and a pollable status | `AllocationSubmissionStatus`: `queued`, `running`, `succeeded`, `failed`, `cancelled`, `timed_out`. `GET …/status/` publishes `terminal`, `terminal_at`, `failure_reason`, `attempt_count`, `claimed_by`, `deadline_at`, plan link and `Retry-After` while open. | status endpoint tests in `test_p1_allocation_jobs.py` |
 | Cancellation cannot later trade | `POST …/cancel/`; the final locked step refuses a cancelled row, so no plan exists for `apply`. Cancelling a terminal row is 409. | `test_6c_a_cancelled_queued_submission_never_runs`, `test_6c_a_cancelled_running_submission_cannot_attach_its_persisted_result` |
 | Contract preserved | 202 still returns `run_id` and status URL; key reuse with a different body is still 409; submission still creates no ledger row. | `test_submission_returns_202…`, `test_reusing_a_key_with_a_different_payload_is_a_409` |
-| Repair path, dry run by default | `python manage.py repair_allocation_submissions`; `--execute` applies. It times out a past-deadline row, fails an unreconciled provider call, or re-queues a worker that died before the paid call. JSON on stdout; summary on stderr. | `test_6d_the_repair_command_reports_a_stuck_worker_without_changing_it`, `test_6d_a_lost_worker_before_the_paid_call_is_requeued`, `test_6d_an_unreconciled_provider_call_is_failed_not_retried` |
+| Repair path: scheduled recovery and a dry-run command | `tasks.recover_allocation_submissions_task` runs `recover_stuck_submissions` from `CELERY_BEAT_SCHEDULE` every minute; `python manage.py repair_allocation_submissions` remains the manual, dry-run-by-default path. Both re-evaluate under the row lock; the scheduler discovers queued rows that were never published or whose publish failed as well as expired leases. | `test_6a_a_broker_failure_progresses_without_another_post_or_command`, `test_6b_a_valid_lease_is_kept_and_only_the_expired_one_is_recovered`, `test_6d_…` |
 
 Divergences recorded rather than absorbed:
 
@@ -714,7 +715,11 @@ Divergences recorded rather than absorbed:
    again when the plan is created. The plan records the proposal's
    `portfolio_version` and sets `revalidation_required` when the freshly
    evaluated version differs, so a changed portfolio cannot be silently applied
-   under the old proposal; an operator must revalidate and approve.
+   under the old proposal; an operator must revalidate and approve. **Superseded
+   by the acceptance-review follow-up below:** the checkpoint now stores the
+   immutable input snapshot and the brief it answered. Only a legacy row with no
+   checkpoint input re-reads the market, and it is labelled
+   `fresh_evaluation_no_checkpoint`.
 3. **The endpoint now needs a worker.** A queued submission with no worker stays
    `queued` with a deadline and a `Retry-After` status; it is not executed
    inline as it was in FIX-08. That is the point of the change, but it is a
@@ -724,10 +729,105 @@ Divergences recorded rather than absorbed:
    application (`tasks.py`), using the existing broker and worker configuration.
    The repair command is a management command, not a beat schedule: a repair
    that runs automatically could re-queue a row an operator is investigating.
+   **Superseded by the acceptance-review follow-up below:** the repair service
+   now runs from the existing beat schedule, because "no repair command is ever
+   run" was the defect.
 5. **Attempts are bounded and not auto-retried.** A broker redelivery does not
    increment the attempt count unless it can claim a lease; `max_attempts`
    (default 3) bounds repair re-queues. Exhaustion is `failed` with
    `attempts_exhausted`.
+
+### Steps 5 and 6, acceptance-review follow-up
+
+The review found two follow-up defects in the first-round fixes.
+
+**Step 5 reproduced.** `docs/spec/fixtures/decision-run-export.v1.json` was
+generated from authored claims, a rebuttal, two guard results and provider-shaped
+fields, but declared `mode: recorded`, `source: crewai`, `protocol.provider:
+anthropic`, `is_synthetic: false` and no run-origin block. The viewer maps
+`recorded` to **Real recorded** and states that the run "actually executed"; its
+own test asserted that label for this authored sample. The `recording` block was
+build provenance (`attached_at_remediation`), but nothing in the document said
+the content was authored.
+
+**Step 5 change.** `core.decision_serializers.run_origin` publishes one explicit
+`run.origin` claim: `authored_fixture`, `provider_run`, `heuristic_fallback`,
+`legacy_import`, `simulated_scripted_provider`,
+`recorded_without_provider_record` or `unknown`, with `provider_backed` and the
+limitations that go with it. Only `provider_run` is provider-backed. The export
+also carries `provenance_claims`, which names integrity (`checksum`), build
+verification (`recording`) and run origin (`run.origin`) as three different
+claims that cannot substitute for one another; `recording` now says
+`scope: build_verification_not_run_origin`.
+
+The sample is now the supported authored pair `mode: "synthetic"`,
+`source: "fixture"`, `protocol_version: "synthetic.v1"`. A `fixture_id` wins
+over a recorded/live mode label, so the superseded sample - retained as
+`decision-run-export.v0-superseded.json` - still verifies but is rendered
+Synthetic by the viewer. `decision-run-export.provider-backed.v1.json` is test
+data for the Step 11 path: a live/crewai run record with a provider/model/usage
+block and a `test_record` limitation. The viewer reads `run.origin` and renders
+the origin's limitations; an export without the block keeps old-format
+compatibility, with a fixture-id contradiction downgraded rather than upgraded.
+
+**Step 6 reproduced.** With the broker publish patched to fail after the durable
+`AllocationSubmission` row was committed, the POST still returned 202 but the row
+stayed `queued` with `last_dispatched_at` set, no error field,
+`recover_stuck_submissions(dry_run=True)` returned zero candidates, and the beat
+schedule had no recovery task. Separately, after a crash following the provider
+result, changing AAPL from 100 to 120 before the resume produced a plan whose
+input price was 120 while the saved response had answered 100.
+
+**Step 6 change.** `dispatch_submission` records every publish attempt
+(`dispatch_attempt_count`, `last_dispatched_at`) and a stable failure code
+(`broker_unavailable`). `recover_stuck_submissions` discovers queued rows that
+were never published, whose publish failed, or whose publish is stale, as well as
+expired running leases; every action is re-evaluated under the row lock, so an
+active lease or terminal row is left intact and `max_attempts` is enforced
+before a requeue. `tasks.recover_allocation_submissions_task` runs from
+`CELERY_BEAT_SCHEDULE` every minute.
+
+`_checkpoint_provider_result` now stores the immutable `InputSnapshot` FK, the
+full input checkpoint (`brief`, policy, cost model, quotes, classifications,
+candidate metadata) and the provider configuration beside the provider result.
+A resume rebuilds that input and links the plan to the same snapshot; a legacy
+row without a checkpoint is the only fresh evaluation, and both
+`plan.model_metadata.input_provenance.input_source` and
+`data_quality.input.input_source` name it. The status endpoint publishes
+`dispatch` (attempts, last error, published), `recovered`/`recovery`, and the
+input snapshot/source; one plan identity per submission is preserved by the
+existing `analysis:<submission id>` key.
+
+Evidence: `core/tests/test_p1_step5_provenance.py` (5A/5B/5C),
+`core/tests/test_p1_step6_recovery.py` (6A/6B/6C),
+`frontend/viewer/exportParity.test.ts`, `ViewerExportRoundTrip.test.tsx`.
+
+Divergences recorded rather than absorbed:
+
+1. **A checkpoint without its snapshot fails typed rather than repricing.** A
+   provider result whose stored snapshot is missing or hash-mismatched is
+   `checkpoint_snapshot_missing` / `checkpoint_snapshot_mismatch`; attaching the
+   answer to a different input would be fabrication. A row with no checkpoint at
+   all (one written before this change) is the labelled fresh-evaluation path.
+2. **Recovery is a one-minute sweep, not a transactional outbox.** The row is
+   still committed before publication. A crash between commit and dispatch has
+   no attempt and is discovered immediately; a broker that accepted then lost a
+   message is discovered after the stale threshold. A true outbox would publish
+   inside the same transaction only with a local relay, which this deployment
+   does not have.
+3. **Dispatch attempts are not worker attempts.** `dispatch_attempt_count`
+   counts publishes; `attempt_count` still counts claimed worker attempts, and
+   only the latter is bounded by `max_attempts`. A repeated publish of the same
+   row is safe because `claim_submission` and the plan key are idempotent.
+4. **The checkpoint is larger.** It stores the full brief and quote/classification
+   blocks so a resume is possible. That duplicates data already in the plan and
+   snapshot; the alternative was re-reading a market the answer never saw.
+5. **The sample's build block is still attached at remediation.** The authored
+   export was regenerated through the endpoint from a dirty working tree, so
+   `scripts/attach_recording_provenance.py` attached the latest passing
+   acceptance record rather than claiming the recorder emitted it. The block
+   says `attached_at_remediation` and is explicitly scoped to build
+   verification, not run origin.
 
 ## P1 remediation — experiment isolation and simulated time (steps 7 and 8)
 

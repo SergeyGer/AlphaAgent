@@ -310,6 +310,16 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": crontab(minute="*"),
         "options": {"expires": 60},
     },
+    # Recover portfolio-analysis submissions a worker will not finish. This is
+    # the repair service running on a schedule: it closes the gap between the
+    # durable row's commit and broker acceptance, and re-queues a lost worker
+    # under a lock. Without it a broker failure left the job queued until a user
+    # POSTed again. One minute bounds the wait; the service itself is idempotent.
+    "recover-allocation-submissions": {
+        "task": "tasks.recover_allocation_submissions_task",
+        "schedule": crontab(minute="*"),
+        "options": {"expires": 55},
+    },
     # Expire recommendations nobody acted on.
     "expire-stale-recommendations": {
         "task": "tasks.expire_stale_recommendations_task",

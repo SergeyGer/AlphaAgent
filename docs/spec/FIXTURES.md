@@ -223,7 +223,7 @@ command, and can be regenerated.
 
 ## Export portability fixtures (P1 remediation step 5)
 
-Two committed files make the browser and Python agree about an exported run.
+These committed files make the browser and Python agree about an exported run.
 
 ### `canonical-json.v1.json`
 
@@ -246,19 +246,54 @@ Changing either implementation alone fails one of the two suites.
 
 ### `decision-run-export.v1.json`
 
-A real document captured from `GET /api/decision-runs/<id>/export/` by
+An **authored** sample captured from `GET /api/decision-runs/<id>/export/` by
 `venv/bin/python scripts/build_export_sample.py --force`. It is produced from the
 run in `core/tests/export_sample.py`, which carries two guard evaluations, a
 superseded outcome, a pending/unavailable outcome schedule, nullable publication
-times, nested decimal strings and Unicode settings.
+times, nested decimal strings and Unicode settings. The run is
+`mode: "synthetic"`, `source: "fixture"`, `protocol_version: "synthetic.v1"`; its
+claims, rebuttal, guard results and provider-shaped fields are authored test
+data. Its `run.origin` says `kind: "authored_fixture"` with
+`provider_backed: false`, so the viewer labels it **Synthetic**, not Real
+recorded.
 
 The Django suite verifies the file's checksum from the stored document and
 compares its recursive shape with a fresh endpoint export; the Vitest suite
 imports the same bytes unchanged through the viewer's importer and renders the
 round trip. A newly emitted field therefore fails the Python shape test until the
 sample is regenerated, and the browser test proves the regeneration is
-importable. The export now carries `schema_version` and names its
-canonicalisation in `checksum.canonicalisation`.
+importable.
+
+The export now carries `schema_version`, names its canonicalisation in
+`checksum.canonicalisation`, and separates three claims explicitly:
+
+* `checksum` — the document is unmodified (integrity);
+* `recording` — which commit and acceptance record the build was verified
+  against, `scope: build_verification_not_run_origin`;
+* `run.origin` — how the content was produced. Only `provider_run` with
+  `provider_backed: true` is evidence of a provider debate.
+
+### `decision-run-export.v0-superseded.json`
+
+The previous sample, retained as a compatibility conformance file. It is the
+defect: authored claims, rebuttal, guards and provider fields labelled
+`mode: "recorded"`, `source: "crewai"`, with no origin block. It still verifies
+under format 1.0, but the viewer does not upgrade it to a provider debate: the
+carried `fixture_id` identifies authored fixture content, so it imports as
+**Synthetic** with a "superseded export label" note. A modified payload fails
+verification. It is not in `RECORDED_ARTIFACTS`; it is a conformance fixture, not
+a build recording.
+
+### `decision-run-export.provider-backed.v1.json`
+
+Test data for the Step 11 recording path: an export from a run record with
+`mode: "live"`, `source: "crewai"`, provider `anthropic`, model
+`claude-haiku-5-5` and a usage block. Its `run.origin` is
+`kind: "provider_run"`, `provider_backed: true`; the viewer renders **Real
+recorded** and shows the origin's limitations. It is explicitly test data
+(`origin.limitations` says so): the record shape is real, no live provider call
+was made for this file. Regenerate it with
+`venv/bin/python scripts/build_export_sample.py --provider-backed --force`.
 
 ## FIX-08 recorded provider run
 
