@@ -18,8 +18,10 @@ from django.utils import timezone
 
 from ai_agent import run_alpha_agent
 from core.decision_models import (
+    DecisionExecutionState,
     DecisionRun,
     DecisionStatus,
+    ExecutionAttempt,
     GuardRecord,
     OutcomeMaturity,
     OutcomeRecord,
@@ -241,21 +243,43 @@ class DecisionLifecycleTests(TestCase):
             price=D("100.00"),
             requested_amount=D("5"),
         )
-        with patch(
-            "services.recommendations.execute_trade",
-            return_value=ExecutionResult(
-                approved=False, decision=blocked, request=None, reason=blocked.reason
-            ),
+        with (
+            # The approval must be judged against a mark it was actually shown.
+            # Without this, the real market price leaks into the test: a drift
+            # beyond the tolerance legitimately defers to a new approval and the
+            # recommendation never reaches the execution lock.
+            patch("services.recommendations.get_latest_quote", return_value=quote("100.00")),
+            patch(
+                "services.recommendations.execute_trade",
+                return_value=ExecutionResult(
+                    approved=False, decision=blocked, request=None, reason=blocked.reason
+                ),
+            ) as execute_trade,
         ):
             outcome = approve_recommendation(
                 recommendation.id, terms_version=recommendation.terms_version
             )
+        # Proves the refusal happened under the lock rather than in an earlier
+        # guard/quote check that would leave a different reason on the outcome.
+        execute_trade.assert_called_once()
         self.assertFalse(outcome.executed)
+        self.assertEqual(outcome.reason_code, "guard_rejected")
         recommendation.refresh_from_db()
         self.assertEqual(recommendation.status, RecommendationStatus.BLOCKED)
         run = DecisionRun.objects.get(pk=result["decision_run_id"])
         self.assertEqual(run.execution_state, "blocked")
         self.assertEqual(Transaction.objects.count(), 0)
+        # The refusal has to be visible: a terminal attempt row and a completed
+        # run event explain it, instead of a PENDING recommendation with no trace.
+        attempt = ExecutionAttempt.objects.get(
+            execution_key=f"recommendation:{recommendation.id}:blocked"
+        )
+        self.assertEqual(attempt.state, DecisionExecutionState.BLOCKED)
+        self.assertEqual(attempt.decision_run_id, run.id)
+        self.assertEqual(attempt.detail, blocked.reason)
+        completed = run.events.get(event_type=RunEventType.DECISION_COMPLETED)
+        self.assertEqual(completed.payload["execution_state"], "blocked")
+        self.assertFalse(completed.payload["executed"])
 
     def test_advisory_rejection_completes_the_run_as_rejected(self):
         self.portfolio.is_autonomous = False
