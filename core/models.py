@@ -1136,6 +1136,23 @@ class RecommendationApproval(models.Model):
     policy_version = models.CharField(max_length=64, blank=True, default="")
     portfolio_version = models.CharField(max_length=64, blank=True, default="")
     terms_hash = models.CharField(max_length=64, blank=True, default="")
+    #: The exact server-issued reference the reviewer's screen or Telegram
+    #: button carried. It covers the recommendation, portfolio, version, side,
+    #: quantity, reference price, tolerance and expiry, so a stale or foreign
+    #: action cannot be applied to refreshed terms.
+    terms_ref = models.CharField(max_length=64, blank=True, default="", db_index=True)
+    #: The idempotency key submitted with this approval, if one was supplied.
+    #: A repeated authenticated approval must present the same key before the
+    #: original execution is replayed.
+    idempotency_key = models.CharField(max_length=160, blank=True, default="")
+    #: The quote the approval was evaluated against. This is a different
+    #: observation from ``quote_observed_at`` (the displayed reference price):
+    #: storing both makes "what the operator saw" and "what the drift check saw"
+    #: separately auditable, each with its own observation instant.
+    evaluated_price = models.DecimalField(max_digits=18, decimal_places=8, null=True, blank=True)
+    evaluated_quote_observed_at = models.DateTimeField(null=True, blank=True)
+    evaluated_quote_retrieved_at = models.DateTimeField(null=True, blank=True)
+    evaluated_quote_source = models.CharField(max_length=64, blank=True, default="")
     decided_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,

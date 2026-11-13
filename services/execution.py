@@ -1426,6 +1426,7 @@ def execute_trade(
                 reason=decision.reason,
                 via=getattr(audit, "via", ""),
                 user_id=getattr(audit, "user_id", None),
+                approved_terms=getattr(audit, "approved_terms", None),
             )
         else:
             from services.execution_audit import ensure_fill_attempt

@@ -13,12 +13,15 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.core.cache import cache
+
+from core.log_safety import log_safe
 
 logger = logging.getLogger("alphaagent.market_data")
 
@@ -72,8 +75,13 @@ class PriceQuote:
     price: Decimal
     previous_close: Decimal | None = None
     currency: str = "USD"
-    source: str = "yfinance"  # yfinance | cache | fallback
+    source: str = "yfinance"  # yfinance_intraday | yfinance_daily_close | cache | fallback
     as_of: datetime | None = None
+    #: The observation time of ``previous_close``, which is a different market
+    #: fact from ``as_of``. A fast intraday price must never be stamped with the
+    #: daily candle's closing time, and a previous close must carry its own
+    #: session close rather than borrow the current price's instant.
+    previous_close_as_of: datetime | None = None
     retrieved_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     @property
@@ -89,6 +97,9 @@ class PriceQuote:
             "symbol": self.symbol,
             "price": str(self.price),
             "previous_close": str(self.previous_close) if self.previous_close else None,
+            "previous_close_as_of": (
+                self.previous_close_as_of.isoformat() if self.previous_close_as_of else None
+            ),
             "change_pct": str(self.change_pct) if self.change_pct is not None else None,
             "currency": self.currency,
             "source": self.source,
@@ -123,59 +134,157 @@ def _to_decimal(value: Any) -> Decimal | None:
     return dec.quantize(Decimal("0.01"))
 
 
+def _as_utc(value: Any) -> datetime | None:
+    """Convert a provider timestamp (including a pandas Timestamp) to UTC."""
+    if value is None:
+        return None
+    if hasattr(value, "to_pydatetime"):
+        try:
+            value = value.to_pydatetime()
+        except (TypeError, ValueError):
+            return None
+    if not isinstance(value, datetime):
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def _frame_observation(frame: Any) -> tuple[Decimal, datetime] | None:
+    """The last close in a frame and the timestamp that belongs to it."""
+    if frame is None or getattr(frame, "empty", True) or "Close" not in frame:
+        return None
+    closes = frame["Close"].dropna()
+    if closes.empty:
+        return None
+    price = _to_decimal(closes.iloc[-1])
+    observed_at = _as_utc(closes.index[-1])
+    if price is None or observed_at is None:
+        return None
+    return price, observed_at
+
+
+def _intraday_observation(ticker_obj, symbol: str) -> tuple[Decimal, datetime] | None:
+    """A timestamped intraday trade, preferred over an untimed fast price.
+
+    ``fast_info`` reports a last price but no instant. An intraday bar does
+    carry one, so it is the only fast source that can authorise an execution
+    without inheriting a daily candle's close.
+    """
+    try:
+        frame = ticker_obj.history(period="1d", interval="1m", auto_adjust=False, prepost=False)
+    except Exception as exc:
+        logger.warning(
+            "yfinance intraday history failed for %s: %s", log_safe(symbol), log_safe(exc)
+        )
+        return None
+    return _frame_observation(frame)
+
+
+def _daily_observations(ticker_obj, symbol: str) -> list[tuple[datetime, Decimal]]:
+    """Completed daily closes, each with the session close that observed it.
+
+    A daily candle for an unfinished session is not a close. Its session-close
+    instant is in the future, so it is dropped rather than used to stamp a fast
+    price or to become the current mark. The previous close keeps its own
+    timestamp, which is why the result is a list of pairs rather than a value.
+    """
+    from services.quote_policy import FUTURE_SKEW_SECONDS, session_close_utc
+
+    try:
+        frame = ticker_obj.history(period="5d", interval="1d", auto_adjust=False)
+    except Exception as exc:
+        logger.warning("yfinance history failed for %s: %s", log_safe(symbol), log_safe(exc))
+        return []
+    if frame is None or getattr(frame, "empty", True) or "Close" not in frame:
+        return []
+    closes = frame["Close"].dropna()
+    if closes.empty:
+        return []
+    now = datetime.now(UTC)
+    observations: list[tuple[datetime, Decimal]] = []
+    for index, raw_close in closes.items():
+        observed_at = session_close_utc(index)
+        price = _to_decimal(raw_close)
+        if observed_at is None or price is None:
+            continue
+        if observed_at > now + timedelta(seconds=FUTURE_SKEW_SECONDS):
+            # The candle's session has not closed yet; it is not a close.
+            continue
+        observations.append((observed_at, price))
+    observations.sort(key=lambda item: item[0])
+    return observations
+
+
+def _previous_close_before(
+    daily: list[tuple[datetime, Decimal]], session_date
+) -> tuple[Decimal, datetime] | None:
+    """The last completed close strictly before ``session_date``."""
+    candidates = [
+        (price, observed_at)
+        for observed_at, price in daily
+        if observed_at.astimezone(ZoneInfo("America/New_York")).date() < session_date
+    ]
+    return candidates[-1] if candidates else None
+
+
 def _fetch_from_yfinance(symbol: str) -> PriceQuote | None:
     """Blocking upstream fetch. Imported lazily to keep Django boot fast.
 
-    The daily history is consulted for its timestamp even when ``fast_info``
-    supplied the price. A daily close is a session, not an instant, so the
-    observation time is the session close in UTC; if the source supplied no
-    usable date, ``as_of`` stays ``None`` rather than being set to "now".
+    Observation times are attached per price. A timestamped intraday bar is
+    preferred and keeps its own instant; a daily close keeps the real session
+    close of its candle, and an unfinished candle is never used as a close. A
+    ``fast_info`` price without an intraday timestamp stays untimed (``as_of``
+    ``None``) instead of inheriting the daily candle's closing time: an unknown
+    observation instant is missing data, not a fresh mark.
     """
     import yfinance as yf  # local import: heavy, optional at import time
 
-    from services.quote_policy import session_close_utc
-
     ticker_obj = yf.Ticker(symbol)
-    price: Decimal | None = None
-    previous_close: Decimal | None = None
-    as_of: datetime | None = None
-    source = "yfinance"
-    history = None
-
+    fast_price: Decimal | None = None
+    fast_previous: Decimal | None = None
     try:
         fast = ticker_obj.fast_info
-        price = _to_decimal(fast.last_price)
-        previous_close = _to_decimal(fast.previous_close)
+        fast_price = _to_decimal(fast.last_price)
+        fast_previous = _to_decimal(fast.previous_close)
     except Exception as exc:
         logger.warning("yfinance fast_info failed for %s: %s", symbol, exc)
 
-    try:
-        history = ticker_obj.history(period="5d", interval="1d", auto_adjust=False)
-    except Exception as exc:
-        logger.warning("yfinance history failed for %s: %s", symbol, exc)
-        history = None
+    intraday = _intraday_observation(ticker_obj, symbol)
+    daily = _daily_observations(ticker_obj, symbol)
 
-    if history is not None and not history.empty:
-        closes = history["Close"].dropna()
-        if len(closes) >= 1:
-            if price is None:
-                price = _to_decimal(closes.iloc[-1])
-                source = "yfinance_daily_close"
-            last_index = closes.index[-1]
-            as_of = session_close_utc(last_index)
-            if as_of is not None and price is not None and source == "yfinance":
-                # The fast price belongs to the session whose close we recorded.
-                source = "yfinance_session_close"
-            if len(closes) >= 2:
-                previous_close = _to_decimal(closes.iloc[-2])
+    price: Decimal | None = None
+    previous_close: Decimal | None = None
+    as_of: datetime | None = None
+    previous_close_as_of: datetime | None = None
+    source = "yfinance"
+
+    if intraday is not None:
+        price, as_of = intraday
+        source = "yfinance_intraday"
+        session_date = as_of.astimezone(ZoneInfo("America/New_York")).date()
+        previous = _previous_close_before(daily, session_date)
+        if previous is not None:
+            previous_close, previous_close_as_of = previous
+        elif fast_previous is not None:
+            previous_close = fast_previous
+    elif fast_price is not None:
+        price = fast_price
+        source = "yfinance_untimed"
+        today = datetime.now(UTC).astimezone(ZoneInfo("America/New_York")).date()
+        previous = _previous_close_before(daily, today)
+        if previous is not None:
+            previous_close, previous_close_as_of = previous
+        elif fast_previous is not None:
+            previous_close = fast_previous
+    elif daily:
+        as_of, price = daily[-1]
+        source = "yfinance_daily_close"
+        if len(daily) >= 2:
+            previous_close_as_of, previous_close = daily[-2]
 
     if price is None:
         return None
-
-    if as_of is None:
-        # No usable session timestamp. This is an observation with unknown time;
-        # callers must not treat it as fresh.
-        source = "yfinance_untimed"
 
     return PriceQuote(
         ticker=symbol,
@@ -184,6 +293,7 @@ def _fetch_from_yfinance(symbol: str) -> PriceQuote | None:
         previous_close=previous_close,
         source=source,
         as_of=as_of,
+        previous_close_as_of=previous_close_as_of,
         retrieved_at=datetime.now(UTC),
     )
 
@@ -231,6 +341,11 @@ def get_latest_quote(
                     as_of=(
                         datetime.fromisoformat(cached["as_of"]) if cached.get("as_of") else None
                     ),
+                    previous_close_as_of=(
+                        datetime.fromisoformat(cached["previous_close_as_of"])
+                        if cached.get("previous_close_as_of")
+                        else None
+                    ),
                     retrieved_at=datetime.now(UTC),
                 )
             except (InvalidOperation, ValueError, TypeError):
@@ -260,6 +375,11 @@ def get_latest_quote(
                     "currency": quote.currency,
                     "source": quote.source,
                     "as_of": quote.as_of.isoformat() if quote.as_of else None,
+                    "previous_close_as_of": (
+                        quote.previous_close_as_of.isoformat()
+                        if quote.previous_close_as_of
+                        else None
+                    ),
                 },
                 ttl,
             )
@@ -273,6 +393,7 @@ def get_latest_quote(
             currency=quote.currency,
             source=quote.source,
             as_of=quote.as_of,
+            previous_close_as_of=quote.previous_close_as_of,
             retrieved_at=quote.retrieved_at,
         )
 

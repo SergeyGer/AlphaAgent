@@ -342,18 +342,40 @@ export const api = {
   },
 
   /** `POST /api/portfolio/recommendations/<id>/approve/` */
-  approveRecommendation(id: number): Promise<RecommendationDecisionResponse> {
+  approveRecommendation(
+    id: number,
+    termsVersion: number,
+    termsRef: string,
+  ): Promise<RecommendationDecisionResponse> {
     return apiRequest<RecommendationDecisionResponse>(
       `/api/portfolio/recommendations/${id}/approve/`,
-      { method: 'POST' },
+      {
+        method: 'POST',
+        body: {
+          terms_version: termsVersion,
+          terms_ref: termsRef,
+          idempotency_key: `recommendation:${id}:approve:v${termsVersion}`,
+        },
+      },
     );
   },
 
   /** `POST /api/portfolio/recommendations/<id>/reject/` */
-  rejectRecommendation(id: number): Promise<RecommendationDecisionResponse> {
+  rejectRecommendation(
+    id: number,
+    termsVersion: number,
+    termsRef: string,
+  ): Promise<RecommendationDecisionResponse> {
     return apiRequest<RecommendationDecisionResponse>(
       `/api/portfolio/recommendations/${id}/reject/`,
-      { method: 'POST' },
+      {
+        method: 'POST',
+        body: {
+          terms_version: termsVersion,
+          terms_ref: termsRef,
+          idempotency_key: `recommendation:${id}:reject:v${termsVersion}`,
+        },
+      },
     );
   },
 

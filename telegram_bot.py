@@ -199,12 +199,33 @@ def main_menu_keyboard() -> dict[str, Any]:
     }
 
 
-def recommendation_keyboard(recommendation_id: int) -> dict[str, Any]:
+def recommendation_keyboard(
+    recommendation_id: int, terms_version: int | None = None, terms_ref: str = ""
+) -> dict[str, Any]:
+    """Action buttons bound to the exact displayed terms.
+
+    The callback carries the version and a short suffix of the server-issued
+    reference. Telegram client data is attacker-controlled, so the service
+    re-checks both under the recommendation lock; the suffix only makes a
+    copied reference from another recommendation fail visibly in the bot.
+    """
+    from services.recommendation_terms import short_reference
+
+    approve = f"ap:{recommendation_id}"
+    reject = f"rj:{recommendation_id}"
+    if terms_version is not None:
+        suffix = f":v{int(terms_version)}"
+        approve += suffix
+        reject += suffix
+    short = short_reference(terms_ref)
+    if short:
+        approve += f":{short}"
+        reject += f":{short}"
     return {
         "inline_keyboard": [
             [
-                {"text": "✅ Approve Trade", "callback_data": f"ap:{recommendation_id}"},
-                {"text": "❌ Reject Trade", "callback_data": f"rj:{recommendation_id}"},
+                {"text": "✅ Approve Trade", "callback_data": approve},
+                {"text": "❌ Reject Trade", "callback_data": reject},
             ],
             [
                 {"text": "🧠 Full Reasoning", "callback_data": f"why:{recommendation_id}"},
@@ -212,6 +233,17 @@ def recommendation_keyboard(recommendation_id: int) -> dict[str, Any]:
             ],
         ]
     }
+
+
+def recommendation_keyboard_for(recommendation) -> dict[str, Any]:
+    """Buttons carrying the terms version/reference of the row being shown."""
+    from services.recommendation_terms import terms_reference
+
+    return recommendation_keyboard(
+        recommendation.id,
+        int(recommendation.terms_version or 1),
+        terms_reference(recommendation),
+    )
 
 
 def autonomy_keyboard(is_autonomous: bool) -> dict[str, Any]:
@@ -349,6 +381,7 @@ def build_recommendation_message(recommendation) -> str:
             f"Quantity: {recommendation.amount.normalize()}",
             f"Price: {money(recommendation.price)}",
             f"Notional: {money(recommendation.notional_usd)}",
+            f"Terms: v{int(recommendation.terms_version or 1)}",
             f"Sentiment: {emoji_for_sentiment(recommendation.sentiment)} "
             f"{esc(recommendation.sentiment)}",
             "",
@@ -536,7 +569,7 @@ def _cmd_pending(chat_id: int) -> None:
         _reply(
             chat_id,
             build_recommendation_message(reco),
-            recommendation_keyboard(reco.id),
+            recommendation_keyboard_for(reco),
         )
 
 
@@ -600,10 +633,21 @@ def _cmd_unlink(chat_id: int) -> None:
 
 # -- callbacks --------------------------------------------------------------
 def _handle_recommendation_action(
-    chat_id: int, message_id: int | None, callback_id: str, action: str, reco_id: int
+    chat_id: int,
+    message_id: int | None,
+    callback_id: str,
+    action: str,
+    reco_id: int,
+    *,
+    terms_version: int | None = None,
+    terms_ref: str = "",
 ) -> None:
     from core.models import DecidedVia, TradeRecommendation
-    from services.recommendations import approve_recommendation, reject_recommendation
+    from services.recommendations import (
+        TERMS_REFUSAL_CODES,
+        approve_recommendation,
+        reject_recommendation,
+    )
 
     link = _require_link(chat_id)
     if not link:
@@ -620,28 +664,63 @@ def _handle_recommendation_action(
         get_client().answer_callback_query(callback_id, "Not found", show_alert=True)
         return
 
-    if not reco.is_actionable:
-        get_client().answer_callback_query(
-            callback_id, f"Already {reco.status.lower()}", show_alert=True
-        )
-        if message_id:
-            _safe_edit(chat_id, message_id, reco)
-        return
-
     try:
         if action == "approve":
-            outcome = approve_recommendation(reco.id, via=DecidedVia.TELEGRAM)
+            outcome = approve_recommendation(
+                reco.id,
+                via=DecidedVia.TELEGRAM,
+                terms_version=terms_version,
+                terms_ref=terms_ref,
+                portfolio_id=reco.portfolio_id,
+            )
         else:
-            outcome = reject_recommendation(reco.id, via=DecidedVia.TELEGRAM)
+            outcome = reject_recommendation(
+                reco.id,
+                via=DecidedVia.TELEGRAM,
+                terms_version=terms_version,
+                terms_ref=terms_ref,
+                portfolio_id=reco.portfolio_id,
+            )
     except Exception as exc:
         logger.exception("Telegram %s failed for recommendation %s: %s", action, reco_id, exc)
         get_client().answer_callback_query(callback_id, "Action failed", show_alert=True)
         return
 
-    get_client().answer_callback_query(callback_id, outcome.message[:190], show_alert=False)
     reco.refresh_from_db()
+    if outcome.reason_code in TERMS_REFUSAL_CODES:
+        # The button predates a terms refresh. Show the operator the current
+        # terms and a fresh keyboard instead of silently approving the new ones.
+        get_client().answer_callback_query(callback_id, outcome.message[:190], show_alert=True)
+        if message_id:
+            _refresh_recommendation_message(chat_id, message_id, reco)
+        return
+
+    if outcome.reason_code in {"already_decided", "expired", "rejected"}:
+        get_client().answer_callback_query(callback_id, outcome.message[:190], show_alert=True)
+        if message_id:
+            _safe_edit(chat_id, message_id, reco, note=outcome.message)
+        return
+
+    get_client().answer_callback_query(callback_id, outcome.message[:190], show_alert=False)
     if message_id:
         _safe_edit(chat_id, message_id, reco, note=outcome.message)
+
+
+def _refresh_recommendation_message(chat_id: int, message_id: int, reco) -> None:
+    """Replace a stale approval message with the current terms and buttons."""
+    from services.recommendation_terms import terms_reference
+
+    try:
+        get_client().edit_message_text(
+            chat_id,
+            message_id,
+            build_recommendation_message(reco),
+            reply_markup=recommendation_keyboard(
+                reco.id, int(reco.terms_version or 1), terms_reference(reco)
+            ),
+        )
+    except TelegramError as exc:
+        logger.debug("Could not refresh Telegram approval message: %s", log_safe(exc))
 
 
 def _safe_edit(chat_id: int, message_id: int, reco, note: str = "") -> None:
@@ -675,17 +754,31 @@ def _handle_callback(callback: dict) -> None:
 
     try:
         if data.startswith(("ap:", "rj:", "why:")):
-            verb, _, raw_id = data.partition(":")
+            verb, _, payload = data.partition(":")
+            parts = payload.split(":")
             try:
-                reco_id = int(raw_id)
-            except ValueError:
+                reco_id = int(parts[0])
+            except (ValueError, IndexError):
                 get_client().answer_callback_query(callback_id, "Bad request", show_alert=True)
                 return
             if verb == "why":
                 _show_reasoning(chat_id, callback_id, reco_id)
                 return
+            terms_version = None
+            terms_ref = ""
+            for part in parts[1:]:
+                if part.startswith("v") and part[1:].isdigit():
+                    terms_version = int(part[1:])
+                elif part:
+                    terms_ref = part
             _handle_recommendation_action(
-                chat_id, message_id, callback_id, "approve" if verb == "ap" else "reject", reco_id
+                chat_id,
+                message_id,
+                callback_id,
+                "approve" if verb == "ap" else "reject",
+                reco_id,
+                terms_version=terms_version,
+                terms_ref=terms_ref,
             )
             return
 
@@ -730,7 +823,7 @@ def _show_reasoning(chat_id: int, callback_id: str, reco_id: int) -> None:
     _reply(
         chat_id,
         f"🧠 <b>Full reasoning — {esc(reco.ticker)}</b>\n\n{esc(reco.reasoning) or '(none)'}",
-        recommendation_keyboard(reco.id) if reco.is_actionable else None,
+        recommendation_keyboard_for(reco) if reco.is_actionable else None,
     )
 
 
@@ -806,7 +899,7 @@ def notify_recommendation(recommendation_id: int) -> dict[str, Any]:
         get_client().send_message(
             link.chat_id,
             build_recommendation_message(reco),
-            reply_markup=recommendation_keyboard(reco.id),
+            reply_markup=recommendation_keyboard_for(reco),
         )
     except TelegramError as exc:
         logger.warning("Could not push recommendation %s: %s", recommendation_id, exc)

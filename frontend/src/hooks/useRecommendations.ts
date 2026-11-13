@@ -88,18 +88,40 @@ export function useRecommendations(token: string | null): UseRecommendationsResu
       );
 
       try {
+        const current = dataRef.current?.find((item) => item.id === id);
+        const termsVersion = current?.terms_version ?? 1;
+        const termsRef = current?.terms_ref ?? '';
         const response =
           decision === 'approve'
-            ? await api.approveRecommendation(id)
-            : await api.rejectRecommendation(id);
+            ? await api.approveRecommendation(id, termsVersion, termsRef)
+            : await api.rejectRecommendation(id, termsVersion, termsRef);
 
         setData((previous) =>
           previous
-            ? previous.map((item) =>
-                item.id === response.id
-                  ? { ...item, status: response.status, decided_via: 'USER' }
-                  : item,
-              )
+            ? previous.map((item) => {
+                if (item.id !== response.id) return item;
+                const revised = response.revised_terms;
+                if (!revised) {
+                  return { ...item, status: response.status, decided_via: 'USER' };
+                }
+                // A price move refreshed the displayed terms. Reconcile the
+                // screen with what the server now shows so a second click
+                // carries the current version and reference.
+                return {
+                  ...item,
+                  status: response.status,
+                  decided_via: 'USER',
+                  price: revised.reference_price,
+                  amount: revised.quantity,
+                  notional_usd: revised.notional_usd,
+                  expires_at: revised.expires_at,
+                  terms_version: revised.recommendation_version,
+                  terms_ref: revised.terms_ref,
+                  quote_observed_at: revised.quote_observed_at,
+                  quote_retrieved_at: revised.quote_retrieved_at,
+                  price_source: revised.quote_source ?? '',
+                };
+              })
             : previous,
         );
 

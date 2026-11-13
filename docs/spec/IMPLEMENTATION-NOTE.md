@@ -852,3 +852,97 @@ Divergences recorded rather than absorbed:
    the *current* full-environment record is not. Tracked as
    [#65](https://github.com/SergeyGer/AlphaAgent/issues/65), and stated in
    [`ACCEPTANCE.md`](ACCEPTANCE.md) §5.
+
+## P0 remediation — approval identity and delivery replay (steps 1 and 2, follow-up)
+
+The acceptance review reproduced two further defects that the earlier P0 change
+did not exercise:
+
+* Web and Telegram submitted only the recommendation id. The service refreshed a
+  pending recommendation in place and incremented `terms_version`, so an action
+  from a screen opened before the refresh was accepted against terms the
+  operator never saw.
+* The Celery duplicate-delivery path returned `decision_run_id: None` and
+  bypassed `resume_execution_audit`. Disabling autonomy after the first delivery
+  made a redelivery return `autonomy_disabled`, and a legacy fill with no
+  `ExecutionAttempt` stayed unlinked.
+
+### 1 — approval is bound to the displayed terms
+
+`services/recommendation_terms.py` issues a server-side `terms_ref` over the
+recommendation, portfolio and owner, the version, side, quantity, reference
+price and notional, the applicable drift tolerance, the expiry and the displayed
+quote's observation provenance. The serializer and recommendation events expose
+`terms_version` and `terms_ref`; the Telegram message shows the version and the
+action buttons carry it plus a short reference suffix.
+
+`approve_recommendation` now requires `terms_version` or `terms_ref`. Under the
+recommendation lock it checks portfolio ownership and the submitted identity
+before reading a quote or writing any audit row. Stable refusal codes are
+`approval_terms_version_required`, `approval_terms_version_invalid`,
+`approval_terms_version_stale`, `approval_terms_reference_stale`,
+`approval_idempotency_key_invalid`, `approval_identity_mismatch` and
+`approval_recommendation_not_owned`. A refusal writes no ledger row.
+
+The frozen `RecommendationApproval` row stores the exact `terms_ref`; the drift
+and quantity checks read `reference_price`, `quantity` and `tolerance_pct` from
+that row rather than the refreshed recommendation. The row also stores the
+evaluated quote's own `evaluated_price` and observation/retrieval/source fields,
+so the displayed observation and the drift observation are separately
+auditable. `ExecutionAttempt.approved_terms` carries the same `terms_ref`.
+`_refresh_recommendation_terms` increments the version only when a displayed
+term (price, notional, observation, source, currency or tolerance) changed.
+
+`services.market_data` now fetches a timestamped one-minute intraday bar first.
+A fast price without that bar keeps `as_of=None`; it never inherits a daily
+candle's session close. Daily selection drops an unfinished candle and takes
+both the close and the previous close from completed daily bars, each with its
+own `as_of` / `previous_close_as_of`.
+
+Evidence: `core/tests/test_p0_terms_binding_and_redelivery.py`
+(`test_1a_*`, `test_1b_*`, `test_1c_*`).
+
+### 2 — a redelivery returns the original execution
+
+The autonomous execution identity is `celery:<task id>`; the web approval
+identity is `recommendation:<id>`. Before the autonomy gate, budget reservation
+or any model work, `run_alpha_agent_task` looks up a `Transaction` with the
+delivery key and returns its original transaction id, decision run id and
+outcome. The audit link is recovered through `resume_execution_audit`; a legacy
+fill with no `ExecutionAttempt` gets one linked to the run it already has, with
+no second fill and no provider call.
+
+The authenticated approval route now lets a repeat of a completed approval reach
+`approve_recommendation`, which replays the accepted `RecommendationApproval`
+only when the submitted terms reference/version, action and idempotency key
+match. A different key is `approval_identity_mismatch`; a stale version or
+reference is refused with the codes above. No second fill is written.
+
+Evidence: `core/tests/test_p0_terms_binding_and_redelivery.py`
+(`test_2a_*`, `test_2b_*`, `test_2c_*`).
+
+Divergences recorded rather than absorbed:
+
+1. **The reference binds content, not a secret.** It is a canonical hash of the
+   displayed terms; an attacker who knows the terms can recompute it, but cannot
+   make it name different terms. The lock re-derives the expected value from
+   stored state, so a copied reference from another recommendation or portfolio
+   fails even when the numeric version is identical.
+2. **A fast price without an intraday timestamp is untimed, not "now".** It is
+   missing data for live execution. Setting `as_of=now` would repeat the defect
+   by turning retrieval into a claim that the provider observed the price then.
+3. **A missing approval identity is refused rather than inferred.** An old
+   client that sends only the recommendation id must refresh its screen; the
+   service does not substitute the current version.
+4. **A redelivery with no recoverable run is returned with a null run id.** The
+   transaction id and outcome are still returned and no second fill is written;
+   inventing a run link the database never recorded would be fabrication.
+5. **A bare version number is weaker than the reference.** Two recommendations can
+   legitimately both be at version 1, so a version-only client that copies the
+   integer from another recommendation is indistinguishable from a current one.
+   The API exposes `terms_ref` for a strong binding and the web/Telegram clients
+   send both; version-only clients are still accepted for compatibility.
+6. **A delivery with no fill has no ledger identity to replay.** The duplicate
+   path resolves a completed *execution* (the reviewed defect). A HOLD, a guard
+   block or an awaiting-approval delivery wrote no transaction, so it is
+   re-evaluated by worker redelivery rather than returned from a fill receipt.

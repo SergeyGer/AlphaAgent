@@ -388,6 +388,15 @@ class TradeRecommendationSerializer(serializers.ModelSerializer):
 
     is_actionable = serializers.BooleanField(read_only=True)
     transaction_id = serializers.IntegerField(source="transaction.id", read_only=True, default=None)
+    #: The server-issued reference over the exactly displayed terms. A client
+    #: echoes it on approve/reject so a screen that was open during a price
+    #: refresh cannot authorise terms the operator never saw.
+    terms_ref = serializers.SerializerMethodField()
+
+    def get_terms_ref(self, recommendation) -> str:
+        from services.recommendation_terms import terms_reference
+
+        return terms_reference(recommendation)
 
     class Meta:
         model = TradeRecommendation
@@ -408,6 +417,7 @@ class TradeRecommendationSerializer(serializers.ModelSerializer):
             "is_actionable",
             "transaction_id",
             "terms_version",
+            "terms_ref",
             "quote_observed_at",
             "quote_retrieved_at",
             "price_source",
