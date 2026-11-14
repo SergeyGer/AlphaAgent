@@ -9,6 +9,18 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **Step 11 — the walkthrough, recut around the interface and republished on YouTube
+  (#78, #79).** The recording now opens on the login screen and the dashboard rather
+  than a terminal, crops into the reasoning so the arguments read as text, and states
+  its numbers in the voice that matches the picture. `docs/demo-walkthrough-evidence.md`
+  maps every spoken number to the artefact beside it, `docs/demo-walkthrough-script.json`
+  records the narration beats, and the SRT/VTT captions were regenerated with the cut.
+  The video is published at <https://youtu.be/JuLyy8xqsWQ> and the README, the poster
+  link and the wiki Home page all point at it. The recording is media, not a
+  machine-checkable claim: the evidence page says which shots are synthetic fixtures,
+  that the guard output is a real `evaluate_proposal()` evaluation rather than a live
+  trade, and that no profitability claim is made in the narration.
+
 - **FIX-08 [P1] — the portfolio advisory product, with one real recorded model run.**
   The allocation service existed but nothing could submit a plan, review it, approve
   it or execute it, and the documented command used a stub client.
@@ -50,10 +62,82 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
-- **Remediation steps 1–10 [P0/P1] — ten remediation steps from the acceptance
-  review, and the mechanism that verifies the repair.** Each finding behind them was
-  reproduced against the tree before anything changed. The suite at `7969cd7` is **955 backend tests and 276
-  frontend tests**; ruff, the format check and the migration check are clean.
+- **Remediation steps 1–10, second pass [P0/P1] — the acceptance review
+  re-tested every repair, and each still had a defect (#69–#75).** The first pass
+  at `602a899`–`7969cd7` built the mechanisms; this pass made them hold for the
+  cases the first tests did not exercise. The suite at `bc030e4` is **1029
+  backend tests and 289 frontend tests**, and the committed eight-stage release
+  record is `docs/spec/acceptance/fe326ef3e593391ae525718e0a8f331720127e41.json`.
+
+  **Steps 1–2 — approval identity and delivery replay (`153e238`, #69).** Web and
+  Telegram sent only the recommendation id, so an action from a screen opened
+  before a refresh could approve terms the operator never saw. `terms_ref` now
+  binds the recommendation, portfolio, owner, version, side, quantity, reference
+  price, notional, drift tolerance, expiry and the displayed quote's observation
+  provenance; a stale, missing or foreign reference is refused with a stable code
+  and writes no fill. The autonomous execution identity is the Celery task id, so
+  a redelivery returns the original transaction, run id and outcome before the
+  autonomy gate or any provider call, and a legacy fill without its audit link is
+  recovered rather than duplicated. Proved by
+  `test_p0_terms_binding_and_redelivery.py::test_1a_stale_web_and_telegram_actions_are_refused_and_current_version_fills`,
+  `test_1c_the_approval_audit_records_each_observation_separately` and
+  `test_2a_redelivery_returns_the_same_fill_and_run_even_after_autonomy_is_disabled`.
+
+  **Steps 3–4 — fair scheduling and event revisions (`84a8060`, #70).** The batch
+  limit bounded candidate decisions before checking which horizon was due, so
+  newer already-scored decisions could starve an older decision's day 7 and day
+  30. Due work is now selected from the work rows oldest-first, and the backfill
+  bounds work items rather than decision rows. Replay now resolves each horizon
+  and method to the event revision recorded at the cursor, treats a partial page
+  as incomplete rather than the tail, reads `status.changed`'s destination from
+  `payload.to`, and writes an exhausted horizon as one `outcome.recorded.v1`
+  event with its reason and attempt count. Proved by
+  `test_p1_step3_fair_scheduling.py::test_3a_the_older_decisions_due_horizons_are_scheduled`,
+  `test_p1_step4_replay_and_unavailable.py::test_4a_a_correction_appends_a_second_event_that_carries_its_own_values`
+  and `test_4c_exhausted_pricing_writes_one_event_one_outbox_row_and_a_reason`.
+
+  **Steps 5–6 — export origin and recovery without an operator (`8ff7194`, #71).**
+  The sample export declared itself a recorded provider run although it was
+  authored. The export now publishes `run.origin` as a claim separate from its
+  checksum and build provenance, and the viewer renders it; a fixture id
+  downgrades a recorded label rather than upgrading it. A broker failure after
+  the durable submission row is retried by `recover_allocation_submissions` from
+  the beat schedule, every publish attempt is recorded, and a resume reattaches
+  the immutable input snapshot the provider actually answered instead of
+  repricing the current one. Proved by
+  `test_p1_step5_provenance.py::test_checksum_recording_and_run_origin_are_three_different_claims`
+  and `test_p1_step6_recovery.py::test_6a_a_broker_failure_progresses_without_another_post_or_command`.
+
+  **Steps 7–8 — attempt identity and fill-time validation (`e93d7bd`, #72).** A
+  rerun under a different provider, model or budget reused the first attempt's
+  run ids, and `force=True` deleted the earlier work. `services/experiment_identity.py`
+  resolves an `experiment_attempt.v1` identity from the client configuration and
+  the applied budget, appends a new attempt, keeps earlier runs resolvable, and
+  matches benchmark windows so the relative metric uses matched pairs only. A
+  fill is now validated at its execution price and time: a BUY cannot overdraw
+  cash including fees, two SELLs cannot credit more than the holding, and the
+  simulated day's realised P&L reaches the next decision and resets at UTC
+  midnight. Proved by
+  `test_p1_step7_identity_benchmarks.py::test_two_resolved_models_and_a_changed_budget_get_distinct_identities`
+  and `test_p1_step8_fill_validation.py::test_a_later_price_or_fee_that_exceeds_cash_clips_and_never_overdraws`.
+
+  **Steps 9–10 — spend identity and the release gate (`bc030e4`, #75).** An
+  allocation reservation was keyed by the caller's idempotency key, so two
+  portfolios sharing a key shared one reservation; the experiment runner never
+  reserved at all. `AIUsageLedger` now carries an explicit `scope`/`scope_key`,
+  every paid attempt reserves under its own identity and is reconciled once, and
+  a blocked attempt remains visible with its stable reason. The release gate
+  derives `usable_for_recording` from the full eight-stage set, so a `--only` run
+  or a four-stage record can no longer claim to be usable. Proved by
+  `test_p1_step9_spend_limits.py::test_two_portfolios_with_the_same_key_each_hold_their_own_reservation`
+  and `test_p1_step10_release_gate.py::test_a_record_that_omits_a_required_stage_is_unusable`.
+
+- **Remediation steps 1–10, first pass [P0/P1] — ten remediation steps from the
+  acceptance review, and the mechanism that verifies the repair.** Each finding
+  behind them was reproduced against the tree before anything changed. At the
+  first-pass merge commit `7969cd7` the suite was **955 backend tests and 276
+  frontend tests**; ruff, the format check and the migration check were clean.
+  The second pass below is what made each repair hold, and is the state at HEAD.
 
   **Step 1 — quote provenance and approval binding (`602a899`).** Observation times
   now travel from provider to cache to quote collection to proposal to approval to
@@ -184,6 +268,19 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `test_p1_acceptance_verification.py::test_the_record_contains_the_commit_stages_counts_and_digest`,
   `test_a_clean_tree_without_an_acceptance_record_is_refused` and
   `test_every_committed_recording_names_a_passing_record`.
+
+### Security
+
+- **`opentelemetry-api` 1.45.1 → 1.45.2 (Dependabot alert #83).** The 1.45.1
+  `traceparent` parser is quadratic on crafted input; 1.45.2 is the patched
+  release. The nine opentelemetry packages moved together — `api`, `sdk`, `proto`,
+  `exporter-otlp-proto-common`, `exporter-otlp-proto-grpc` and
+  `exporter-otlp-proto-http` to 1.45.2, and `semantic-conventions`,
+  `exporter-otlp-common` and `exporter-http-transport` to 0.66b2, which the 1.45.2
+  exporters require. `requirements.txt` was regenerated with
+  `pip-compile --generate-hashes`, not hand-edited: every changed entry carries
+  both published artefact hashes, and `docker compose build web` installs the
+  lockfile under `--require-hashes` and succeeds.
 
 ## [1.2.0] — 2026-11-12
 

@@ -12,7 +12,7 @@ implementation detail and the reasoning behind it.
 
 ## Watch first
 
-**▶ [Watch the walkthrough](https://github.com/SergeyGer/AlphaAgent/blob/main/docs/demo-walkthrough.mp4)**
+**▶ [Watch the walkthrough](https://youtu.be/JuLyy8xqsWQ)**
 — narrated, recorded from the running system: the dashboard, the AI debate, the risk
 guard, and the measured result.
 
@@ -34,8 +34,8 @@ Full annotated tracks, with a per-step breakdown:
 [changelog](https://github.com/SergeyGer/AlphaAgent/blob/main/CHANGELOG.md) for what
 changed, and the
 [releases page](https://github.com/SergeyGer/AlphaAgent/releases) for the notes.
-Phase 4 (portfolio allocation) is in 1.1.8; FIX-08 and the remediation steps 1–10
-are in the changelog's Unreleased section, at HEAD `7969cd7`.
+Phase 4 (portfolio allocation) is in 1.1.8; FIX-08 and the remediation steps 1–11
+are in the changelog's Unreleased section, at HEAD `0051067` (2026-11-14).
 
 | Version | Date | Headline |
 | --- | --- | --- |

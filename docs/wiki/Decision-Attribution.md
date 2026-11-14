@@ -51,7 +51,10 @@ The scorecard prints `evaluated`, `directional_calls`, `hit_rate_pct`,
 Each horizon is now scheduled independently. `OutcomeEvaluation` is keyed by
 decision, horizon and method version, so a day-one score no longer makes days
 seven and thirty ineligible; an unpriceable decision gets a state and a reason
-instead of silently blocking the batch. `manage.py backfill_outcome_records`
+instead of silently blocking the batch. The second pass bounded the *work*, not the candidate decisions:
+due work rows are selected oldest-first, so a batch full of already-scored newer
+decisions cannot starve an older decision's day 7 and day 30
+(`test_p1_step3_fair_scheduling.py`). `manage.py backfill_outcome_records`
 repairs older rows that were scored on the wrong basis, preserving the prior
 revision rather than overwriting it.
 

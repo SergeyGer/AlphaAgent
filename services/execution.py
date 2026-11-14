@@ -109,9 +109,9 @@ class Exposure:
     Passed in rather than fetched, so ``evaluate_proposal`` stays free of I/O -
     which is what makes the safety-critical code testable without a database.
 
-    ``equity_usd`` is the denominator for both ratios. When it is zero or absent
-    the portfolio-level checks are skipped rather than guessed at: a percentage of
-    an unknown total is not a limit, it is a number.
+    ``equity_usd`` is the denominator for every portfolio-level ratio. When it is
+    zero or absent those checks are skipped rather than guessed at: a percentage
+    of an unknown total is not a limit, it is a number.
     """
 
     positions_value_usd: Decimal = ZERO
@@ -134,14 +134,15 @@ def _portfolio_headroom(
 ) -> tuple[Decimal, str | None]:
     """How much more this portfolio may buy, in dollars.
 
-    Returns the binding dollar ceiling across both portfolio-level limits, plus a
-    note template naming the constraint that produced it - ``None`` when neither
-    limit applies, so the caller falls back to reporting the per-trade ceiling.
+    Returns the binding dollar ceiling across the portfolio-level limits, plus a
+    note template naming the constraint that produced it - ``None`` when no limit
+    applies, so the caller falls back to reporting the per-trade ceiling.
 
-    Both limits are expressed as percentages of equity, so the headroom is
-    ``limit_value - current_value``. When two limits bind, the smaller wins and
-    the note names that one; a clamp that does not say which rule it obeyed is
-    harder to audit than no note at all.
+    Every limit is a percentage of equity, so the headroom is
+    ``limit_value - current_value``. When several limits bind, the smaller wins
+    and the note names that one; a clamp that does not say which rule it obeyed is
+    harder to audit than no note at all. The sector limit is evaluated only when
+    the sector value is known: an unclassified instrument is not a zero.
     """
     if exposure is None or not exposure.usable:
         # No exposure means the portfolio-level limits cannot be evaluated. The
@@ -220,11 +221,15 @@ def evaluate_proposal(
        of equity.
     7. BUY cannot push one instrument past ``max_ticker_concentration_pct`` of
        equity.
+    8. BUY cannot push a classified sector past ``max_sector_concentration_pct``
+       of equity.
 
-    Rules 6 and 7 need ``exposure`` and are skipped without it. That is a real
-    gap rather than a graceful default, so the production caller is asserted to
+    Rules 6-8 need ``exposure`` and are skipped without it. That is a real gap
+    rather than a graceful default, so the production caller is asserted to
     supply it by ``ExposureWiringTests`` - a new caller that forgets would
     silently lose the cumulative limits while every per-trade check still passed.
+    Rule 8 additionally needs a *known* sector value: an unclassified instrument
+    skips that one check rather than being treated as zero exposure.
     """
     action = proposal.action
     decision = GuardDecision(approved=False, reason="", action=action, price=price)
@@ -267,7 +272,7 @@ def evaluate_proposal(
             )
             return decision
 
-        # --- Rules 6 and 7: portfolio-level headroom ---------------------
+        # --- Rules 6-8: portfolio-level headroom -------------------------
         # Folded into the same ceiling as the per-trade limit rather than added as
         # a separate rejection path. A buy that does not fit the portfolio should
         # be sized down to what fits, exactly as one that does not fit the

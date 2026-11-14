@@ -178,14 +178,23 @@ honest about a synthetic input - the artefact's own `synthetic_input_data`,
 
 ## 5. Committed records and the release gate
 
-Two committed records predate the release gate. They are read with the same
-derivation the guard uses (`acceptance_record_usable`), not by trusting the
-stored boolean:
+Three committed records are read with the same derivation the guard uses
+(`acceptance_record_usable`), not by trusting the stored boolean:
 
 | Record | Commit | Stages | Counts | What it supports |
 | --- | --- | --- | --- | --- |
+| `fe326ef3e593391ae525718e0a8f331720127e41.json` | `fe326ef` (generated before the record was committed in PR #75; PR head `877a6c4`, merged as `bc030e4`) | all eight | 1029 backend / 289 frontend | The release acceptance for the merged tree: `tree_clean: true`, `usable_for_recording: true`, `release_acceptance: true` |
 | `4e6c71f7e01c50b4e43ff44b40e90265837a3a0a.json` | `4e6c71f` | all eight | 928 backend / 275 frontend | A full pass at the steps 7–8 commit; usable |
 | `03308ca6cff5ba6cc36c3d72869c45447193f518.json` | `03308ca` (pre-merge branch commit) | four: backend-tests, lint, format, migration-check | 955 backend / **0** frontend | Backend and static checks only; **not usable for recording** |
+
+The release record names `fe326ef`, the application commit the verifier ran on.
+A commit cannot contain the record that names its own hash; the documented order
+is commit, verify `--record`, record the artefact, then commit the artefact and
+record together. The record was committed in `877a6c4` (the PR head), and the
+merged commit `bc030e4` has that same tree, so the record covers the release
+tree. It
+does **not** cover later documentation-only commits, and a fresh record is
+required after any change to application code.
 
 The four-stage record's stored `usable_for_recording` was `true` when it was
 written. That was the defect: `usable_for_recording` was set from
@@ -241,9 +250,11 @@ must match, and the pair is checked by `check_recordings`. A manifest that names
 a different commit, a digest the record does not contain, or an incomplete
 stage set fails the same pairing check.
 
-At the time of writing, the tree contains the Step 9/10 changes but is **not
-committed**, as the task requires. A publishable release record therefore cannot
-be produced yet: `git_state` reports a dirty tree, and `--record` refuses it.
-The full command, the exact stages and the manifest shape above are what the
-release commit must run; the local evidence is in
-`.runtime/release-evidence/` and is explicitly not a release acceptance.
+The committed manifest at `docs/spec/fixtures/release-evidence.v1.json` is still
+a **template**: `template: true`, an empty commit, `release_ready: false`. No
+filled manifest accompanies the walkthrough, and none is claimed: the walkthrough
+predates the manifest requirement, and the timecode-to-evidence table in
+`docs/demo-walkthrough-evidence.md` is its provenance, not a release record. The
+full command, the exact stages and the manifest shape above are what a release
+commit must run; a filled manifest naming a clean release commit remains future
+work tied to the next release, not to the acceptance record already committed.

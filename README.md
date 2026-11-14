@@ -186,7 +186,7 @@ from a decision the model never made.
 
 | Step | Read | Time |
 | --- | --- | --- |
-| 1 | [▶ Watch the walkthrough](docs/demo-walkthrough.mp4) — real dashboard, real debate, real guard | **2 min** |
+| 1 | [▶ Watch the walkthrough](https://youtu.be/JuLyy8xqsWQ) — real dashboard, real debate, real guard | **2 min** |
 | 2 | [Incident log](https://github.com/SergeyGer/AlphaAgent/wiki/Incident-Log) — eleven real defects, root causes and fixes | **8 min** |
 | 3 | [ADR index](docs/adr/README.md) — seventeen decisions with the alternatives that were rejected | **6 min** |
 | 4 | [Quality and testing](https://github.com/SergeyGer/AlphaAgent/wiki/Quality-and-Testing) — what each gate actually proves | **2 min** |
@@ -196,11 +196,11 @@ from a decision the model never made.
 ---
 ## See it running
 
-[![AlphaAgent walkthrough](docs/demo-walkthrough-poster.png)](docs/demo-walkthrough.mp4)
+[![AlphaAgent walkthrough](docs/demo-walkthrough-poster.png)](https://youtu.be/JuLyy8xqsWQ)
 
-**▶ [Watch the walkthrough](docs/demo-walkthrough.mp4)** — the one recording, narrated and taken
+**▶ [Watch the walkthrough](https://youtu.be/JuLyy8xqsWQ)** — the one recording, narrated and taken
 from the running system: the dashboard, the AI debate, the risk guard and the scorecard it
-publishes. It is also on [YouTube](https://youtu.be/DfOMb_l19p8).
+publishes. It is also on [YouTube](https://youtu.be/JuLyy8xqsWQ).
 
 *Recorded from the live React application (not the Streamlit risk-guard demo below) — sign-in,
 portfolio metrics, the equity curve, an agent debate expanding, news sentiment and the trade
@@ -417,42 +417,56 @@ the wiki:
 **Also in the stack:** Django REST Framework · Django Channels (WebSockets) ·
 Recharts · GitHub Actions
 
-**At HEAD `7969cd7` (2026-11-12):** the suites contain 955 backend tests and 276
+**At HEAD `0051067` (2026-11-14):** the suites contain 1029 backend tests and 289
 frontend tests. `scripts/verify_application.py` runs those plus lint, format,
 migration check, typecheck, build and an HTTP smoke test, and writes a
 commit-keyed record; the contract, and what the committed record currently
 covers, are in [`ACCEPTANCE.md`](docs/spec/ACCEPTANCE.md).
 
 <details>
-<summary><b>What the remediation programme changed</b> — ten steps between FIX-07 and HEAD, each with the test that holds it</summary>
+<summary><b>What the remediation programme changed</b> — eleven steps between FIX-07 and HEAD, each with the test that holds it</summary>
 
-The acceptance review that followed FIX-07 produced ten remediation steps. Each
-finding behind them was reproduced against the tree before it was fixed. The
-merge commits are `602a899` (steps 1–2), `76c3017` (3–4), `f54b2bf` (5–6),
-`4e6c71f` (7–8) and `7969cd7` (9–10).
+The acceptance review that followed FIX-07 produced ten remediation steps, a
+second review re-tested each repair against the defect it claimed to close, and
+step 11 recorded the result. Every finding was reproduced against the tree before
+it was fixed. The merged
+commits are `602a899` with `153e238` (steps 1–2), `76c3017` with `84a8060` (3–4),
+`f54b2bf` with `8ff7194` (5–6), `4e6c71f` with `e93d7bd` (7–8), `7969cd7` with
+`bc030e4` (9–10), and the walkthrough in `1bb1ee2` / `0051067` (step 11).
 
 | Step | What changed | Where it lives | Proving test |
 | --- | --- | --- | --- |
-| 1 | Observation times on every execution mark, a declared freshness policy, and an approval that binds the terms the operator saw | `services/quote_policy.py`; `services/execution.py` | `test_p0_execution_remediation.py::test_untimed_quote_is_missing_data_not_a_current_mark` |
-| 2 | The fill, guard record, run link, run event and outbox row commit in one transaction; a retry cannot return an executed recommendation whose run never completed | `services/execution.py`; `services/execution_audit.py` | `test_p0_execution_remediation.py::test_injected_audit_failure_rolls_back_then_retry_writes_one_fill` |
-| 3 | Each horizon is evaluated independently from the linked fill; a day-one score no longer blocks days seven and thirty, and a backfill repairs the older basis | `services/attribution.py`; `manage.py backfill_outcome_records` | `test_p1_attribution_remediation.py::test_a_day_one_score_does_not_prevent_days_seven_and_thirty` |
-| 4 | Replay resolves the guard visible at the cursor, and a late outcome is appended to a completed run as a versioned event | `core/decision_serializers.py`; `frontend/src/lib/replayGuard.ts` | `test_p1_replay_remediation.py::test_a_completed_run_keeps_its_execution_state_and_records_the_late_outcome` |
-| 5 | One declared canonical JSON form in Python and the browser, so an untouched export verifies after the trip | `core/decision_json.py`; `frontend/viewer/bundle.ts` | `test_p1_export_portability.py::test_every_shared_vector_matches_python` |
-| 6 | Analysis is a durable, pollable job with explicit ownership, attempts and a repair command, not work done inside the request | `services/allocation_submission.py`; `manage.py repair_allocation_submissions` | `test_p1_allocation_jobs.py::test_6a_the_response_returns_before_the_model_is_called` |
-| 7 | Experiment executions have their own namespace, snapshots and cost scope, and the pre-registered metric is computed with its denominator, rejection reasons, dispersion and interval | `services/experiment_execution.py`; `services/experiment_rebuild.py` | `test_p1_experiment_isolation_metric.py::test_a_supported_horizon_carries_a_value_denominator_and_dispersion` |
-| 8 | Simulated time only moves forward; a later-priced fill is deferred, and an archived report rebuilds from its recorded inputs | `services/experiment_simulation.py`; `manage.py rebuild_experiment_report` | `test_p1_simulation_rebuild.py::test_a_fill_priced_after_the_clock_is_deferred_and_invisible_to_the_next_decision` |
-| 9 | A durable reservation ledger counts unknown cost conservatively before the provider call and reconciles afterwards | `services/budget.py`; `core/models.py` (`AIUsageLedger`) | `test_p1_cost_limiter.py::test_tokens_without_dollars_reconcile_to_an_estimate_not_zero` |
-| 10 | One verifier runs the checks, refuses a dirty tree, and writes a commit-keyed acceptance record every recording must name | `scripts/verify_application.py`; `services/recording_provenance.py` | `test_p1_acceptance_verification.py::test_the_record_contains_the_commit_stages_counts_and_digest` |
+| 1 | The approval binds the exact terms the operator saw, and every execution mark carries an observation time under a declared freshness policy | `services/recommendation_terms.py`; `services/quote_policy.py`; `services/execution.py` | `test_p0_terms_binding_and_redelivery.py::test_1a_stale_web_and_telegram_actions_are_refused_and_current_version_fills` |
+| 2 | The fill, guard record, run link, run event and outbox row commit in one transaction; a repeated delivery returns the original fill instead of re-evaluating | `services/execution.py`; `services/execution_audit.py`; `tasks.py` | `test_p0_terms_binding_and_redelivery.py::test_2a_redelivery_returns_the_same_fill_and_run_even_after_autonomy_is_disabled` |
+| 3 | Each horizon is scheduled from work that is actually due, oldest first; a day-one score no longer starves days seven and thirty | `services/attribution.py`; `manage.py backfill_outcome_records` | `test_p1_step3_fair_scheduling.py::test_3a_the_older_decisions_due_horizons_are_scheduled` |
+| 4 | Replay resolves the guard and outcome revision visible at the cursor, hides the future behind a partial page, and records an exhausted horizon as unavailable with its reason | `frontend/src/lib/decisionRuns.ts`; `core/decision_serializers.py` | `test_p1_step4_replay_and_unavailable.py::test_4a_a_correction_appends_a_second_event_that_carries_its_own_values` |
+| 5 | One declared canonical JSON form in Python and the browser, and an export whose run origin is a claim separate from its checksum | `core/decision_json.py`; `core/decision_serializers.py`; `frontend/viewer/bundle.ts` | `test_p1_step5_provenance.py::test_checksum_recording_and_run_origin_are_three_different_claims` |
+| 6 | Analysis is a durable job that recovers a never-published or stale submission itself, and a resume reuses the input snapshot the provider actually answered | `services/allocation_submission.py`; `tasks.py`; `manage.py repair_allocation_submissions` | `test_p1_step6_recovery.py::test_6a_a_broker_failure_progresses_without_another_post_or_command` |
+| 7 | An experiment attempt resolves its own provider, model and budget identity, keeps earlier attempts resolvable, and the pre-registered metric is computed with its denominator, exclusions, dispersion and interval | `services/experiment_identity.py`; `services/experiment_execution.py` | `test_p1_step7_identity_benchmarks.py::test_two_resolved_models_and_a_changed_budget_get_distinct_identities` |
+| 8 | A fill is revalidated at its execution price and time — cash, held quantity and the day's realised P&L — a later-priced fill is deferred, and an archived report rebuilds from its recorded inputs | `services/execution.py`; `services/experiment_simulation.py`; `manage.py rebuild_experiment_report` | `test_p1_step8_fill_validation.py::test_a_later_price_or_fee_that_exceeds_cash_clips_and_never_overdraws` |
+| 9 | A durable reservation ledger counts unknown cost conservatively before the provider call, scopes each paid attempt by its own identity, and reconciles afterwards | `services/budget.py`; `core/models.py` (`AIUsageLedger`) | `test_p1_step9_spend_limits.py::test_two_portfolios_with_the_same_key_each_hold_their_own_reservation` |
+| 10 | One verifier runs the checks, refuses a dirty tree or an incomplete stage set, and writes a commit-keyed release record the recording gate requires | `scripts/verify_application.py`; `services/recording_provenance.py` | `test_p1_step10_release_gate.py::test_a_record_that_omits_a_required_stage_is_unusable` |
+| 11 | The walkthrough is recut around the interface and the numbers on screen, with a timecode-to-evidence table and a published YouTube copy | `docs/demo-walkthrough-evidence.md`; `docs/demo-walkthrough-script.json`; `README.md` | `docs/demo-walkthrough-evidence.md` maps every spoken number to its artefact; the video is media and is not machine-checkable |
+
+**What is claimed, and what is not.** Each row above claims that the behaviour is
+implemented and held by the named test, and that the hash-pinned image builds.
+The full eight-stage release record is
+`docs/spec/acceptance/fe326ef3e593391ae525718e0a8f331720127e41.json`: 1029 backend
+tests, 289 frontend tests, a clean tree, generated at `fe326ef` and committed in
+`877a6c4`, the head of PR #75, whose tree was merged as `bc030e4`. It does not cover later documentation-only
+commits, and it is evidence that the checks passed, not that every path was
+exercised live. The project does **not** claim profitability, a live provider run
+for every scenario, or that a test of one path proves an unexercised one. The
+bounds are in [`CLAIMS.md`](docs/spec/CLAIMS.md), and the open issues name the
+work that remains.
 
 The suite gate and the commit-keyed acceptance record are described under
 **At HEAD** above; the mechanism, its refusal codes and the
 commit/record ordering are specified in
 [`ACCEPTANCE.md`](docs/spec/ACCEPTANCE.md).
 
-Two residual gaps are tracked separately: a **full** acceptance record for the
-release commit ([#65](https://github.com/SergeyGer/AlphaAgent/issues/65)) and the
-never-executed V4 allocation arm ([#66](https://github.com/SergeyGer/AlphaAgent/issues/66)).
-
+One residual gap is tracked separately: the never-executed V4 allocation arm
+([#66](https://github.com/SergeyGer/AlphaAgent/issues/66)).
 </details>
 
 <a href="#top">↑ back to top</a>

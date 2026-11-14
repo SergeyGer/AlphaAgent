@@ -16,7 +16,7 @@ make up                 # PostgreSQL + Redis via Docker
 # Edit .env: set POSTGRES_PASSWORD and DJANGO_SECRET_KEY to real values
 make migrate
 make seed               # demo user + API token
-make test               # full suite (955 at HEAD 7969cd7; the run prints the total), no network required
+make test               # full suite (1029 at HEAD 0051067; the run prints the total), no network required
 ```
 
 Run the API, worker and scheduler in three terminals:
@@ -246,7 +246,7 @@ different point-in-time guarantees and must not share method versions or claims.
 The suite is one Django/unittest tree; run the slice that covers your change.
 
 ```bash
-# Everything (955 at HEAD 7969cd7; the run prints the total)
+# Everything (1029 at HEAD 0051067; the run prints the total)
 venv/bin/python manage.py test core.tests
 
 # Safety-critical guard and its portfolio-level ceilings
@@ -273,13 +273,13 @@ venv/bin/python manage.py test core.tests.test_api core.tests.test_dashboard_api
 venv/bin/python manage.py test core.tests.test_documentation_links \
     core.tests.test_demo_theme_contract
 
-# Frontend (276 tests on this commit)
+# Frontend (289 tests on this commit)
 cd frontend && npm test
 ```
 
 Counts are snapshots, not constants. The authoritative numbers are whatever the
 current run reports; do not copy a count into a new document without naming the
-commit. The commit-pinned snapshot at HEAD `7969cd7` is 955 backend and 276
+commit. The commit-pinned snapshot at HEAD `0051067` is 1029 backend and 289
 frontend tests, reproduced in [`README.md`](README.md),
 [`docs/wiki/Quality-and-Testing.md`](docs/wiki/Quality-and-Testing.md) and
 [`docs/spec/CLAIMS.md`](docs/spec/CLAIMS.md).

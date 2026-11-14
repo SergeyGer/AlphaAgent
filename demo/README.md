@@ -23,9 +23,9 @@ dashboard), the two portfolio-ceiling meters, and four tabs.
      still works while new risk is frozen) and an oversized SELL clamped to the
      held position;
    - a buy **clamped by the portfolio exposure ceiling**, a buy **clamped by the
-     single-instrument concentration ceiling**, a portfolio where **both ceilings
-     bind and the smaller headroom wins**, and a buy **refused because
-     concentration is already at its ceiling**.
+     single-instrument concentration ceiling**, a portfolio where **both equity
+     ceilings the page drives bind and the smaller headroom wins**, and a buy
+     **refused because concentration is already at its ceiling**.
 
    The metric row is driven by the same inputs: equity, cash, positions, the
    P&L cards, the daily-loss budget, and the two ceiling meters all move with the
@@ -82,25 +82,30 @@ loudly instead of silently.
 
 ## How the portfolio-level limits are driven
 
-Every input the guard takes is supplied, **including `Exposure`**. That is the
-point of the object: `evaluate_proposal` skips rules 6 and 7 - total exposure and
-single-instrument concentration - when it is handed no exposure, so a page that
-omitted it would drive only the per-trade half of the guard while looking
-complete. The demo builds the three market values from the widgets, the same way
+Every guard input the widgets can know is supplied, **including `Exposure`**.
+That is the point of the object: `evaluate_proposal` skips rules 6-8 - total
+exposure, single-instrument concentration and sector concentration - when it is
+handed no exposure, so a page that omitted it would drive only the per-trade half
+of the guard while looking complete. The sector value is the one exception: the
+page has no classification, so it stays unknown and rule 8 is stated as not
+driven. The demo builds the three market values from the widgets, the same way
 `services.portfolio_metrics.build_exposure()` derives them from the ledger - but
 without fetching anything:
 
 ```
 ticker_value_usd    = units held x price          this instrument, at market
 positions_value_usd = that + other holdings       every holding, at market
-equity_usd          = cash + positions_value_usd  the denominator for both ceilings
+equity_usd          = cash + positions_value_usd  the denominator for these ceilings
 ```
 
-Both ceilings are percentages of that **equity** - not of cash, which is what
-`max_trade_allocation_pct` uses - and a buy that does not fit is **sized down**,
-with the note naming the ceiling that bound it. Only a buy with no headroom at
-all is refused. Equity comes from `Exposure`, never from a database, so the page
-keeps its no-database, no-network property.
+The two ceilings this page drives are percentages of that **equity** - not of
+cash, which is what `max_trade_allocation_pct` uses - and a buy that does not fit
+is **sized down**, with the note naming the ceiling that bound it. Only a buy
+with no headroom at all is refused. A third portfolio ceiling, sector
+concentration (`max_sector_concentration_pct`), is **not driven**: the page has
+no sector classification, so `Exposure.sector_value_usd` stays `None` (unknown,
+never zero) and the guard skips that check. Equity comes from `Exposure`, never
+from a database, so the page keeps its no-database, no-network property.
 
 **No new dependencies**: the exposure limits need nothing beyond the two pins
 already in `demo/requirements.txt`.
@@ -132,8 +137,9 @@ already in `demo/requirements.txt`.
   them, so preset 9 reads that way.
 - Not reachable from the widgets: rule 1 (the side selector offers BUY and SELL
   only, so a HOLD never becomes a proposal here), rule 2 (the price minimum is
-  $0.01) and the BUY-versus-cash half of rule 4 (the per-trade ceiling is at most
-  25% of cash). The app's "Which guard rules this page exercises" expander lists
-  exactly what is and is not covered.
+  $0.01), the BUY-versus-cash half of rule 4 (the per-trade ceiling is at most
+  25% of cash) and rule 8 (sector concentration needs a classification the
+  widgets do not carry). The app's "Which guard rules this page exercises"
+  expander lists exactly what is and is not covered.
 
 MIT licensed, like the rest of the project.

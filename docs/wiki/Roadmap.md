@@ -13,32 +13,44 @@ newer than this page.
 
 ## Delivered since FIX-07
 
-The acceptance review after FIX-07 produced ten remediation steps across five
-merges. Each finding behind them was reproduced before it was fixed. The commit
-and the proving test are recorded in
+The acceptance review after FIX-07 produced ten remediation steps, a second
+review re-tested every repair against the defect it claimed to close, and step 11
+recorded the result. Each
+finding behind them was reproduced before it was fixed. The commits and the
+proving tests are recorded in
 [`CHANGELOG.md`](https://github.com/SergeyGer/AlphaAgent/blob/main/CHANGELOG.md)
-under Unreleased.
+under Unreleased, and the implementation detail is in
+[`IMPLEMENTATION-NOTE.md`](https://github.com/SergeyGer/AlphaAgent/blob/main/docs/spec/IMPLEMENTATION-NOTE.md).
 
 | Delivered | Commit / PR | What it established |
 | --- | --- | --- |
 | FIX-08 portfolio advisory product, one real recorded provider run | `4078a94` / #54 | Submission, review, approval and apply; one recorded real model call |
-| Steps 1–2: quote provenance, approval binding, execution/audit atomicity | `602a899` / #60 | An untimed or stale mark cannot authorise a fill; a fill and its audit commit together |
-| Steps 3–4: attribution across horizons, replay order, late outcomes | `76c3017` / #61 | Each horizon is independent and measured from the fill; the guard visible at the cursor is the one shown |
-| Steps 5–6: portable exports, recoverable analysis jobs | `f54b2bf` / #62 | One canonical JSON in Python and the browser; analysis is a pollable worker job with a repair path |
-| Steps 7–8: isolated experiments, registered metric, simulated time, report rebuild | `4e6c71f` / #63 | The pre-registered metric is computed; simulated time is monotonic; an archive rebuilds from its recorded inputs |
-| Steps 9–10: conservative spend limiter, verified acceptance | `7969cd7` / #64 | Unknown cost is reserved, not counted as zero; a recording names a passing commit |
-| FIX-10: the walkthrough rebuilt around one decision | `3d229cd` / #59 | One narrated recording at `docs/demo-walkthrough.mp4`, with a poster |
+| Steps 1–2, first pass: quote provenance, approval binding, execution/audit atomicity | `602a899` / #60 | An untimed or stale mark cannot authorise a fill; a fill and its audit commit together |
+| Steps 1–2, second pass: the approval binds the displayed terms, a redelivery returns the original fill | `153e238` / #69 | A stale screen or foreign identity is refused without a fill; the Celery task id is the execution identity |
+| Steps 3–4, first pass: attribution across horizons, replay order, late outcomes | `76c3017` / #61 | Each horizon is independent and measured from the fill; the guard visible at the cursor is the one shown |
+| Steps 3–4, second pass: fair scheduling, event-revision replay, unavailable outcomes | `84a8060` / #70 | The work limit selects due work, not candidate decisions; a partial page hides the future; an exhausted horizon is a durable event |
+| Steps 5–6, first pass: portable exports, recoverable analysis jobs | `f54b2bf` / #62 | One canonical JSON in Python and the browser; analysis is a pollable worker job with a repair path |
+| Steps 5–6, second pass: explicit run origin, recovery without an operator | `8ff7194` / #71 | An authored export cannot claim a provider run; a broker failure recovers itself and a resume keeps the input snapshot |
+| Steps 7–8, first pass: isolated experiments, registered metric, simulated time, report rebuild | `4e6c71f` / #63 | The pre-registered metric is computed; simulated time is monotonic; an archive rebuilds from its recorded inputs |
+| Steps 7–8, second pass: attempt identity, matched benchmarks, fill-time validation | `e93d7bd` / #72 | A changed model or budget is a new attempt; a fill is revalidated at its price and time; the day's realised P&L reaches the next decision |
+| Steps 9–10, first pass: conservative spend limiter, verified acceptance | `7969cd7` / #64 | Unknown cost is reserved, not counted as zero; a recording names a passing commit |
+| Steps 9–10, second pass: per-attempt spend identity, release gate | `bc030e4` / #75 | Each paid attempt reserves by its own identity; an incomplete stage set can never be usable for recording |
+| Step 11: the walkthrough recut around the interface and republished on YouTube | `1bb1ee2`, `0051067` / #78, #79 | One narrated recording, its timecode-to-evidence table, and a published copy at <https://youtu.be/JuLyy8xqsWQ> |
+| FIX-10: the walkthrough rebuilt around one decision | `3d229cd` / #59 | The earlier cut of the same single recording, with a poster |
 
-The suites at HEAD `7969cd7` contain 955 backend tests and 276 frontend tests.
+The suites at HEAD `0051067` contain 1029 backend tests and 289 frontend tests.
 `scripts/verify_application.py` also runs lint, format, migration check,
-typecheck, build and an HTTP smoke test; the committed full eight-stage record is
-for `4e6c71f`, and a full record for HEAD is tracked as #65. The verification
-command and the record contract are in
+typecheck, build and an HTTP smoke test. The committed full eight-stage release
+record is `docs/spec/acceptance/fe326ef3e593391ae525718e0a8f331720127e41.json`,
+generated at `fe326ef`, committed in the PR head `877a6c4` and merged as
+`bc030e4`: 1029 backend / 289 frontend, `tree_clean: true`,
+`release_acceptance: true`. A commit cannot contain
+the record that names its own hash, so the documented order is commit, verify,
+then commit the record; #65 is closed on that record. The verification command
+and the record contract are in
 [`ACCEPTANCE.md`](https://github.com/SergeyGer/AlphaAgent/blob/main/docs/spec/ACCEPTANCE.md).
 
-Two operational gaps from the same programme are tracked separately:
-[#65](https://github.com/SergeyGer/AlphaAgent/issues/65) (a full eight-stage
-acceptance record for the release commit) and
+One operational gap from the same programme remains open:
 [#66](https://github.com/SergeyGer/AlphaAgent/issues/66) (the V4 allocation arm,
 declared in every manifest and never executed).
 
@@ -49,18 +61,26 @@ Four proposals from comparing against
 capability without meeting their full acceptance criteria. They remain open:
 
 - **#29 deterministic replay** — the offline viewer replays stored payloads
-  deterministically and the export round-trips every guard evaluation. No command
-  re-runs the guard against a recorded proposal and sweeps every stored decision.
+  deterministically, the export round-trips every guard evaluation, and the
+  second pass made replay resolve each outcome to its event revision and mark an
+  exhausted horizon unavailable (`core/tests/test_p1_step4_replay_and_unavailable.py`).
+  No command re-runs the guard against a recorded proposal and sweeps every
+  stored decision.
 - **#33 point-in-time contract** — execution marks now carry and validate an
-  observation time (`services/quote_policy.py`), and experiment evaluation refuses
-  future knowledge. The agent tools still fetch "now"; they do not accept an `as_of`
-  bound, and no test iterates the tool registry looking for leakage.
-- **#34 live scorecard** — the scorecard is computed at read time, and the
-  experiment report now computes its pre-registered metric. No generated public
-  scorecard file, scheduled regeneration or README badge exists.
-- **#35 verifiable audit bundle** — the export endpoint emits a checksummed bundle
-  verified in Python and in the browser, with tamper and redaction tests. The
-  proposed CLI and the offline re-run of the guard verdict are not built.
+  observation time (`services/quote_policy.py`), the approval binds the displayed
+  observation provenance, and experiment evaluation refuses future knowledge
+  (`core/tests/test_p0_terms_binding_and_redelivery.py`,
+  `test_p1_step8_fill_validation.py`). The agent tools still fetch "now"; they do
+  not accept an `as_of` bound, and no test iterates the tool registry looking for
+  leakage.
+- **#34 live scorecard** — the scorecard is computed at read time, the due
+  horizons are scheduled oldest-first, and the experiment report computes its
+  pre-registered metric. No generated public scorecard file, scheduled
+  regeneration or README badge exists.
+- **#35 verifiable audit bundle** — the export endpoint emits a checksummed
+  bundle verified in Python and in the browser, now with an explicit `run.origin`
+  claim, tamper and redaction tests. The proposed CLI and the offline re-run of
+  the guard verdict are not built.
 
 ---
 
@@ -126,7 +146,9 @@ code on divergence.
 `Portfolio.user` is a `OneToOneField`, so one user owns one portfolio. Risk
 profile and limits are already per portfolio, and `is_autonomous` is too. The
 watchlist (`ALPHA_WATCHLIST`) and the AI spend ceiling
-(`AI_DAILY_SPEND_LIMIT_USD`, with `AIUsageLedger`) are deployment-global.
+(`AI_DAILY_SPEND_LIMIT_USD`) are deployment-global. `AIUsageLedger` now carries
+an explicit `scope`/`scope_key`, so a reservation can name a portfolio, but the
+configured ceiling is still one deployment-wide value.
 
 *Why not done:* the multi-tenant boundaries exist (every query is ownership-scoped)
 but there is no reason to rush into a user-facing configuration surface before
@@ -229,7 +251,7 @@ and planned stays explicit.
 | **3 / Measure value** | Versioned signal diagnostics, ledger-based portfolio performance, experiment manifests, V0–V3 reports | **Done** — v1.1.7; `docs/spec/MEASUREMENT.md` |
 | **4 / Allocate capital** | Complete portfolio brief, target weights, deterministic plan sizing, advisory workflow | **Done** — v1.1.8; `docs/spec/ALLOCATION.md` |
 | **5 / Publish evidence** | Curated recorded cases, revised demonstration, methodology report | **Done** — `0724f11`; `docs/spec/METHODOLOGY.md`, `CASES.md`, `DEMO.md`, `CLAIMS.md` |
-| **P0/P1 remediation** | Quote provenance, execution/audit atomicity, attribution horizons, replay order, portable exports, recoverable jobs, experiment isolation and metric, simulated time, spend limiter, verified acceptance | **Done** — steps 1–10 in #60–#64; `docs/spec/IMPLEMENTATION-NOTE.md` and `ACCEPTANCE.md` |
+| **P0/P1 remediation** | Quote provenance, execution/audit atomicity, attribution horizons, replay order, portable exports, recoverable jobs, experiment isolation and metric, simulated time, spend limiter, verified acceptance, the walkthrough | **Done** — steps 1–11 across two passes in #60–#64, #69–#72, #75 and #78–#79; `docs/spec/IMPLEMENTATION-NOTE.md` and `ACCEPTANCE.md` |
 
 ### Why the phases cannot be collapsed
 

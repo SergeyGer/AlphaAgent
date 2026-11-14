@@ -10,9 +10,9 @@ Measured on this checkout:
 
 | Metric | Value | How it was measured |
 | --- | --- | --- |
-| Backend test modules | 43 (`test_*.py`) plus `helpers.py` | `ls core/tests/` |
-| Backend test methods | **955** at HEAD `7969cd7` (2026-11-12; the runner prints the current total) | `venv/bin/python manage.py test core.tests` |
-| Frontend test files / tests | 27 / **276** | `cd frontend && npm test` |
+| Backend test modules | 52 (`test_*.py`) plus `helpers.py` | `ls core/tests/` |
+| Backend test methods | **1029** at HEAD `0051067` (2026-11-14; the runner prints the current total) | `venv/bin/python manage.py test core.tests` |
+| Frontend test files / tests | 27 / **289** | `cd frontend && npm test` |
 | Result | `OK` | both commands, PostgreSQL backend for the Django suite |
 | Lint status | `All checks passed!` | `venv/bin/ruff check .` |
 | Format status | clean | `venv/bin/ruff format --check .` |
@@ -20,8 +20,8 @@ Measured on this checkout:
 
 ## Test modules
 
-Counts are `def test_*` methods per module at HEAD `7969cd7`, verified by AST
-walk and consistent with the runner's total of 955. The authoritative number is
+Counts are `def test_*` methods per module at HEAD `0051067`, verified by AST
+walk and consistent with the runner's total of 1029. The authoritative number is
 the total the runner prints on the commit being reviewed; the commit is named
 because a count without one is a claim that will drift.
 
@@ -69,6 +69,15 @@ because a count without one is a claim that will drift.
 | `test_p1_simulation_rebuild.py` | 12 | Monotonic simulated time, byte-identical replays and archived report rebuild. |
 | `test_p1_cost_limiter.py` | 9 | Reservation before the provider call, tokens-without-dollars reconciliation, unknown cost, durable replay and state shape. |
 | `test_p1_acceptance_verification.py` | 18 | Verifier stages and exit codes, acceptance record digest, dirty-tree refusal, recording pairing and committed recordings. |
+| `test_p0_terms_binding_and_redelivery.py` | 9 | Terms-reference binding for web and Telegram approvals, observation provenance per mark, the wire format the clients carry, and redelivery returning the original fill. |
+| `test_p1_step3_fair_scheduling.py` | 4 | Due-horizon work selected oldest-first, ineligible pairs not consuming slots, and idempotent overlapping ticks plus backfill. |
+| `test_p1_step4_replay_and_unavailable.py` | 4 | Event-revision replay, the unavailable outcome event and its rollback, and the server-tail contract. |
+| `test_p1_step5_provenance.py` | 11 | The authored export labelled as authored, `run.origin` as a separate claim, the superseded sample, and provider-backed limitations. |
+| `test_p1_step6_recovery.py` | 14 | Broker-failure recovery without a repost, lease and attempt rules under lock, the recorded input snapshot, and the beat-scheduled sweep. |
+| `test_p1_step7_identity_benchmarks.py` | 5 | Resolved attempt identity, retained reruns, matched benchmark windows, observation states and the missing-benchmark path. |
+| `test_p1_step8_fill_validation.py` | 5 | Cash, holding and daily-loss validation at the executable price, deferred fills, and the v3 archive rebuild digest. |
+| `test_p1_step9_spend_limits.py` | 8 | Per-identity reservations for allocation attempts, one paid attempt per experiment allowance, token-only settlement and confirmed charges. |
+| `test_p1_step10_release_gate.py` | 14 | A developer run is not release acceptance, an incomplete stage set is unusable, and a release record must pass all eight stages. |
 | `test_websockets.py` | 14 | ASGI consumer auth, ping/pong, unknown frames, event relay to the owning user only, Decimal serialisation, soft failure without a channel layer. |
 
 `core/tests/helpers.py` is not a test module. It supplies `TEST_CACHES` (a `LocMemCache`
@@ -274,7 +283,7 @@ The Makefile wraps the common paths; the underlying commands are shown beside th
 
 | Target | Command it runs | Purpose |
 | --- | --- | --- |
-| `make test` | `venv/bin/python manage.py test core.tests` | The full suite (955 at HEAD `7969cd7`). Requires PostgreSQL reachable (`make up` starts `db` and `redis` only). |
+| `make test` | `venv/bin/python manage.py test core.tests` | The full suite (1029 at HEAD `0051067`). Requires PostgreSQL reachable (`make up` starts `db` and `redis` only). |
 | `make test-guardrails` | `venv/bin/python manage.py test core.tests.test_guardrails core.tests.test_security` | The safety-critical subset: execution guardrails plus secret hygiene. |
 | `make lint` | `venv/bin/ruff check .` | Lint only. |
 | `make format` | `venv/bin/ruff check . --fix && venv/bin/ruff format .` | Auto-fix and format. |
@@ -414,14 +423,14 @@ Related pages: [[Execution-Guard]], [[Architecture]], [[Operations]], [[Configur
 
 Numbers here are deliberately kept in as few places as possible. A count quoted in
 several files drifts apart — this project once had three different test counts in
-three files at once. The README now carries one **commit-pinned** snapshot (955
-backend / 276 frontend at `7969cd7`), and this page plus `CONTRIBUTING.md` carry
+three files at once. The README now carries one **commit-pinned** snapshot (1029
+backend / 289 frontend at `0051067`), and this page plus `CONTRIBUTING.md` carry
 the same snapshot. A number without the commit is still a claim that will drift;
 the authoritative number is whatever CI reports on the commit being reviewed.
 
 | | |
 | --- | --- |
-| **Two test suites** | 955 Python tests at HEAD `7969cd7` — risk guard, ledger, API, task pipeline, WebSockets, Telegram bot, tool server, decision runs, debate protocol, measurement, allocation, the P0/P1 remediation modules, documentation links and the demo's theme contract — plus 276 frontend tests in 27 files (Vitest + Testing Library) covering formatters, the WebSocket frame validator, feed merging, the metric grid, portfolio plans, replay and the offline viewer. The authoritative number is whatever CI reports on the current commit; treat any figure written down, including this one, as a snapshot |
+| **Two test suites** | 1029 Python tests at HEAD `0051067` — risk guard, ledger, API, task pipeline, WebSockets, Telegram bot, tool server, decision runs, debate protocol, measurement, allocation, the P0/P1 remediation modules, documentation links and the demo's theme contract — plus 289 frontend tests in 27 files (Vitest + Testing Library) covering formatters, the WebSocket frame validator, feed merging, the metric grid, portfolio plans, replay and the offline viewer. The authoritative number is whatever CI reports on the current commit; treat any figure written down, including this one, as a snapshot |
 | **Coverage enforced** | CI fails below a 70% floor on the backend |
 | **Continuous integration** | Lint, format, the full backend suite against PostgreSQL 16 with a 70% coverage floor, the frontend typecheck/build/Vitest suite, and a Docker image build — on every push |
 | **Security scanning** | CodeQL analysis, Dependabot, secret scanning, and a test that walks every publishable file looking for committed credentials |

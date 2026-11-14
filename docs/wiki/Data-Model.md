@@ -359,6 +359,22 @@ The later phases did not reinterpret the original columns. They added tables.
 | `CashFlow`, `Experiment`, `ExperimentVariant`, `ExperimentRun` | `0012` | External deposits/withdrawals (kept out of `Transaction` because the ledger treats every non-BUY row as a SELL), the experiment manifest, its variants and scheduled runs |
 | `InstrumentClassification`, `PortfolioPlan`, `PortfolioPlanLeg` | `0013` | Explicit sector/asset-class lookup; the Phase 4 plan, its requested and constrained weights, deviations and one-to-one legs. A leg's transaction makes a duplicate fill structurally impossible |
 
+## Remediation-era fields
+
+The second remediation pass added fields rather than reinterpreting the existing
+ones:
+
+| Migration | Change | Why |
+| --- | --- | --- |
+| `0024` | `AIUsageLedger`: a unique `call_key`, `day`, `state`, `reserved_usd`, `reserved_upper_bound_usd`, `billed_usd`, `estimated_usd`, `pricing_version`, `scope` and `scope_key` | A reservation is written **before** the provider call and reconciled once. Unknown cost keeps its bound rather than becoming zero. `scope`/`scope_key` name the allowance the call belongs to, so one portfolio's or experiment's spend is not another's (`services/budget.py`) |
+| `0025` | `RecommendationApproval.terms_ref` and the evaluated price/observation fields | The approval stores the exact terms the operator saw, not the recommendation's current terms; the drift and quantity checks read the stored row (`services/recommendation_terms.py`) |
+| `0026` | `AllocationSubmission.dispatch_attempt_count`, `last_dispatched_at`, `last_dispatch_error`, the input checkpoint and its snapshot FK | The recovery sweep can find a row that was never published, whose publish failed or whose publish is stale, and a resume reuses the input the provider answered (`services/allocation_submission.py`) |
+| `0027` | `AIUsageLedger` attempt identity fields | A paid attempt reserves on its own identity; two callers sharing an idempotency key cannot share a reservation (`test_p1_step9_spend_limits.py`) |
+
+`ExecutionAttempt.approved_terms` carries the same `terms_ref` as the approval
+that authorised it, and an experiment attempt's resolved provider/model/budget
+identity is stored with the run rather than inferred later.
+
 `DecisionRun` is keyed by the stable `fixture_id` for demo data, so a fixture is
 idempotent and a checksum change is refused rather than mixed. `Transaction.fee`
 stays nullable by design: `NULL` is *unrecorded*, not zero. The Phase 3 and Phase 4

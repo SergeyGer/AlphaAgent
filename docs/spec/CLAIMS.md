@@ -38,9 +38,9 @@ fixture or removed.
 | R-09 | Bull and bear cases are independent and a separate CIO adjudicates | `README.md` — pillar 3 | `services/debate_protocol.py`; `core/tests/test_debate_protocol.py` | B |
 | R-10 | Both sides are instructed to concede when their case is weak | `README.md` — pillar 3 | `services/debate_protocol.py` prompts; `docs/spec/fixtures/decision-runs.v1.json` (`disagreement-tsla-2026-02-04`, a `qualify` rebuttal) | A/B |
 | R-11 | The transcript is stored with the decision | `README.md` — pillar 3 | `core/decision_models.py` (`Claim`, `Rebuttal`); `core/models.py` (`bull_case`, `bear_case`) | B |
-| R-12 | The walkthrough video is a recording of the running system | `README.md` — See it running | `docs/demo-walkthrough.mp4` (media file; its contents are not machine-checkable) | media |
+| R-12 | The walkthrough video is a recording of the running system, published on YouTube | `README.md` — See it running | `https://youtu.be/JuLyy8xqsWQ`; `docs/demo-walkthrough.mp4`; `docs/demo-walkthrough-evidence.md` (media; the evidence table, not a test, maps the numbers) | media |
 | R-13 | The Streamlit page drives the real `services/execution.py` guard, with no installation or key | `README.md` — See it running | `demo/app.py`; `core/tests/test_demo_theme_contract.py` | B |
-| R-14 | The one walkthrough recording was taken from the live React application, not the Streamlit demo; the poster links to it | `README.md` — See it running | `docs/demo-walkthrough.mp4`; `docs/demo-walkthrough-poster.png` (media files; the caption is a provenance statement, not a code claim) | media |
+| R-14 | The one walkthrough recording was taken from the live React application, not the Streamlit demo; the poster links to the YouTube copy | `README.md` — See it running | `https://youtu.be/JuLyy8xqsWQ`; `docs/demo-walkthrough-poster.png`; `docs/demo-walkthrough-evidence.md` (media; provenance statement, not a code claim) | media |
 | R-15 | The dashboard shows the decision scorecard to a signed-in visitor | `README.md` — attribution section | `frontend/src/components/DecisionQualityPanel.tsx`; `core/views.py` (`DecisionScorecardView`) | B |
 | R-16 | The scorecard reports directional hit rate, average decision return and alpha vs SPY per horizon | `README.md` — attribution table | `services/attribution.py` (`Scorecard.as_dict`); `core/views.py`; `frontend/src/types.ts` | B |
 | R-17 | A HOLD is excluded from the hit-rate denominator | `README.md` — attribution table | `services/attribution.py`; `frontend/src/components/DecisionQualityPanel.tsx` | B |
@@ -64,8 +64,8 @@ fixture or removed.
 | R-35 | The project is MIT licensed | `README.md` — footer | `LICENSE` | B |
 | R-36 | The README has nine sections | `README.md` — Contents | The nine `##` headings in the file | B |
 | R-37 | The quality-and-testing link points at a real page | `README.md` — Choose your path | `docs/wiki/Quality-and-Testing.md` | B |
-| R-38 | At HEAD `7969cd7` the suites contain 955 backend tests and 276 frontend tests | `README.md` — At HEAD; `Quality-and-Testing.md` — Measured | `core/tests/test_*.py` (955 `test_*` methods by AST walk); `docs/spec/acceptance/03308ca6cff5ba6cc36c3d72869c45447193f518.json` (backend 955); `frontend/**/*.test.*` (27 files, 276 tests from `npm test` on this checkout) | B |
-| R-39 | Remediation steps 1–10 shipped, each with the named test and commit | `README.md` — remediation programme; `CHANGELOG.md` — Unreleased | `602a899`, `76c3017`, `f54b2bf`, `4e6c71f`, `7969cd7`; the nine `core/tests/test_p0_*` / `test_p1_*` modules; `docs/spec/IMPLEMENTATION-NOTE.md` | B |
+| R-38 | At HEAD `0051067` the suites contain 1029 backend tests and 289 frontend tests | `README.md` — At HEAD; `Quality-and-Testing.md` — Measured | `core/tests/test_*.py` (1029 `test_*` methods by AST walk, 52 modules); `docs/spec/acceptance/fe326ef3e593391ae525718e0a8f331720127e41.json` (backend 1029, frontend 289); `frontend/**/*.test.*` (27 files, 289 tests from `npm test` on this checkout) | B |
+| R-39 | Remediation steps 1–11 shipped across two passes, each with the named test and commit | `README.md` — remediation programme; `CHANGELOG.md` — Unreleased | `602a899`/`153e238`, `76c3017`/`84a8060`, `f54b2bf`/`8ff7194`, `4e6c71f`/`e93d7bd`, `7969cd7`/`bc030e4`, and the walkthrough `1bb1ee2`/`0051067`; `core/tests/test_p0_terms_binding_and_redelivery.py`, `test_p1_step3_*`–`test_p1_step10_*`; `docs/spec/IMPLEMENTATION-NOTE.md` | B |
 
 ## 2. Wiki claims
 
@@ -74,8 +74,8 @@ fixture or removed.
 | # | Claim | Where stated | Supporting evidence | Class |
 | --- | --- | --- | --- | --- |
 | W-H-01 | AI agents propose and deterministic code decides | `Home.md` — introduction | `services/execution.py`; `services/debate_protocol.py` | B |
-| W-H-02 | The walkthrough is recorded from the running system | `Home.md` — Watch first | `docs/demo-walkthrough.mp4` (media) | media |
-| W-H-03 | Current version is 1.2.0 (2026-11-12); Phases 1/2/3 are 1.1.5/1.1.6/1.1.7, Phase 4 is 1.1.8, and FIX-08 plus the remediation steps are Unreleased at `7969cd7` | `Home.md` — Current version | `CHANGELOG.md` entries 1.1.5–1.2.0 and Unreleased | C |
+| W-H-02 | The walkthrough is recorded from the running system and published on YouTube | `Home.md` — Watch first | `https://youtu.be/JuLyy8xqsWQ`; `docs/demo-walkthrough-evidence.md` (media) | media |
+| W-H-03 | Current version is 1.2.0 (2026-11-12); Phases 1/2/3 are 1.1.5/1.1.6/1.1.7, Phase 4 is 1.1.8, and FIX-08 plus remediation steps 1–11 are Unreleased at `0051067` | `Home.md` — Current version | `CHANGELOG.md` entries 1.1.5–1.2.0 and Unreleased | C |
 | W-H-04 | Engineering-Decisions has eight long-form records; the ADR index has seventeen | `Home.md` — If you are evaluating | `docs/wiki/Engineering-Decisions.md` (ADR-001–008 sections); `docs/adr/README.md` | B |
 | W-H-05 | Celery Beat wakes every fifteen minutes and fans out one subtask per portfolio and instrument | `Home.md` — The system; `Architecture.md`; `Operations.md` | `config/settings.py` (`autonomous-market-monitoring`, `*/15`); `tasks.py` (`group`) | B |
 | W-H-06 | A pure guard checks allocation, cash, concentration and daily loss before the ledger | `Home.md` — The system | `services/execution.py`; `core/tests/test_guardrails.py` | B |
@@ -163,14 +163,14 @@ fixture or removed.
 
 | # | Claim | Where stated | Supporting evidence | Class |
 | --- | --- | --- | --- | --- |
-| W-Q-01 | The backend suite has 955 tests in 43 modules at HEAD `7969cd7`; the frontend suite has 276 tests in 27 files; the runner's printed total is authoritative | `Quality-and-Testing.md` — Measured | `core/tests/` (955 `test_*` methods by AST walk); `frontend/**/*.test.*` (27 files, 276 tests); reproducible by `manage.py test core.tests` and `npm test` (not stored in a fixture) | B (snapshot) |
+| W-Q-01 | The backend suite has 1029 tests in 52 modules at HEAD `0051067`; the frontend suite has 289 tests in 27 files; the runner's printed total is authoritative | `Quality-and-Testing.md` — Measured | `core/tests/` (1029 `test_*` methods by AST walk); `frontend/**/*.test.*` (27 files, 289 tests); reproducible by `manage.py test core.tests` and `npm test` (not stored in a fixture) | B (snapshot) |
 | W-Q-02 | CI runs four jobs in `ci.yml`: lint, test, frontend, docker | `Quality-and-Testing.md` — CI pipeline | `.github/workflows/ci.yml` job names | B |
 | W-Q-03 | The backend coverage floor is 70% | `Quality-and-Testing.md` — CI pipeline; Quality signals | `.github/workflows/ci.yml` (`coverage report --fail-under=70`) | B |
 | W-Q-04 | The frontend has two coverage floors: `src/lib` 75% and a global ratchet | `Quality-and-Testing.md` — Frontend tests | `frontend/vitest.config.ts` thresholds | B |
 | W-Q-05 | Tests make no external network calls; yfinance, RSS, LLM and Redis are stubbed | `Quality-and-Testing.md` — How external services are isolated | `core/tests/helpers.py`; `core/tests/test_services.py`; `core/tests/test_llm_hooks.py` | B |
 | W-Q-06 | CodeQL, Dependabot and the secret scan are configured | `Quality-and-Testing.md` — Static analysis | `.github/workflows/codeql.yml`; `.github/dependabot.yml`; `core/tests/test_security.py` | B |
 | W-Q-07 | The dependency files are hash-pinned lockfiles | `Quality-and-Testing.md` — Dependency locking | `requirements.txt`, `requirements-dev.txt`, `requirements.in`, `requirements-dev.in` | B |
-| W-Q-08 | A count quoted in several files drifts; the README carries one commit-pinned snapshot and this page plus CONTRIBUTING carry the same snapshot | `Quality-and-Testing.md` — Quality signals | `README.md` (955/276 at `7969cd7`); `CONTRIBUTING.md` (955/276); this index | B |
+| W-Q-08 | A count quoted in several files drifts; the README carries one commit-pinned snapshot and this page plus CONTRIBUTING carry the same snapshot | `Quality-and-Testing.md` — Quality signals | `README.md` (1029/289 at `0051067`); `CONTRIBUTING.md` (1029/289); this index | B |
 | W-Q-09 | The project had 22 CodeQL findings, all resolved | `Quality-and-Testing.md` — Static analysis | `CHANGELOG.md` 1.1.0 ("Twenty-two CodeQL alerts"); historical, not reproducible | C |
 | W-Q-10 | The `chromadb` advisory triage was recorded when no patched version existed; the lockfile has moved on | `Quality-and-Testing.md` — What enabling alerts revealed | `requirements.txt` (`chromadb==1.5.9`); `CHANGELOG.md`; the page now says to re-check the advisory database | C/B |
 
@@ -270,12 +270,12 @@ fixture or removed.
 
 | # | Claim | Where stated | Supporting evidence | Class |
 | --- | --- | --- | --- | --- |
-| W-RM-01 | Phases 0–5 are complete, and the P0/P1 remediation steps 1–10 shipped in #60–#64 | `Roadmap.md` — Implementation programme; Delivered since FIX-07 | `docs/spec/IMPLEMENTATION-NOTE.md`; `CHANGELOG.md` Unreleased; `docs/spec/ACCEPTANCE.md` | B |
+| W-RM-01 | Phases 0–5 are complete, and the P0/P1 remediation steps 1–11 shipped across two passes in #60–#64, #69–#72, #75 and #78–#79 | `Roadmap.md` — Implementation programme; Delivered since FIX-07 | `docs/spec/IMPLEMENTATION-NOTE.md`; `CHANGELOG.md` Unreleased; `docs/spec/ACCEPTANCE.md` | B |
 | W-RM-02 | A cumulative daily deployment ceiling, backtesting, deterministic guard replay, per-user strategies and more asset classes are not fully built | `Roadmap.md` — Next/Later | `services/execution.py` has no daily deployment total; no backtest module; `core/management/commands/` has no guard-replay command; `ai_agent._build_tools` has no `as_of` | B |
 | W-RM-03 | Leverage, margin and short selling are explicitly not planned | `Roadmap.md` — Explicitly not planned | `services/execution.py` long-only; `services/portfolio_targets.py` long-only contract; `docs/spec/ALLOCATION.md` §3 | B |
 | W-RM-04 | The remediation shipped execution-time observation checks, replay of stored payloads, a checksummed export and a read-time scorecard, without completing the #29/#33/#34/#35 acceptance criteria | `Roadmap.md` — What the programme did not complete | `services/quote_policy.py`; `core/decision_json.py`; `services/attribution.py`; `ai_agent.py` (`_build_tools`); `core/management/commands/` | B |
-| W-RM-05 | The current version is 1.2.0; FIX-08 and remediation are Unreleased at HEAD `7969cd7` | `Roadmap.md` — Delivered since FIX-07 | `CHANGELOG.md`; `docs/spec/acceptance/` | B/C |
-| W-RM-06 | The committed acceptance record at HEAD covers four stages; no full eight-stage record exists for `7969cd7` | `Roadmap.md` — Delivered since FIX-07; `ACCEPTANCE.md` §5; `DEMO.md` §0 | `docs/spec/acceptance/03308ca...json` (four stages, `frontend_tests: 0`); `docs/spec/acceptance/4e6c71f...json` (eight stages); no `7969cd7` record | B |
+| W-RM-05 | The current version is 1.2.0; FIX-08 and remediation steps 1–11 are Unreleased at HEAD `0051067` | `Roadmap.md` — Delivered since FIX-07 | `CHANGELOG.md`; `docs/spec/acceptance/` | B/C |
+| W-RM-06 | A committed eight-stage release record exists for the release tree: generated at `fe326ef`, committed in the PR head `877a6c4` and merged as `bc030e4`; 1029 backend / 289 frontend, `release_acceptance: true`; the older four-stage record is not usable for recording | `Roadmap.md` — Delivered since FIX-07; `ACCEPTANCE.md` §5; `DEMO.md` §0 | `docs/spec/acceptance/fe326ef...json`; `docs/spec/acceptance/03308ca...json` (`frontend_tests: 0`); `venv/bin/python manage.py check_recordings` | B |
 
 ### Engineering-Decisions
 
@@ -353,6 +353,9 @@ The "was" column quotes the claim as it stood before Phase 5.
 | C-58 | `Quality-and-Testing.md`; `CONTRIBUTING.md` | 716 backend / 178 frontend at the Phase 0-4 baseline; "the README states no test count" | 955 backend in 43 modules / 276 frontend in 27 files at HEAD `7969cd7`; README carries the same commit-pinned snapshot | The suite grew and the README now states the count with its commit |
 | C-59 | `CLAIMS.md` — R-14 | The GIF was recorded from the live application | The one walkthrough recording is the evidence; the GIF no longer exists | `docs/demo.gif` was deleted |
 | C-60 | `METHODOLOGY.md` — the live-vs-Phase-3 table and §4.3 | The live engine "stores no `price_observed_at`" and "starts at the transaction price" | It measures from the linked fill, records `measurement_basis`, `reference_at` and `price_observed_at_decision`, and publishes the signal-diagnostic basis; it still has no `as_of` | `resolve_measurement_reference` and `attribution.v2` in `services/attribution.py` |
+| C-61 | `README.md`; `Quality-and-Testing.md`; `CONTRIBUTING.md`; `CLAIMS.md` | 955 backend / 276 frontend at HEAD `7969cd7` | 1029 backend / 289 frontend at HEAD `0051067`; 52 backend test modules, 27 frontend files | The step 1–10 second pass added the `test_p0_terms_binding_and_redelivery` and `test_p1_step3`–`step10` modules (74 tests backend, 13 frontend), and the counts no longer named the current HEAD |
+| C-62 | `Roadmap.md`; `Home.md`; `README.md` | Remediation steps 1–10 across five merges; #65 open for a full acceptance record | Steps 1–11 across two passes; the eight-stage record at `fe326ef` (merged `bc030e4`) is the release acceptance and #65 is closed | The first-pass commits were followed by #69–#72 and #75, then the walkthrough (#78–#79); the record exists |
+| C-63 | `README.md`; `Home.md`; `CLAIMS.md` | The walkthrough was a local `docs/demo-walkthrough.mp4` link; a second, older YouTube id was quoted | One canonical public URL, `https://youtu.be/JuLyy8xqsWQ`, in the README, the poster link and the wiki Home; the local file remains the committed master | The recording was republished; two different YouTube ids and a local path were live at once |
 
 ## 4. Claims that could not be traced, and what happened to them
 
