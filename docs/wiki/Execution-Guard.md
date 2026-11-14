@@ -50,9 +50,11 @@ every deviation between what the model asked for and what was permitted.
 
 `evaluate_proposal(portfolio, proposal, price, position, realised_pnl_today)`
 
-The guard's docstring groups these as seven enforced rules. The table splits the
-BUY and SELL branches so an audit reader can see each outcome; it is the same
-implementation, not a second list.
+The guard's docstring groups these as eight enforced rules. The table splits the
+BUY and SELL branches so an audit reader can see each outcome; its numbers are
+evaluation steps, not the docstring's rule numbers — in the docstring, rule 8 is
+the sector ceiling, while the table's rows 8 and 9 are the two SELL checks. It is
+the same implementation, not a second list.
 
 | # | Rule | Outcome when violated |
 | --- | --- | --- |
@@ -154,7 +156,7 @@ words: *"a deliberate sequence of individually-permitted trades is unbounded."*
 Beat sweeps every fifteen minutes, so a sequence of individually-permitted
 5%-of-cash buys compounds exposure without any single decision looking wrong.
 
-Two ceilings close that, both expressed as a percentage of **equity** (cash plus
+Three ceilings close that, all expressed as a percentage of **equity** (cash plus
 positions at market) rather than of cash — a percentage of cash would let a
 portfolio with a large position and little cash look empty.
 
@@ -162,10 +164,14 @@ portfolio with a large position and little cash look empty.
 | --- | --- | --- |
 | `max_portfolio_exposure_pct` | 90 | Total invested capital |
 | `max_ticker_concentration_pct` | 30 | One instrument |
+| `max_sector_concentration_pct` | 40 | One classified sector |
 
 They are not separate risks. A portfolio 90% invested in a single stock passes
 every exposure check and is not diversified in any sense a risk reviewer would
-accept, which is why concentration is bounded independently.
+accept, which is why concentration is bounded independently. The sector ceiling
+is evaluated only when the traded instrument's sector is known and the
+`Exposure` carries its value; an unclassified instrument is reported as
+`not_evaluated`, never treated as zero exposure.
 
 **Headroom folds into the existing clamp**, it is not a separate rejection path. A
 buy that does not fit the portfolio is sized down to what fits, exactly as one
@@ -184,7 +190,7 @@ Clamped to 2.00000000 units: this would take invested capital past the
 | Room for the full trade | Per-trade ceiling applies as before |
 | Room for only part of it | Clamped to the headroom, note names the ceiling |
 | No room at all | Rejected |
-| SELL | Never blocked by either limit — both govern *new* risk |
+| SELL | Never blocked by these limits — all govern *new* risk |
 
 ### The exposure parameter
 
@@ -192,13 +198,16 @@ The guard is a pure function and cannot fetch market values without breaking tha
 so they arrive as an `Exposure` value object built by
 `services.portfolio_metrics.build_exposure`.
 
-> **Omitting `exposure` skips both limits.** It is not a required parameter,
-> because the guard is called from paths that do not have market values to hand,
-> so this is a real gap rather than a graceful default. `ExposureWiringTests`
-> asserts the scheduled-run and approval callers supply it, and the Phase 4
-> `apply_plan` path also builds one — a test standing in for a type. The
-> Streamlit demo builds and passes one too, so the public playground drives the
-> whole guard rather than half of it.
+> **Omitting `exposure` skips the cumulative limits.** It is not a required
+> parameter, because the guard is called from paths that do not have market
+> values to hand, so this is a real gap rather than a graceful default.
+> `ExposureWiringTests` asserts the scheduled-run and approval callers supply
+> it, and the Phase 4 `apply_plan` path also builds one — a test standing in for
+> a type. The Streamlit demo builds and passes one too, so the public playground
+> drives the per-trade rules and the exposure and single-instrument ceilings.
+> It does **not** drive the sector ceiling: the demo has no sector
+> classification, so `Exposure.sector_value_usd` is `None` and that check is
+> skipped rather than satisfied.
 
 ### A refusal names the limit that refused it
 

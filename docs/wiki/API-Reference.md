@@ -251,6 +251,15 @@ curl -sS -X POST "$API/api/portfolio/recommendations/12/approve/" -H "Authorizat
 | `500` | Unexpected failure while applying the decision |
 | `401` | Missing or invalid token |
 
+The approval body must name the terms the caller displayed: `terms_ref`
+(preferred) or `terms_version`. A missing, stale or foreign reference is refused
+with a stable code before any quote is read or audit row written, and no fill is
+produced. A repeat of a completed approval reaches the service only when its
+`terms_ref`/`terms_version`, action and idempotency key match, in which case it
+replays the original result. The serializer publishes `terms_version` and
+`terms_ref`. See `services/recommendation_terms.py` and
+`core/tests/test_p0_terms_binding_and_redelivery.py`.
+
 ### `POST /api/portfolio/recommendations/<id>/reject/` — same codes
 
 Marks the proposal `REJECTED` (`decided_via: "WEB"`), writes a matching audit row and starts no
@@ -292,7 +301,10 @@ standard error envelope. The response carries `count`, `last_sequence`,
 ### `GET /api/decision-runs/<id>/export/` — `200`, `401`, `404`
 
 A versioned, checksummed JSON bundle. Account identifiers and credentials are
-excluded; evidence excerpts are included only when `is_redistributable` is true.
+excluded; evidence excerpts are included only when `is_redistributable` is true. The bundle also states its `run.origin` (`authored_fixture`,
+`provider_run`, `heuristic_fallback`, `legacy_import`, ...) as a claim separate
+from its checksum and build provenance; only `provider_run` is provider-backed.
+See `test_p1_step5_provenance.py`.
 
 ### `POST /api/decision-runs/` — `202`, `400`, `401`, `404`, `409`
 
@@ -319,7 +331,10 @@ The status URL returned by the submission. `status` is `queued`, `running`,
 `terminal`, `terminal_at`, `failure_reason` (a stable code, null while open or
 after success), `attempt_count`, `claimed_by`, `deadline_at`, and
 `plan_id`/`plan_url` when a plan exists. A non-terminal response sends
-`Retry-After: 1`. This id space is the submission's, not a per-ticker
+`Retry-After: 1`. The response also carries `dispatch` (`attempts`, `last_error`, `published`),
+`recovered`/`recovery` and the input snapshot/source, so a caller can see that
+the recovery sweep, not a second POST, moved a stuck submission
+(`test_p1_step6_recovery.py`). This id space is the submission's, not a per-ticker
 `DecisionRun` id.
 
 ### `POST /api/decision-runs/<run_id>/cancel/` — `200`, `400`, `401`, `404`, `409`

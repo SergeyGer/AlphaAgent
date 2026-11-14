@@ -1001,13 +1001,16 @@ Divergences recorded rather than absorbed:
    `provenance_kind: "attached_at_remediation"` and names the commit whose clean
    acceptance record was used. It does not claim the recorder emitted the block.
    New recordings write it at creation time.
-6. **The committed record for the steps 9–10 commit covers four stages, not
-   eight.** `docs/spec/acceptance/03308ca...json` records backend-tests, lint,
-   format and migration-check, with `frontend_tests: 0`; it names the pre-merge
-   commit `03308ca`, not the merged HEAD `7969cd7`. The full eight-stage record
-   exists for `4e6c71f` (928 backend / 275 frontend). The mechanism is complete;
-   the *current* full-environment record is not. Tracked as
-   [#65](https://github.com/SergeyGer/AlphaAgent/issues/65), and stated in
+6. **The first committed steps 9–10 record covered four stages, not eight.**
+   `docs/spec/acceptance/03308ca...json` records backend-tests, lint, format and
+   migration-check, with `frontend_tests: 0`; it names the pre-merge commit
+   `03308ca`, not the then-merged `7969cd7`. The step 10 follow-up at `bc030e4`
+   (#75) produced the full eight-stage release record
+   `docs/spec/acceptance/fe326ef...json`: 1029 backend / 289 frontend,
+   `tree_clean: true`, `usable_for_recording: true`, `release_acceptance: true`.
+   It was generated at `fe326ef`, committed in the PR head `877a6c4`, and the
+   merged commit `bc030e4` has the same tree. [#65](https://github.com/SergeyGer/AlphaAgent/issues/65) is closed on
+   that record; the ordering and the record's limits are in
    [`ACCEPTANCE.md`](ACCEPTANCE.md) §5.
 
 ## P0 remediation — approval identity and delivery replay (steps 1 and 2, follow-up)
@@ -1264,3 +1267,32 @@ four-stage `--only` run (or the committed four-stage record with
    unchanged: commit, verify `--record`, record the artefact, commit the
    artefact and record together. The release record for this change still has
    to be produced after a commit; this working tree is intentionally dirty.
+
+## Step 11 — the walkthrough, and the evidence behind its numbers
+
+The recording is a media artefact, not a machine-checkable one, so the
+implementation note records what it may and may not be used to claim.
+
+**What changed.** The cut at `0051067` (#79) opens on the login screen and the
+dashboard rather than a terminal, crops into the reasoning so the arguments read
+as text, and matches every spoken number to the frame it describes. The commit
+at `1bb1ee2` (#78) added the timecode-to-evidence table
+(`docs/demo-walkthrough-evidence.md`), the narration beats
+(`docs/demo-walkthrough-script.json`) and regenerated SRT/VTT captions. The
+recording is published at <https://youtu.be/JuLyy8xqsWQ>; the README poster,
+the "See it running" links and the wiki Home page point at that URL.
+
+**What it claims.** Only what the evidence table records: the guard output is a
+real `evaluate_proposal()` evaluation against the demo portfolio, the offline
+viewer plays synthetic fixtures and says so on screen, and the close names the
+repository. The recording was taken from the live React application, not the
+Streamlit demo.
+
+**What it does not claim.** No profitability result, no live trade, and no
+provider run for the viewer segment. No test executes the video; the evidence
+table is the provenance, `core/tests/test_documentation_links.py` checks the
+source links in the documentation, and the Docs workflow's media job checks that
+every local file a page references exists. The committed
+`docs/spec/fixtures/release-evidence.v1.json` is still a template: the
+walkthrough predates the filled-manifest requirement, and no filled manifest is
+claimed on its behalf.

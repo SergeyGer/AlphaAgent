@@ -14,10 +14,13 @@ HTML/CSS emitted through ``st.markdown`` so it cannot drift with Streamlit's
 internal element classes; native widgets are kept for the inputs that must be
 interactive.
 
-Every input the guard takes is supplied, including the market values it refuses
-to fetch itself (``services.execution.Exposure``). That matters: given no
-exposure the guard skips its two portfolio-level ceilings, so a page that omitted
-it would be driving only half the guard.
+Every market value the guard takes is supplied, including the
+``services.execution.Exposure`` it refuses to fetch itself. That matters: given no
+exposure the guard skips its portfolio-level ceilings, so a page that omitted it
+would be driving only half the guard. The exception is sector exposure: this page
+has no sector classification, so ``Exposure.sector_value_usd`` stays ``None``
+(unknown, never zero) and the sector ceiling is stated as not exercised rather
+than implied to be passing.
 
 Run locally:  streamlit run demo/app.py
 """
@@ -136,8 +139,9 @@ class Preset:
 
 
 # Every preset states the same four portfolio facts (cash, what else is held,
-# what this ticker is worth via units held x price) plus the two ceilings, so each
-# one shows a single interesting guard path rather than a combination.
+# what this ticker is worth via units held x price) plus the two equity ceilings
+# this page drives, so each preset shows one interesting guard path rather than a
+# combination.
 PRESETS: tuple[Preset, ...] = (
     Preset(
         label="1 - Normal trade (allowed)",
@@ -394,7 +398,7 @@ class GuardInputs:
 
     @property
     def equity_usd(self) -> Decimal:
-        """Cash plus positions - the denominator for both portfolio ceilings."""
+        """Cash plus positions - the denominator for the portfolio ceilings driven here."""
         return (self.cash + self.positions_value_usd).quantize(CENT)
 
 
@@ -410,11 +414,15 @@ def run_guard(inputs: GuardInputs) -> tuple[GuardDecision, Decimal]:
     decimal_places=2)``, so quantizing mirrors what PostgreSQL would actually
     hold and keeps the guard's verbatim reason strings faithful to production.
 
-    WHY ``exposure``: rules 6 and 7 (total exposure, single-instrument
-    concentration) are skipped when the guard is handed no exposure. Supplying it
-    is what makes this page exercise the whole guard rather than its per-trade
-    half: the keyword is optional in the signature for backwards compatibility,
-    not because those limits were meant to be skipped.
+    WHY ``exposure``: rules 6-8 (total exposure, single-instrument concentration
+    and sector concentration) are skipped when the guard is handed no exposure.
+    Supplying it is what makes this page exercise the guard's cumulative limits
+    rather than its per-trade half: the keyword is optional in the signature, not
+    because those limits were meant to be skipped.
+
+    WHY no sector value: this page has no sector classification, so
+    ``Exposure.sector_value_usd`` is left ``None``. The guard treats that as
+    unknown and skips rule 8; passing zero would claim the sector is empty.
     """
     portfolio = Portfolio(
         balance_usd=inputs.cash.quantize(CENT),
@@ -445,7 +453,7 @@ def _mirror_sell(inputs: GuardInputs) -> GuardDecision:
 
     WHY: rule 5 freezes new risk but never blocks selling - that asymmetry is the
     entire point of a kill switch, and it is worth showing rather than claiming.
-    The same holds for the two portfolio ceilings, which bound new risk only.
+    The same holds for the portfolio ceilings, which bound new risk only.
     """
     return run_guard(
         GuardInputs(
@@ -1667,9 +1675,10 @@ def _verdict_html(
   {_mini("Positions · at market", _money(inputs.positions_value_usd), position_hint)}
   {_mini(inputs.ticker, _money(inputs.ticker_value_usd), ticker_hint)}
 </div>
-<p class="aa-footnote">Both portfolio ceilings are percentages of <strong>equity</strong>
+<p class="aa-footnote">All portfolio ceilings are percentages of <strong>equity</strong>
 (cash + positions at market), not of cash and not of the per-trade budget. A buy that does not
-fit is sized down; only a buy with no headroom is refused.</p>
+fit is sized down; only a buy with no headroom is refused. The sector ceiling is not driven
+here because the page has no sector classification.</p>
 {mirror_html}
 <div class="aa-raw">
   <p class="aa-label">Raw GuardDecision · the function's untouched return value</p>
@@ -2307,7 +2316,7 @@ fundamentals ──▶ BEAR CASE ───────┘                │
 
     st.markdown(
         _panel(
-            "Risk Guard · Rules 1-7",
+            "Risk Guard · Rules 1-8",
             "The rules the widgets can reach, and the ones they cannot",
             "<p><strong>Enforced on this page.</strong></p>"
             + _bullets(
@@ -2324,18 +2333,26 @@ fundamentals ──▶ BEAR CASE ───────┘                │
                     "<strong>Rule 7 — single-instrument concentration ceiling</strong> "
                     + "(<code>max_ticker_concentration_pct</code>, also a percentage of "
                     + "<strong>equity</strong>): presets 7, 8 and 9.",
+                    "<strong>Rule 8 — sector concentration ceiling</strong> "
+                    + "(<code>max_sector_concentration_pct</code>): <strong>not driven</strong> "
+                    + "on this page. It needs a sector classification for the traded instrument "
+                    + "and every material holding, and the widgets carry none; the guard skips "
+                    + "the check when the sector value is unknown rather than treating it as "
+                    + "zero. Production callers build the value in "
+                    + "<code>services/execution.py</code> from the ledger and its classifications.",
                 ]
             )
             + '<p style="margin-top:0.55rem"><strong>Why Exposure is always supplied.</strong> '
-            "Rules 6 and 7 are skipped when the guard is handed no <code>exposure</code>, or when "
-            "equity is zero (<code>Exposure.usable</code> is false). An earlier version of this "
+            "Rules 6-8 are skipped when the guard is handed no <code>exposure</code>, or when "
+            "equity is zero (<code>Exposure.usable</code> is false); rule 8 is also skipped when "
+            "the sector value is unknown. An earlier version of this "
             "page passed none and exercised only the per-trade half while looking complete. It now "
             "always builds one from the widgets:</p>"
             '<div class="aa-pipeline">ticker_value_usd    = units held x price            '
             "this instrument, at market\npositions_value_usd = that + other holdings         "
             "every holding, at market\nequity_usd          = cash + positions_value_usd    "
-            "the denominator for both ceilings</div>"
-            + '<p style="margin-top:0.55rem">Both ceilings are percentages of that '
+            "the denominator for these ceilings</div>"
+            + '<p style="margin-top:0.55rem">These ceilings are percentages of that '
             "<strong>equity</strong> — not of cash, and not of the per-trade budget, which is a "
             "percentage of cash. A BUY that does not fit is <strong>sized down</strong> to what "
             "does, and the clamp note names the ceiling that bound it; only a BUY with no "
@@ -2343,9 +2360,10 @@ fundamentals ──▶ BEAR CASE ───────┘                │
             "“cannot be sized down” message rather than a rule-specific one.</p>"
             "<p><strong>Not reachable from these widgets.</strong> Rule 1 (the side selector "
             "offers BUY and SELL only, so a HOLD never becomes a proposal here), rule 2 (the price "
-            "minimum is $0.01, so “no reliable market price” cannot be produced) and the "
+            "minimum is $0.01, so “no reliable market price” cannot be produced), the "
             "BUY-versus-cash half of rule 4 (the per-trade ceiling is at most 25% of cash, so a "
-            "clamped BUY always fits the balance).</p>",
+            "clamped BUY always fits the balance) and rule 8 (no sector classification, so its "
+            "value stays unknown).</p>",
         ),
         unsafe_allow_html=True,
     )
