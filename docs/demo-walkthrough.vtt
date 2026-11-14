@@ -1,0 +1,67 @@
+WEBVTT
+
+00:00:04.500 --> 00:00:08.904
+A request arrives to buy forty-five shares of NVDA at a hundred dollars.
+
+00:00:08.904 --> 00:00:15.815
+The portfolio holds twenty thousand nine hundred eighty-three dollars, and its per-trade ceiling is five percent.
+
+00:00:15.815 --> 00:00:19.546
+The guard approves ten point four nine units, not forty-five.
+
+00:00:19.546 --> 00:00:22.482
+One thousand forty-nine dollars, eighteen cents.
+
+00:00:22.482 --> 00:00:25.112
+The model asked; the code decided the size.
+
+00:00:25.112 --> 00:00:26.947
+Four hundred and fifty shares?
+
+00:00:26.947 --> 00:00:27.926
+No - forty-five.
+
+00:00:27.926 --> 00:00:30.250
+Either way, the ceiling is what it is.
+
+00:00:30.250 --> 00:00:33.802
+Three agents argue before that request ever reaches the guard.
+
+00:00:33.802 --> 00:00:41.479
+A bull analyst builds the case to buy, a risk assessor builds the case to sell, and neither prompt contains the other side's argument.
+
+00:00:41.479 --> 00:00:47.151
+A chief investment officer weighs both and has to name the strongest objection it could not answer.
+
+00:00:47.151 --> 00:00:51.390
+Their disagreement is stored as claims and rebuttals, not summarised away.
+
+00:00:51.390 --> 00:00:53.412
+The same guard refuses twice more.
+
+00:00:53.412 --> 00:00:59.776
+A request after a realised loss of six hundred dollars is blocked, because the daily limit is five hundred.
+
+00:00:59.776 --> 00:01:03.582
+The loss that already happened is the reason new risk is frozen.
+
+00:01:03.582 --> 00:01:06.080
+The guard does not know which agent asked.
+
+00:01:06.080 --> 00:01:07.210
+It knows the limit.
+
+00:01:07.210 --> 00:01:10.416
+Every refusal is recorded with the rule that produced it.
+
+00:01:10.416 --> 00:01:17.840
+Run the same decision again and you get the same answer, from a replay bundle you can open in a browser with no database and no key.
+
+00:01:17.840 --> 00:01:20.990
+The numbers on screen are the numbers in the transcript.
+
+00:01:20.990 --> 00:01:22.440
+Open source, on GitHub.
+
+00:01:22.440 --> 00:01:26.410
+Read the transcript, check the arithmetic, then try to beat it.
