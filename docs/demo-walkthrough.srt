@@ -1,87 +1,91 @@
 1
-00:00:04,500 --> 00:00:08,904
-A request arrives to buy forty-five shares of NVDA at a hundred dollars.
+00:00:00,000 --> 00:00:02,885
+A language model can recommend a trade in seconds.
 
 2
-00:00:08,904 --> 00:00:15,815
-The portfolio holds twenty thousand nine hundred eighty-three dollars, and its per-trade ceiling is five percent.
+00:00:02,885 --> 00:00:05,193
+The hard part is trusting it with money.
 
 3
-00:00:15,815 --> 00:00:19,546
-The guard approves ten point four nine units, not forty-five.
+00:00:05,193 --> 00:00:11,135
+AlphaAgent puts three models in an argument, then hands the answer to code that cannot be talked round.
 
 4
-00:00:19,546 --> 00:00:22,482
-One thousand forty-nine dollars, eighteen cents.
+00:00:11,135 --> 00:00:16,270
+No prompt can move money here; only the guard, which knows nothing about language models.
 
 5
-00:00:22,482 --> 00:00:25,112
-The model asked; the code decided the size.
+00:00:16,270 --> 00:00:17,670
+Here is the interface.
 
 6
-00:00:25,112 --> 00:00:26,947
-Four hundred and fifty shares?
+00:00:17,670 --> 00:00:23,334
+A request to buy forty-five shares of NVDA at a hundred dollars arrives at the portfolio.
 
 7
-00:00:26,947 --> 00:00:27,926
-No - forty-five.
+00:00:23,334 --> 00:00:29,888
+The guard approves ten point four nine units instead - one thousand forty-nine dollars, eighteen cents.
 
 8
-00:00:27,926 --> 00:00:30,250
-Either way, the ceiling is what it is.
+00:00:29,888 --> 00:00:31,225
+Five percent of cash.
 
 9
-00:00:30,250 --> 00:00:33,802
-Three agents argue before that request ever reaches the guard.
+00:00:31,225 --> 00:00:37,970
+Every limit is visible in the same header: exposure, concentration, per-trade size and the daily loss cap.
 
 10
-00:00:33,802 --> 00:00:41,479
-A bull analyst builds the case to buy, a risk assessor builds the case to sell, and neither prompt contains the other side's argument.
+00:00:37,970 --> 00:00:39,446
+Three agents argued first.
 
 11
-00:00:41,479 --> 00:00:47,151
-A chief investment officer weighs both and has to name the strongest objection it could not answer.
+00:00:39,446 --> 00:00:41,547
+A bull analyst built the case to buy.
 
 12
-00:00:47,151 --> 00:00:51,390
-Their disagreement is stored as claims and rebuttals, not summarised away.
+00:00:41,547 --> 00:00:45,805
+A risk assessor built the case to sell, and neither saw the other's prompt.
 
 13
-00:00:51,390 --> 00:00:53,412
-The same guard refuses twice more.
+00:00:45,805 --> 00:00:50,688
+The chief investment officer weighed both and named the objection it could not answer.
 
 14
-00:00:53,412 --> 00:00:59,776
-A request after a realised loss of six hundred dollars is blocked, because the daily limit is five hundred.
+00:00:50,688 --> 00:00:53,640
+Nothing about their disagreement is summarised away.
 
 15
-00:00:59,776 --> 00:01:03,582
-The loss that already happened is the reason new risk is frozen.
+00:00:53,640 --> 00:00:56,735
+The deliberation is on screen, not summarised away.
 
 16
-00:01:03,582 --> 00:01:06,080
-The guard does not know which agent asked.
+00:00:56,735 --> 00:01:02,439
+Claims, evidence and the rebuttal that answered them, each tagged with its source and horizon.
 
 17
-00:01:06,080 --> 00:01:07,210
-It knows the limit.
+00:01:02,439 --> 00:01:07,900
+Positive coverage on the left, negative on the right, and the decision quality underneath.
 
 18
-00:01:07,210 --> 00:01:10,416
-Every refusal is recorded with the rule that produced it.
+00:01:07,900 --> 00:01:11,903
+And every request is checked against limits the model cannot see.
 
 19
-00:01:10,416 --> 00:01:17,840
-Run the same decision again and you get the same answer, from a replay bundle you can open in a browser with no database and no key.
+00:01:11,903 --> 00:01:18,124
+A second request after a six hundred dollar loss is refused, because the daily limit is five hundred.
 
 20
-00:01:17,840 --> 00:01:20,990
-The numbers on screen are the numbers in the transcript.
+00:01:18,124 --> 00:01:20,957
+The arithmetic is printed next to the refusal.
 
 21
-00:01:20,990 --> 00:01:22,440
-Open source, on GitHub.
+00:01:20,957 --> 00:01:24,960
+The refusal names the rule, the amount and the limit it breached.
 
 22
-00:01:22,440 --> 00:01:26,410
-Read the transcript, check the arithmetic, then try to beat it.
+00:01:24,960 --> 00:01:32,622
+Run the decision again and you get the same answer, from a replay bundle you can open in a browser with no database and no key.
+
+23
+00:01:32,622 --> 00:01:34,010
+Open source, on GitHub.
