@@ -1,0 +1,7 @@
+{
+  "s1": "A request arrives to buy forty-five shares of NVDA at a hundred dollars. The portfolio holds twenty thousand nine hundred eighty-three dollars, and its per-trade ceiling is five percent. The guard approves ten point four nine units, not forty-five. One thousand forty-nine dollars, eighteen cents. The model asked; the code decided the size. Four hundred and fifty shares? No - forty-five. Either way, the ceiling is what it is.",
+  "s2": "Three agents argue before that request ever reaches the guard. A bull analyst builds the case to buy, a risk assessor builds the case to sell, and neither prompt contains the other side's argument. A chief investment officer weighs both and has to name the strongest objection it could not answer. Their disagreement is stored as claims and rebuttals, not summarised away.",
+  "s3": "The same guard refuses twice more. A request after a realised loss of six hundred dollars is blocked, because the daily limit is five hundred. The loss that already happened is the reason new risk is frozen. The guard does not know which agent asked. It knows the limit.",
+  "s4": "Every refusal is recorded with the rule that produced it. Run the same decision again and you get the same answer, from a replay bundle you can open in a browser with no database and no key. The numbers on screen are the numbers in the transcript.",
+  "s5": "Open source, on GitHub. Read the transcript, check the arithmetic, then try to beat it."
+}
