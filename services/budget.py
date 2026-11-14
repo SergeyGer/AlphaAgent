@@ -59,6 +59,9 @@ from services.cost_accounting import UNKNOWN_PROVIDER_COST
 
 __all__ = [
     "MICRO_CENT",
+    "REASON_ALREADY_DISPATCHED",
+    "REASON_EXPERIMENT_EXCEEDED",
+    "REASON_RESERVATION_CONFLICT",
     "BudgetState",
     "SpendDecision",
     "allocation_call_key",
